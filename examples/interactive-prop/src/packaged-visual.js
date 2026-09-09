@@ -18,14 +18,22 @@ export function resolvePackagedUrl(sidecar) {
   return sidecar?.source?.packagedUrl ?? "/packaged/crate-toolbox.glb";
 }
 
+function looksLikeGlb(res) {
+  if (!res || !res.ok) return false;
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  // Vite SPA fallback serves index.html with 200 for missing files.
+  if (ct.includes("text/html")) return false;
+  return true;
+}
+
 export async function probePackagedUrl(url) {
   if (!url) return false;
   try {
     const head = await fetch(url, { method: "HEAD" });
-    if (head.ok) return true;
+    if (looksLikeGlb(head)) return true;
     if (head.status === 405 || head.status === 501) {
       const get = await fetch(url, { method: "GET", headers: { Range: "bytes=0-16" } });
-      return get.ok;
+      return looksLikeGlb(get);
     }
     return false;
   } catch {
