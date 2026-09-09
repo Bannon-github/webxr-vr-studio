@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.6.0] — 2026-09-09
+
+### Added
+
+- `crate-toolbox` **v0.4.0** L5: re-latch cancel, tool grab only when open, drive front fastener (4 turns), snap-return, `feedback` → `hapticActuators.pulse` when present. LOD set unchanged. Quest 3 frame time still TODO.
+
 ## [0.5.0] — 2026-09-09
 
 ### Added

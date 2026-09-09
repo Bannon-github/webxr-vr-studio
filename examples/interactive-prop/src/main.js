@@ -13,6 +13,8 @@ import {
   restPose,
   setColliderDebug,
   setToolboxLod,
+  toolIsHeldOrOut,
+  tryReturnTool,
   updateStatePlaque,
   updateToolboxLod,
 } from "./toolbox.js";
@@ -20,11 +22,13 @@ import {
   beginGrab,
   collectPickables,
   clearAllHovers,
+  dispatchDrive,
   dispatchUse,
   endGrab,
   firstHit,
   isPinching,
   pinchReleased,
+  playFeedback,
   playTick,
   pulseHaptic,
   rayFromController,
@@ -101,7 +105,16 @@ const movable = [toolbox, toolbox.userData.parts.tool];
 
 let colliderDebug = false;
 let lastState = activityState(toolbox);
-updateStatePlaque(plaque, lastState);
+let lastFastenerKey = "";
+function refreshPlaque() {
+  const f = toolbox.userData.fastener;
+  const key = `${activityState(toolbox)}:${f?.turns}:${f?.seated}`;
+  if (key === lastFastenerKey) return;
+  lastFastenerKey = key;
+  lastState = activityState(toolbox);
+  updateStatePlaque(plaque, lastState, f);
+}
+refreshPlaque();
 const lodStatus = document.getElementById("lod-status");
 let lastLodKey = "";
 
@@ -173,22 +186,37 @@ function hoverFromRay(raycaster) {
   if (!hit) return null;
   const entity = hit.object.userData.entity;
   const changed = setHover(entity, hit.object.name);
-  if (changed) pulseHaptic(undefined, 0.08, 12);
+  if (changed) playFeedback(entity, "hoverEnter", null);
   return hit;
 }
 
 function onUse(controller) {
   resumeAudio();
   const hit = firstHit(rayFromController(controller), pickables());
+  const src = controller.userData.inputSource;
+  const tool = toolbox.userData.parts.tool;
+  if (controller.userData.held === tool) {
+    if (hit?.object.name === "collider_fastener") dispatchDrive(toolbox, src);
+    else playFeedback(toolbox, "nack", src);
+    return;
+  }
   if (!hit) return;
-  const result = dispatchUse(hit.object.userData.entity, hit.object.name, controller.userData.inputSource);
+  if (hit.object.name === "collider_fastener") {
+    if (toolIsHeldOrOut(tool, toolbox)) dispatchDrive(toolbox, src);
+    else playFeedback(toolbox, "nack", src);
+    return;
+  }
+  const result = dispatchUse(hit.object.userData.entity, hit.object.name, src);
   if (result.reset) resetAll();
 }
 
 function grabTargetFromHit(hit, grip) {
   if (!hit) return null;
   const entity = hit.object.userData.entity;
-  if (hit.object.name === "collider_tool") return entity.userData.parts.tool;
+  if (hit.object.name === "collider_tool") {
+    if (hit.object.userData.pickable === false) return null;
+    return entity.userData.parts.tool;
+  }
   if (hit.object.name === "collider_grab") {
     const near = grip?.getWorldPosition(new THREE.Vector3()) ?? null;
     const cfg = entity.userData.studio?.components?.grabbable;
@@ -220,14 +248,15 @@ function onGrabStart(controller, grip) {
 function onGrabEnd(controller) {
   const held = controller.userData.held;
   if (!held) return;
-  endGrab(held, scene);
+  endGrab(held, scene, toolbox);
   controller.userData.held = null;
 }
 
 function resetAll() {
   resetToolbox(toolbox, table.position.y + 0.04);
-  lastState = activityState(toolbox);
-  updateStatePlaque(plaque, lastState);
+  lastFastenerKey = "";
+  refreshPlaque();
+  setAction("reset");
 }
 
 // Desktop pointer stand-in (same intents; not a WebXR API).
@@ -256,6 +285,11 @@ renderer.domElement.addEventListener("pointermove", (e) => {
   hoverFromRay(ray);
 });
 
+const actionStatus = document.getElementById("action-status");
+function setAction(msg) {
+  if (actionStatus) actionStatus.textContent = msg;
+}
+
 renderer.domElement.addEventListener("pointerdown", (e) => {
   if (renderer.xr.isPresenting) return;
   resumeAudio();
@@ -263,9 +297,22 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
   const ray = rayFromNdc(camera, pointer.x, pointer.y);
   const hit = firstHit(ray, pickables());
   if (!hit) return;
+  if (hit.object.name === "collider_fastener") {
+    const tool = toolbox.userData.parts.tool;
+    if (toolIsHeldOrOut(tool, toolbox) || pointer.dragging === tool) {
+      const r = dispatchDrive(toolbox, null);
+      setAction(r.ok ? (r.seated ? "fastener seated" : `drive ${r.turns}/${r.needed}`) : "drive nack");
+    } else {
+      playFeedback(toolbox, "nack", null);
+      setAction("nack — extract the tool first");
+    }
+    return;
+  }
   if (hit.object.userData.layer === "use") {
     const result = dispatchUse(hit.object.userData.entity, hit.object.name, null);
     if (result.reset) resetAll();
+    else if (result.ok) setAction(`${result.from} → ${result.to}`);
+    else setAction(`nack — ${result.from || "wrong state"}`);
     return;
   }
   const target = grabTargetFromHit(hit, null);
@@ -278,7 +325,19 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
 });
 
 window.addEventListener("pointerup", () => {
-  if (pointer.dragging) pointer.dragging.userData.heldBy = null;
+  if (pointer.dragging) {
+    const dragged = pointer.dragging;
+    dragged.userData.heldBy = null;
+    if (dragged === toolbox.userData.parts.tool) {
+      if (tryReturnTool(dragged, toolbox)) {
+        playFeedback(toolbox, "return", null);
+        setAction("tool returned");
+      } else {
+        dragged.userData.extracted = true;
+        setAction("tool extracted — F drives, T returns");
+      }
+    }
+  }
   pointer.down = false;
   pointer.dragging = null;
 });
@@ -289,6 +348,26 @@ window.addEventListener("keydown", (e) => {
     setColliderDebug(entities, colliderDebug);
   }
   if (e.key === "r" || e.key === "R") resetAll();
+  if (e.key === "f" || e.key === "F") {
+    const tool = toolbox.userData.parts.tool;
+    if (toolIsHeldOrOut(tool, toolbox)) {
+      const r = dispatchDrive(toolbox, null);
+      setAction(r.ok ? (r.seated ? "fastener seated" : `drive ${r.turns}/${r.needed}`) : "drive nack");
+    } else {
+      playFeedback(toolbox, "nack", null);
+      setAction("nack — extract the tool first");
+    }
+  }
+  if (e.key === "t" || e.key === "T") {
+    const tool = toolbox.userData.parts.tool;
+    if (tryReturnTool(tool, toolbox, { force: true })) {
+      playFeedback(toolbox, "return", null);
+      setAction("tool returned");
+    } else {
+      playFeedback(toolbox, "nack", null);
+      setAction("nack — crate must be open to return");
+    }
+  }
   if (e.key === "0") {
     toolbox.userData.lod.mode = "auto";
   }
@@ -345,7 +424,11 @@ function updateHands() {
       const ray = rayFromController(hand);
       const hit = firstHit(ray, pickables()) || nearestColliderTo(tip);
       if (!hit) continue;
-      if (hit.object.userData.layer === "use") {
+      if (hit.object.name === "collider_fastener") {
+        const tool = toolbox.userData.parts.tool;
+        if (toolIsHeldOrOut(tool, toolbox) || hand.userData.held === tool) dispatchDrive(toolbox, null);
+        else playFeedback(toolbox, "nack", null);
+      } else if (hit.object.userData.layer === "use") {
         const result = dispatchUse(hit.object.userData.entity, hit.object.name, null);
         if (result.reset) resetAll();
       } else {
@@ -359,7 +442,7 @@ function updateHands() {
     } else if (!pinching && hand.userData.pinching && pinchReleased(hand)) {
       hand.userData.pinching = false;
       if (hand.userData.held) {
-        endGrab(hand.userData.held, scene);
+        endGrab(hand.userData.held, scene, toolbox);
         hand.userData.held = null;
       }
     }
@@ -388,11 +471,7 @@ renderer.setAnimationLoop(() => {
   const viewCam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
   updateToolboxLod(toolbox, viewCam);
   refreshLodStatus();
-  const state = activityState(toolbox);
-  if (state !== lastState) {
-    lastState = state;
-    updateStatePlaque(plaque, state);
-  }
+  refreshPlaque();
 
   if (renderer.xr.isPresenting) {
     let hovered = false;
@@ -402,7 +481,10 @@ renderer.setAnimationLoop(() => {
       if (ray) ray.scale.z = hit ? hit.distance : 1.6;
       if (hit && !hovered) {
         clearAllHovers(entities);
-        setHover(hit.object.userData.entity, hit.object.name);
+        const entity = hit.object.userData.entity;
+        if (setHover(entity, hit.object.name)) {
+          playFeedback(entity, "hoverEnter", controller.userData.inputSource);
+        }
         hovered = true;
       }
     }

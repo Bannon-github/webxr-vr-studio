@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.4.0 — 2026-09-09
+
+- **Delta (additive, L5):** Re-latch cancel (`unlatched` + latch → `closed`). Tool remains unpickable while closed. After `open`, grab the screwdriver; use `collider_fastener` (4 turns, plaque `DRIVE n/4` → `SEATED`). Release near the slot (or `T`) returns the tool. Declared `feedback` keys pulse `gamepad.hapticActuators` when present. LOD0–2 and L4 hull names unchanged; fastener is +12 tris / +1 draw.
+- **Layers:** L5 complete. `layerTarget` met.
+- **Quest 3:** Still ≪750k tris / ≪100 draws. Frame time / FFR on headset still **TODO**.
+- **Revision:** `revisions/v0.4.0/`
+
 ## 0.3.0 — 2026-09-09
 
 - **Delta (additive, L3):** Procedural LOD1 (96 tris / 8 draws) and LOD2 (24 / 2) sit beside unchanged LOD0 (240 / 14). Distance switch 2.4 m / 4.5 m with hysteresis; `1`/`2`/`3` force a level, `0` auto. Same part names and L4 hulls (`collider_grab` / latch / lid / tool); activity still `closed` → `unlatched` → `open`.

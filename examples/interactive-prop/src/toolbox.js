@@ -156,19 +156,27 @@ export function createToolbox() {
   tool.add(toolL0, toolL1, toolL2);
   tool.position.set(0, 0.045, 0);
   tool.userData.restLocal = tool.position.clone();
+  tool.userData.feedbackEntity = root;
   root.add(tool);
+
+  // L5 work target: front fastener. Extra 12 tris / 1 draw, not an LOD mesh.
+  const fastener = boxMesh(0.028, 0.028, 0.02, brass, -0.12, 0.07, 0.131);
+  fastener.name = "fastenerMesh";
+  root.add(fastener);
 
   const colliderGrab = makeCollider("collider_grab", 0.38, 0.15, 0.24, 0, 0.075, 0);
   const colliderLatch = makeCollider("collider_latch", 0.08, 0.1, 0.06, 0, 0.1, 0.15);
   const colliderLid = makeCollider("collider_lid", 0.38, 0.06, 0.26, 0, 0.012, 0.12);
   const colliderTool = makeCollider("collider_tool", 0.2, 0.04, 0.04, 0, 0, 0);
+  const colliderFastener = makeCollider("collider_fastener", 0.09, 0.09, 0.08, -0.12, 0.07, 0.16);
   colliderGrab.userData.layer = "grab";
   colliderLatch.userData.layer = "use";
   colliderLid.userData.layer = "use";
   colliderTool.userData.layer = "grab";
   colliderTool.userData.part = "tool";
+  colliderFastener.userData.layer = "use";
   // Hulls live with the part they represent; they are never the render mesh.
-  root.add(colliderGrab, colliderLatch);
+  root.add(colliderGrab, colliderLatch, colliderFastener);
   lidPivot.add(colliderLid);
   tool.add(colliderTool);
 
@@ -177,11 +185,13 @@ export function createToolbox() {
     lid: lidPivot,
     latch: latchPivot,
     tool,
+    fastener,
   };
 
-  root.userData.parts = { body, lidPivot, latchPivot, tool };
+  root.userData.parts = { body, lidPivot, latchPivot, tool, fastener };
   root.userData.highlightables = highlightables;
-  root.userData.colliders = [colliderGrab, colliderLatch, colliderLid, colliderTool];
+  root.userData.colliders = [colliderGrab, colliderLatch, colliderLid, colliderTool, colliderFastener];
+  root.userData.fastener = { mesh: fastener, turns: 0, needed: 4, seated: false };
   root.userData.lod = {
     current: 0,
     mode: "auto",
@@ -295,6 +305,49 @@ export function tryUse(entity, colliderName) {
   return { ok: true, to: hit.to, from: hit.from };
 }
 
+/** L5: drive the front fastener while the tool is in use. */
+export function tryDriveFastener(entity) {
+  const f = entity.userData.fastener;
+  if (!f) return { ok: false, reason: "nack" };
+  if (f.seated) return { ok: false, reason: "nack", seated: true };
+  f.turns += 1;
+  if (f.turns >= f.needed) {
+    f.turns = f.needed;
+    f.seated = true;
+  }
+  applyFastenerVisual(entity);
+  return { ok: true, turns: f.turns, seated: f.seated, needed: f.needed };
+}
+
+const _slotWorld = new THREE.Vector3();
+const _toolWorld = new THREE.Vector3();
+
+/**
+ * Seat the tool in the tray. Default: only when within 0.2 m of rest (drop-to-return).
+ * Pass `{ force: true }` for the desktop T key / explicit holster from any distance.
+ */
+export function tryReturnTool(tool, crate, opts = {}) {
+  if (!tool || !crate || activityState(crate) !== "open") return false;
+  if (!opts.force) {
+    crate.localToWorld(_slotWorld.copy(tool.userData.restLocal));
+    tool.getWorldPosition(_toolWorld);
+    if (_toolWorld.distanceTo(_slotWorld) > 0.2) return false;
+  }
+  crate.attach(tool);
+  tool.position.copy(tool.userData.restLocal);
+  tool.rotation.set(0, 0, 0);
+  tool.userData.heldBy = null;
+  tool.userData.extracted = false;
+  if (tool.userData.velocity) tool.userData.velocity.set(0, 0, 0);
+  return true;
+}
+
+export function toolIsHeldOrOut(tool, crate) {
+  if (!tool) return false;
+  if (tool.userData.heldBy || tool.userData.extracted) return true;
+  return Boolean(crate) && tool.parent !== crate;
+}
+
 const LID_OPEN = -2.15;
 const LATCH_OPEN = -1.35;
 
@@ -316,6 +369,14 @@ export function applyActivityVisual(entity, alpha = 0.2) {
     toolCollider.userData.pickable = state === "open" || !nested;
   }
   if (tool) tool.visible = state === "open" || tool.parent !== entity;
+  applyFastenerVisual(entity);
+}
+
+export function applyFastenerVisual(entity) {
+  const f = entity.userData.fastener;
+  if (!f?.mesh) return;
+  f.mesh.rotation.z = f.turns * (Math.PI / 2);
+  f.mesh.position.z = 0.131 - (f.seated ? 0.012 : f.turns * 0.002);
 }
 
 export function setColliderDebug(roots, visible) {
@@ -343,7 +404,14 @@ export function resetToolbox(entity, tableY = 0.9) {
   if (tool.parent !== entity) entity.attach(tool);
   tool.position.copy(tool.userData.restLocal);
   tool.rotation.set(0, 0, 0);
+  tool.userData.heldBy = null;
+  tool.userData.extracted = false;
   tool.userData.velocity = new THREE.Vector3();
+  const f = entity.userData.fastener;
+  if (f) {
+    f.turns = 0;
+    f.seated = false;
+  }
   lidSnap(entity);
 }
 
@@ -372,7 +440,7 @@ export function createStatePlaque() {
   return mesh;
 }
 
-export function updateStatePlaque(plaque, state) {
+export function updateStatePlaque(plaque, state, fastener) {
   const { ctx, canvas, tex } = plaque.userData;
   ctx.fillStyle = "#121820";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -380,10 +448,16 @@ export function updateStatePlaque(plaque, state) {
   ctx.lineWidth = 8;
   ctx.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
   ctx.fillStyle = "#8aa0c0";
-  ctx.font = "28px system-ui, sans-serif";
-  ctx.fillText("ACTIVITY", 28, 52);
+  ctx.font = "22px system-ui, sans-serif";
+  ctx.fillText("ACTIVITY", 28, 42);
   ctx.fillStyle = "#e8ecf5";
-  ctx.font = "bold 48px system-ui, sans-serif";
-  ctx.fillText(String(state).toUpperCase(), 28, 118);
+  ctx.font = "bold 40px system-ui, sans-serif";
+  ctx.fillText(String(state).toUpperCase(), 28, 92);
+  ctx.fillStyle = "#c4a35a";
+  ctx.font = "22px system-ui, sans-serif";
+  if (fastener) {
+    const label = fastener.seated ? "FASTENER SEATED" : `DRIVE ${fastener.turns}/${fastener.needed}`;
+    ctx.fillText(label, 28, 132);
+  }
   tex.needsUpdate = true;
 }

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { applyActivityVisual, tryUse } from "./toolbox.js";
+import { applyActivityVisual, tryDriveFastener, tryReturnTool, tryUse, toolIsHeldOrOut } from "./toolbox.js";
 
 /**
  * Intent adapter: WebXR select/squeeze (and a desktop pointer stand-in)
@@ -83,6 +83,13 @@ export function firstHit(raycaster, pickables) {
   // Prefer a use-target that is almost as near as the grab hull so a large
   // body collider cannot steal latch/lid clicks (interactive-objects.md).
   const nearest = hits[0];
+  const entity = nearest.object.userData.entity;
+  const tool = entity?.userData?.parts?.tool;
+  // Prefer the fastener only while the tool is in play so it cannot steal latch/lid.
+  if (tool && toolIsHeldOrOut(tool, entity)) {
+    const fastener = hits.find((h) => h.object.name === "collider_fastener" && h.distance <= nearest.distance + 0.16);
+    if (fastener) return fastener;
+  }
   const use = hits.find((h) => h.object.userData.layer === "use" && h.distance <= nearest.distance + 0.08);
   return use || nearest;
 }
@@ -115,8 +122,9 @@ export function setHover(entity, colliderName) {
     const lidHit = colliderName === "collider_lid" && key === "lid";
     const grabHit = colliderName === "collider_grab" && key === "body";
     const toolHit = colliderName === "collider_tool" && key === "tool";
+    const fastenerHit = colliderName === "collider_fastener" && key === "fastener";
     const resetHit = colliderName === "collider_reset" && key === "reset";
-    if (latchHit || lidHit || grabHit || toolHit || resetHit) emissiveFor(obj, 0x4a2810);
+    if (latchHit || lidHit || grabHit || toolHit || fastenerHit || resetHit) emissiveFor(obj, 0x4a2810);
     else clearEmissive(obj);
   }
   return prev !== colliderName;
@@ -126,8 +134,9 @@ export function clearAllHovers(entities) {
   for (const e of entities) setHover(e, null);
 }
 
-function feedback(entity, key, inputSource) {
-  const fb = entity.userData.studio?.components?.feedback?.[key];
+export function playFeedback(entity, key, inputSource) {
+  const src = entity?.userData.studio ? entity : entity?.userData.feedbackEntity;
+  const fb = src?.userData.studio?.components?.feedback?.[key];
   if (!fb) return;
   if (fb.haptic) pulseHaptic(inputSource, fb.haptic, fb.ms ?? 30);
   if (fb.audio) playTick(fb.audio);
@@ -142,12 +151,17 @@ export function dispatchUse(entity, colliderName, inputSource) {
   const result = tryUse(entity, colliderName);
   if (result.ok) {
     applyActivityVisual(entity, 1);
-    feedback(entity, result.to, inputSource);
-    playTick(result.to === "unlatched" ? "latch" : "lid");
+    playFeedback(entity, result.to, inputSource);
   } else if (result.reason === "nack") {
-    feedback(entity, "nack", inputSource);
-    playTick("nack");
+    playFeedback(entity, "nack", inputSource);
   }
+  return result;
+}
+
+export function dispatchDrive(entity, inputSource) {
+  const result = tryDriveFastener(entity);
+  if (result.ok) playFeedback(entity, result.seated ? "seated" : "drive", inputSource);
+  else playFeedback(entity, "nack", inputSource);
   return result;
 }
 
@@ -166,24 +180,31 @@ export function beginGrab(object, holder, inputSource) {
   if (object.userData.heldBy) return false;
   attachTo(holder, object);
   object.userData.poseHistory = [];
-  feedback(object, "grab", inputSource);
-  playTick("grab");
+  playFeedback(object, "grab", inputSource);
   return true;
 }
 
-export function endGrab(object, scene) {
-  if (!object.userData.heldBy) return;
+export function endGrab(object, scene, crate) {
+  if (!object.userData.heldBy) return { returned: false };
   const history = object.userData.poseHistory || [];
   detachTo(scene, object);
-  const v = new THREE.Vector3();
-  if (history.length >= 2) {
-    const a = history[0];
-    const b = history[history.length - 1];
-    const dt = Math.max(1 / 90, b.t - a.t);
-    v.subVectors(b.p, a.p).divideScalar(dt);
-    v.clampLength(0, 6);
+  if (object.name === "tool" && crate && tryReturnTool(object, crate)) {
+    playFeedback(crate, "return");
+    return { returned: true };
   }
-  object.userData.velocity = v;
+  if (object.name === "tool") object.userData.extracted = true;
+  const v = object.userData.velocity;
+  if (v) {
+    v.set(0, 0, 0);
+    if (history.length >= 2) {
+      const a = history[0];
+      const b = history[history.length - 1];
+      const dt = Math.max(1 / 90, b.t - a.t);
+      v.subVectors(b.p, a.p).divideScalar(dt);
+      v.clampLength(0, 6);
+    }
+  }
+  return { returned: false };
 }
 
 export function sampleHeldPose(object, now) {

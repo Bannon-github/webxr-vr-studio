@@ -2,16 +2,17 @@
   "version": 1,
   "entity": "toolbox",
   "objectId": "crate-toolbox",
-  "objectVersion": "0.3.0",
+  "objectVersion": "0.4.0",
   "components": {
     "visual": { "lodGroup": "toolbox_lod" },
     "colliders": [
       { "node": "collider_grab", "layer": "grab", "shape": "box" },
       { "node": "collider_latch", "layer": "use", "shape": "box" },
       { "node": "collider_lid", "layer": "use", "shape": "box" },
-      { "node": "collider_tool", "layer": "grab", "shape": "box" }
+      { "node": "collider_tool", "layer": "grab", "shape": "box" },
+      { "node": "collider_fastener", "layer": "use", "shape": "box" }
     ],
-    "hoverable": { "parts": ["latch", "lid", "body", "tool"] },
+    "hoverable": { "parts": ["latch", "lid", "body", "tool", "fastener"] },
     "grabbable": { "attachNode": "toolbox", "nearMeters": 0.28, "throwOnRelease": true },
     "activity": {
       "id": "open-box",
@@ -20,7 +21,7 @@
       "transitions": [
         { "from": "closed", "intent": "use", "collider": "collider_latch", "to": "unlatched" },
         { "from": "unlatched", "intent": "use", "collider": "collider_lid", "to": "open" },
-        { "from": "unlatched", "intent": "use", "collider": "collider_latch", "to": "open" },
+        { "from": "unlatched", "intent": "use", "collider": "collider_latch", "to": "closed" },
         { "from": "open", "intent": "use", "collider": "collider_lid", "to": "closed" }
       ]
     },
@@ -28,10 +29,13 @@
     "feedback": {
       "hoverEnter": { "haptic": 0.12, "ms": 18 },
       "grab": { "haptic": 0.4, "ms": 40, "audio": "grab" },
-      "nack": { "haptic": 0.25, "ms": 30 },
+      "nack": { "haptic": 0.25, "ms": 30, "audio": "nack" },
       "unlatched": { "haptic": 0.35, "ms": 35, "audio": "latch" },
       "open": { "haptic": 0.3, "ms": 45, "audio": "lid" },
-      "closed": { "haptic": 0.3, "ms": 35, "audio": "lid" }
+      "closed": { "haptic": 0.3, "ms": 35, "audio": "lid" },
+      "drive": { "haptic": 0.45, "ms": 40, "audio": "latch" },
+      "seated": { "haptic": 0.6, "ms": 70, "audio": "grab" },
+      "return": { "haptic": 0.3, "ms": 35, "audio": "lid" }
     }
   }
 }

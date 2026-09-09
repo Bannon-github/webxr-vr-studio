@@ -2,7 +2,7 @@
 
 Vite + Three.js demo of a **photoreal-looking PBR crate** with hover, grab/throw, and a multi-state open activity. Companion to the WebXR VR Studio playbook — specifically [asset-to-interaction-workflow](../../studio/asset-to-interaction-workflow.md), [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md), and [interactive-objects](../../docs/design/interactive-objects.md).
 
-Meshes here are **procedural stand-ins** (wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.3.0, `targetDevice: quest3`). LOD0/1/2 are additive visual sets (only one draws). Later DCC GLBs UPGRADE that id ([additive iteration](../../studio/additive-object-iteration.md)); they do not replace it with a new folder. Visual mesh ≠ collider ≠ behavior.
+Meshes here are **procedural stand-ins** (wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.4.0, `targetDevice: quest3`). LOD0/1/2 are additive visual sets (only one draws). L5 adds tool-drive + re-latch cancel. Later DCC GLBs UPGRADE that id ([additive iteration](../../studio/additive-object-iteration.md)). Visual mesh ≠ collider ≠ behavior.
 
 ## Run
 
@@ -20,7 +20,8 @@ Vite uses HTTPS and host binding so a headset on LAN gets a secure context. Desk
 Use the WebXR API Emulator, **or** stay in inline view:
 
 - Mouse hover highlights the part under the ray (collider, not the hero mesh)
-- Click the **latch** then the **lid** to drive `closed` → `unlatched` → `open`
+- Click the **latch** (`unlatched`); click latch again to **cancel** back to `closed`, or click the **lid** to `open`
+- Drag the **tool** out (only when open). Click the front **fastener** (4 turns → seated). Drop near the crate or press `T` to return
 - Drag the crate (grab hull) to move it on the table
 - Click the dark **reset** plate, or press `R`
 - Press `C` to draw collider wireframes
@@ -35,12 +36,13 @@ Use the `build` and `preview` scripts in package.json.
 | Concern | Implementation |
 | --- | --- |
 | Photoreal-ish look | `MeshStandardMaterial` + `RoomEnvironment` PMREM, `SRGBColorSpace`, ACES tone mapping |
-| Visual vs collider | `collider_grab` / `collider_latch` / `collider_lid` / `collider_tool` — raycasts hit these only |
+| Visual vs collider | `collider_grab` / `collider_latch` / `collider_lid` / `collider_tool` / `collider_fastener` — raycasts hit these only |
 | Behavior metadata | [`src/behavior.json`](src/behavior.json) matches ADR 0004; cloned onto `userData.studio` |
 | Hover | Local emissive on the *part*, not an unlit hero tint |
 | Use | WebXR `select` (Three `selectstart` on the target-ray controller) |
 | Grab / throw | WebXR `squeeze` attaches to `getControllerGrip` (`gripSpace`); release samples recent poses and applies a clamped kinematic velocity — **not** to the camera |
-| Multi-state activity | `closed` --use latch--> `unlatched` --use lid--> `open`; illegal transitions nack |
+| Multi-state activity | `closed` --latch--> `unlatched` --lid--> `open`; **unlatched --latch--> closed** (cancel). Illegal use nacks |
+| L5 tool use | Grab tool when `open`; use `collider_fastener` while tool is held/out (4 turns). Snap-return on release near slot |
 | Contents gating | Tool collider is unpickable until `open` |
 | Hands (optional) | `requestSession` `optionalFeatures: ["hand-tracking"]`; pinch measured on `XRHand` joints `thumb-tip` / `index-finger-tip`. Core loop does not require hands. |
 | Feedback | Short Web Audio ticks + `gamepad.hapticActuators.pulse` when the source exposes it |
@@ -54,10 +56,11 @@ Copied from the sidecar (intents, not buttons):
 | From | Intent | Collider | To |
 | --- | --- | --- | --- |
 | closed | use | collider_latch | unlatched |
-| unlatched | use | collider_lid or collider_latch | open |
+| unlatched | use | collider_lid | open |
+| unlatched | use | collider_latch | closed (cancel) |
 | open | use | collider_lid | closed |
 
-Grab uses `collider_grab` (crate) or `collider_tool` (screwdriver, only when open).
+Grab: `collider_grab` (crate) or `collider_tool` (only when open). Drive: `collider_fastener` while the tool is held/out (progress on the plaque, not a fourth box state).
 
 ## Notes
 
