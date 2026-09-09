@@ -34,3 +34,4 @@ Use the build and preview scripts in package.json.
 
 - Prefer local-floor on device; Three WebXRManager negotiates available spaces.
 - Product comfort defaults: studio/adr/0002-locomotion.md (this starter has no artificial locomotion).
+- Next example: [interactive-prop](../interactive-prop/) — hover, grab, and a multi-state openable crate (ADR 0004).

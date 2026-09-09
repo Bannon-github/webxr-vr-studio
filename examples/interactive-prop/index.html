@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebXR VR Studio — Interactive prop</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0d12; color: #e8ecf5; font-family: system-ui, sans-serif; }
+      #hud {
+        position: fixed; left: 16px; bottom: 16px; z-index: 2;
+        max-width: min(460px, 92vw); padding: 12px 14px; border-radius: 12px;
+        background: rgba(10, 14, 22, 0.72); backdrop-filter: blur(8px);
+        border: 1px solid rgba(255,255,255,0.08); line-height: 1.45; font-size: 14px;
+      }
+      #hud code { color: #9ad1ff; }
+      #hud kbd { background: #1c2433; padding: 1px 6px; border-radius: 6px; font-size: 12px; }
+      canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <strong>Interactive prop</strong> — photoreal PBR stand-in, not the pick target.<br />
+      <strong>XR:</strong> ray hover · trigger <code>select</code> = use latch/lid · grip <code>squeeze</code> = grab/throw<br />
+      <strong>Desktop:</strong> hover + click to use · drag the crate to move · <kbd>C</kbd> colliders · <kbd>R</kbd> reset<br />
+      Activity: <code>closed</code> → unlatch → <code>open</code> (tool is grabbable only when open).
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
