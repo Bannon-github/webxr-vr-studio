@@ -52,8 +52,8 @@ Layers complete **upward**. A higher layer may refine a lower one; it may not si
 | --- | --- | --- |
 | **L0** Blockout | Scale, origin, part empties, 1 unit = 1 m | Guessed size; no `objectId` |
 | **L1** Readable mesh | Silhouette + separate moving parts; collider stubs | One merged sculpt; rays hit the hero |
-| **L2** PBR photoreal | Metallic-roughness, no baked lighting in albedo | Plastic gray or photo-lit texture |
-| **L3** LODs / perf | LOD1+, texture class, holds target Hz | LOD0 only; 4K handheld; misses v-sync |
+| **L2** PBR photoreal | Metallic-roughness, no baked lighting in albedo. Maps **≤2048², prefer ≤1024²**; KTX2 + mipmaps. Look from bakes, not scan density. Must fit [Quest 3](../docs/shipping/quest-3-target.md). | Plastic gray, photo-lit albedo, or 4K handheld maps |
+| **L3** LODs / perf | LOD1+, holds **Quest 3 90 Hz**; scene draw calls ≲100; view tris ≲750k/eye soft cap; FFR-safe. | LOD0 only; misses 90 Hz; desktop-only “it looks fine” |
 | **L4** Interaction states | Hover / grab / use; named `Activity` states | Pretty sculpture; no latch/lid contract |
 | **L5** Complex activity | Multi-step, physics hull, audio/haptics, hands optional | States exist; drop soft-locks; no nack |
 
@@ -91,7 +91,8 @@ A cycle is done when **all** of these are true:
 2. **Same `objectId`.** NEW objects are a different cycle with a new L0.
 3. **Prior revision retained** (folder or pointer) if a binary or behavior file changed.
 4. **Manifest** `version` + `layersComplete` updated if a layer newly holds.
-5. Applicable [quality-bar](quality-bar.md) interactive-asset boxes still pass (do not regress L4 to get L2).
+5. Applicable [quality-bar](quality-bar.md) boxes still pass **on Quest 3** (do not regress L4 to get L2). L2/L3 deltas that break 90 Hz are not done.
+6. Manifest `targetDevice` is `quest3` and `perf` (tris / LOD / texture sizes) matches what shipped.
 
 If you changed three layers, you ran three cycles or you scope-crept. Split the notes anyway.
 
@@ -113,4 +114,5 @@ Do not start a NEW object in a pulse unless the tree said NEW **and** the delta 
 | [ADR 0005](adr/0005-additive-object-evolution.md) | IDs, manifests, retention |
 | [assets/objects/](../assets/objects/README.md) | Catalog + template |
 | [asset-to-interaction-workflow](asset-to-interaction-workflow.md) | First-time hero path (feeds L0–L5) |
+| [quest-3-target](../docs/shipping/quest-3-target.md) | Gate device; L2/L3 must fit |
 | [content-pipeline](content-pipeline.md) | Export / CDN snapshot |

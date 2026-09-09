@@ -33,8 +33,10 @@ Required:
 | `layersComplete` | string[] | Subset of `L0`…`L5`, lowest-to-highest. Prefer no gaps; a skipped layer needs a CHANGELOG reason (seed `crate-toolbox` skips L3 until a GLB/LOD set exists) |
 | `interactions` | string[] | Affordance tags (`hover`, `grab`, `use-latch`, …). Empty before L4 |
 | `deps` | string[] | Repo-relative paths or other `objectId`s this object needs |
+| `targetDevice` | string | Studio default: `quest3` ([quest-3-target](../../docs/shipping/quest-3-target.md)) |
+| `perf` | object | `lod0Tris`, `textureMax`, `texturePref`, `drawCallsEstimate`, notes. L2/L3 must fit Quest 3 budgets |
 
-Common optional fields: `layerTarget`, `displayName`, `variants`, `deprecatedBy`, `source` (`kind`: `gltf` \| `procedural`, plus pointers).
+Common optional fields: `layerTarget`, `displayName`, `variants`, `deprecatedBy`, `source` (`kind`: `gltf` \| `procedural`, plus pointers). `perf.frameHz` defaults to 90 if omitted.
 
 Unknown fields are ignored. Do not mint a `KHR_` name for this file.
 
@@ -50,4 +52,4 @@ Copy [`_template/`](_template/) to `assets/objects/<objectId>/` and replace plac
 
 | objectId | Version | Layers | Notes |
 | --- | --- | --- | --- |
-| [crate-toolbox](crate-toolbox/) | 0.2.0 | L0–L2, L4 | Seed; runtime in [examples/interactive-prop](../../examples/interactive-prop/) |
+| [crate-toolbox](crate-toolbox/) | 0.2.1 | L0–L2, L4 | Seed; `targetDevice: quest3`; runtime in [examples/interactive-prop](../../examples/interactive-prop/) |

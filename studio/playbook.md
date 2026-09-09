@@ -7,7 +7,7 @@ How a productive WebXR VR app studio operates week to week.
 | Ritual | When | Outcome |
 | --- | --- | --- |
 | Comfort review | Before merging loco/camera PRs | Tier classification + tester sign-off |
-| Perf budget check | Mid-sprint + release | On-device ms vs target Hz |
+| Perf budget check | Mid-sprint + release | Quest 3 ms vs **90 Hz** ([quest-3-target](../docs/shipping/quest-3-target.md)) |
 | Matrix update | Every release candidate | docs/shipping table filled |
 | ADR office hours | As needed | Decisions recorded in studio/adr |
 | Content freeze | RC cut | Pipeline revision pinned |

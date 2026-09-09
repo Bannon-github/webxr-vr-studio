@@ -2,7 +2,7 @@
   "version": 1,
   "entity": "toolbox",
   "objectId": "crate-toolbox",
-  "objectVersion": "0.2.0",
+  "objectVersion": "0.2.1",
   "components": {
     "visual": { "lodGroup": "toolbox_lod" },
     "colliders": [

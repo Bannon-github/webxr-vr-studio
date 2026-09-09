@@ -13,7 +13,7 @@ We need a default for **how objects grow** that does not fight [ADR 0004](0004-a
 
 1. **Stable `objectId`.** Assigned at L0. Kebab-case. Immutable. Never recycled. Catalog path: `assets/objects/<objectId>/`.
 
-2. **Layered manifest.** Each object has `manifest.json` with at least `id`, `version` (semver), `layersComplete` (L0–L5), `interactions[]`, `deps[]`. Optional `layerTarget`, `variants[]`, `deprecatedBy`, `source`. The manifest is the index; `behavior.json` remains the ADR 0004 sidecar.
+2. **Layered manifest.** Each object has `manifest.json` with at least `id`, `version` (semver), `layersComplete` (L0–L5), `interactions[]`, `deps[]`, `targetDevice` (studio default `quest3`), and `perf` (tris / LOD / texture sizes vs [Quest 3](../../docs/shipping/quest-3-target.md)). Optional `layerTarget`, `variants[]`, `deprecatedBy`, `source`. The manifest is the index; `behavior.json` remains the ADR 0004 sidecar.
 
 3. **Revision retention.** Every shipped object version that changed a binary or behavior file is copied to `assets/objects/<objectId>/revisions/<semver>/` (or a POINTER.md to immutable storage). Git LFS for GLB/KTX2. Overwriting `current.glb` without a revision copy is not allowed.
 

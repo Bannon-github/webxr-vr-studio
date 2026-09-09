@@ -5,8 +5,8 @@
 1. **Unit / logic** — locomotion math, save settings, UI state (Node/browser without HMD)
 2. **Emulator** — WebXR API Emulator (Chrome/Firefox extensions) for session smoke, controllers, poses
 3. **Headset smoke** — enter/exit session, both controllers, recenter, teleport
-4. **Headset soak** — 10–20 minutes thermal + comfort
-5. **Device matrix** — per docs/shipping
+4. **Headset soak** — 10–20 minutes thermal + comfort on **Quest 3 @ 90 Hz**
+5. **Device matrix** — per [docs/shipping](../shipping/); gate is [quest-3-target](../shipping/quest-3-target.md)
 
 ## Emulator checklist
 

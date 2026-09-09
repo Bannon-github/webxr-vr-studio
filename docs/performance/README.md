@@ -2,6 +2,8 @@
 
 Standalone HMDs are thermally and GPU constrained. Comfort collapses when you miss v-sync.
 
+**Gate device:** [Quest 3](../shipping/quest-3-target.md) @ 90 Hz. Do not author against a desktop GPU and “see if Quest holds.”
+
 ## Frame budgets
 
 | Refresh | Budget (approx) |
@@ -43,7 +45,7 @@ Leave headroom for browser + compositor. Target ~70–80% of budget on device, n
 7. Retest with FFR 0 / 0.5 / 1
 8. Verify no GC spikes on interaction storms
 
-Fail the build if the lowest-tier target device cannot hold target Hz in the hero scene.
+Fail the build if **Quest 3** cannot hold **90 Hz** in the hero scene ([quest-3-target](../shipping/quest-3-target.md); 72 Hz is fallback only).
 
 ## Photoreal props
 

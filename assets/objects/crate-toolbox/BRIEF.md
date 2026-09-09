@@ -5,4 +5,5 @@
 - **Named states:** `closed` → `unlatched` → `open`
 - **Grab vs use parts:** `collider_grab` (body), `collider_latch` / `collider_lid` (use), `collider_tool` (grab, only when `open`)
 - **layerTarget:** L5 (physics hull + throw already kinematic in the example; hands optional)
+- **Gate:** Quest 3 @ 90 Hz ([quest-3-target](../../docs/shipping/quest-3-target.md)); `perf` on the manifest. TODO: headset confirm.
 - **NEW vs UPGRADE:** Seed object. Further cycles UPGRADE this id unless topology or affordance class changes.

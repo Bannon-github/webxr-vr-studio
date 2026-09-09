@@ -2,9 +2,9 @@
 
 How to keep a photographed-looking prop without missing v-sync on a standalone HMD.
 
-Read with the global budgets in [README](README.md) (72 Hz ≈ 13.9 ms, 90 Hz ≈ 11.1 ms). This page is the **asset** half: triangles, textures, materials, lighting, LODs. Interaction CPU (raycasts, state) stays cheap if you pick **colliders**, not hero meshes — [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md).
+**Gate:** [Quest 3](../shipping/quest-3-target.md) @ **90 Hz** (≈11.1 ms). 72 Hz fallback; 120 Hz stretch; no 207/240 Hz. This page is the **asset** half: triangles, textures, materials, lighting, LODs. Interaction CPU stays cheap if you pick **colliders**, not hero meshes — [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md).
 
-Leave headroom for the browser and compositor. Author to ~70–80% of the frame on the **lowest-tier** device in the shipping matrix, not a desktop dGPU.
+Quest 3 is a mobile **TBDR** GPU. Author to ~70–80% of 11.1 ms **on the headset**, not a desktop dGPU. L2 (PBR) and L3 (LODs) must stay inside the Quest 3 checklist — photoreal via **baked maps + LODs**, not raw scan density.
 
 ## What “photoreal” means here
 
@@ -29,13 +29,13 @@ Tune per product; fail QA if the hero scene misses target Hz. Numbers assume Que
 
 | Class | Tris (LOD0) | Albedo | Normal | ORM / packed | Draw notes |
 | --- | --- | --- | --- | --- | --- |
-| Hero interactive prop | 5–20 k | 1–2K | 1–2K | 1K | One material if possible; 2–3 parts max |
-| Held tool | 2–8 k | 1K | 1K | 512–1K | Tip extra material only if needed |
-| Set dressing (in reach) | 1–5 k | 512–1K | 512–1K | 512 | Atlas shared among variants |
+| Hero interactive prop | 5–20 k | **1024** (2048 max) | 1024 | 512–1024 | One material if possible; 2–3 parts max |
+| Held tool | 2–8 k | 512–1024 | 512–1024 | 512 | Tip extra material only if needed |
+| Set dressing (in reach) | 1–5 k | 512–1024 | 512 | 512 | Atlas shared among variants |
 | Background / far | LOD2 or card | 256–512 | none / 256 | none | Merge; instance repeats |
 | Collision hulls | 12–200 tris each | — | — | — | Hidden; convex pieces |
 
-Scene texture memory: treat **256–512 MB** of decoded/resident textures as a caution band on Quest 2-class hardware. Prefer Basis/KTX2 so GPU footprints stay compressed.
+Whole-view soft ceiling (Quest 3 WebXR studio default): **≲750k tris/eye**, **≲100 draw calls**. Props must sit far under that. Texture memory: treat **256–512 MB** resident as caution; prefer KTX2/Basis. **TODO:** confirm ceilings on-device for the product hero scene.
 
 LODs: switch ~2–3 m → LOD1 (≈30–50% tris, half res), farther → impostor or 512 flake. Do not keep LOD0 behind the user.
 
@@ -112,4 +112,4 @@ Bake in DCC or a desktop prepass. Ship GLB + IBL.
 5. Thermal soak 10+ minutes with the activity looping
 6. Interaction storm: hover + grab + throw spam — watch GC and raycast cost
 
-Fail the content revision if the lowest-tier device cannot hold target Hz in the hero scene ([quality-bar](../../studio/quality-bar.md)).
+Fail the content revision if **Quest 3** cannot hold **90 Hz** in the hero scene ([quality-bar](../../studio/quality-bar.md), [quest-3-target](../shipping/quest-3-target.md)).

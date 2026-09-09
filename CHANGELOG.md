@@ -2,6 +2,18 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.4.0] — 2026-09-09
+
+### Added
+
+- [Quest 3 gate](docs/shipping/quest-3-target.md) — 90 Hz ship / 72 Hz fallback / 120 Hz stretch; TBDR + thermal; studio draw/tri/texture/FFR checklist (Meta WebXR + MDN cites; TODOs for on-device confirm)
+- Manifest `targetDevice` + `perf` on the catalog template and `crate-toolbox` v0.2.1
+- `examples/interactive-prop` requests 90 Hz and FFR 0.75 on `sessionstart` when the UA exposes the APIs
+
+### Changed
+
+- Quality bar, additive L2/L3, asset workflow, content-pipeline, photoreal-realtime, shipping matrix, and testing soak now gate on Quest 3 @ 90 Hz (not a desktop GPU). 207/240 Hz out of scope.
+
 ## [0.3.0] — 2026-09-09
 
 ### Added

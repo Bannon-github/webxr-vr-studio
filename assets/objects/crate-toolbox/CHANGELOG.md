@@ -1,5 +1,11 @@
 # crate-toolbox
 
+## 0.2.1 — 2026-09-09
+
+- **Delta (additive):** Manifest `targetDevice: quest3` + `perf` envelope (90 Hz / 72 fallback, ~1.2k LOD0 tris, ≤1024², ~14 draws, box colliders). No mesh change.
+- **Layers:** unchanged (L3 still pending a GLB).
+- **Revision:** current files (metadata only)
+
 ## 0.2.0 — 2026-09-09
 
 - **Delta (additive):** Hollow L1/L2 body so L4 contents are visible; use-colliders win over the grab hull (8 cm near-hit bias); grab box shrunk to the body. Same `objectId`, same states, same sidecar contract.

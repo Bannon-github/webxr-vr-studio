@@ -281,7 +281,33 @@ window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-renderer.xr.addEventListener("sessionstart", () => resumeAudio());
+/**
+ * Quest 3 Browser defaults: 90 Hz if the UA lists it (else 72), FFR medium-high.
+ * Real APIs only — XRSession.supportedFrameRates / updateTargetFrameRate (MDN),
+ * XRWebGLLayer.fixedFoveation via Three WebXRManager.setFoveation.
+ * Do not require 120 / 207 / 240 Hz.
+ */
+function applyQuest3SessionDefaults(session) {
+  if (!session) return;
+  const rates = session.supportedFrameRates ? Array.from(session.supportedFrameRates) : [];
+  const hz = rates.includes(90) ? 90 : rates.includes(72) ? 72 : null;
+  if (hz && typeof session.updateTargetFrameRate === "function") {
+    session.updateTargetFrameRate(hz).then(
+      () => console.info("[interactive-prop] target frameRate", hz, "supported:", rates),
+      () => console.info("[interactive-prop] updateTargetFrameRate rejected; UA default. supported:", rates)
+    );
+  } else {
+    console.info("[interactive-prop] frame-rate API unavailable; UA default. supported:", rates);
+  }
+  if (typeof renderer.xr.setFoveation === "function") {
+    renderer.xr.setFoveation(0.75);
+  }
+}
+
+renderer.xr.addEventListener("sessionstart", () => {
+  resumeAudio();
+  applyQuest3SessionDefaults(renderer.xr.getSession());
+});
 
 const clock = new THREE.Clock();
 

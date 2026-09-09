@@ -82,7 +82,7 @@ Export **glTF 2.0** as `.glb` (binary). This is the studio interchange ([ADR 000
 | Format | glTF 2.0 GLB; metallic-roughness workflow |
 | Compression | **meshopt** (`EXT_meshopt_compression`) for runtime decode; Draco (`KHR_draco_mesh_compression`) when download size dominates and load-time decode is acceptable. Do not double-compress blindly — measure. |
 | Textures | KTX2 / Basis Universal (`KHR_texture_basisu`): ETC1S for albedo-like, UASTC for normals. Power-of-two. Mipmaps on. |
-| Texture size | See [photoreal-realtime](../docs/performance/photoreal-realtime.md). Default hero: 1K–2K albedo, 1K–2K normal, 1K ORM. Set dressing: 512–1K. No 4K on handheld props. |
+| Texture size | [Quest 3](../docs/shipping/quest-3-target.md): **≤2048² max, prefer ≤1024²** on props. KTX2 + mipmaps. No 4K handheld. See [photoreal-realtime](../docs/performance/photoreal-realtime.md). |
 | LODs | `LOD0` (arm’s length), `LOD1` (~2–3 m), `LOD2` impostor or 512-atlas flake. Switch on camera distance, not magic. |
 | Collision | Separate low-poly convex hulls or boxes/capsules as nodes. Export them in the same GLB (no materials, or a debug material stripped at ingest) **or** as extras-referenced primitives. |
 | Animation | Hinges as node TRS animation clips (`open`, `close`) or runtime-driven; do not morph a 20k lid if a 200-tri lid node can rotate. |
@@ -204,7 +204,7 @@ Copy this onto the content revision:
 ### Packaging
 
 - [ ] glTF Validator clean (or warnings owned)
-- [ ] LOD and texture class match [photoreal-realtime](../docs/performance/photoreal-realtime.md) for the lowest-tier device
+- [ ] LOD and texture class match [photoreal-realtime](../docs/performance/photoreal-realtime.md) on **Quest 3 @ 90 Hz** ([quest-3-target](../docs/shipping/quest-3-target.md))
 - [ ] Collider nodes present and hidden at runtime; hero mesh is not the pick target
 - [ ] extras/sidecar matches [ADR 0004](adr/0004-asset-interaction-architecture.md); ingest test in the example or app
 
@@ -238,5 +238,6 @@ Fail the revision if any applicable box is unchecked.
 | [ADR 0003](adr/0003-interaction.md) | Rays, select, squeeze, hybrid grab |
 | [ADR 0004](adr/0004-asset-interaction-architecture.md) | glTF + metadata + components |
 | [interactive-objects.md](../docs/design/interactive-objects.md) | Affordance and activity patterns |
+| [quest-3-target.md](../docs/shipping/quest-3-target.md) | Gate device, 90 Hz, studio draw/tri/texture caps |
 | [photoreal-realtime.md](../docs/performance/photoreal-realtime.md) | Frame-budget look |
 | [examples/interactive-prop](../examples/interactive-prop/) | Hover + grab + multi-state box |

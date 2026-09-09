@@ -11,21 +11,21 @@ For generation choices (scan vs AI vs DCC), cleanup, interaction metadata, WebXR
 3. **Export** — GLB (glTF 2.0); y-up as engine expects; apply transforms
 4. **Metadata** — `*.behavior.json` sidecar (source of truth) and/or `extras.studio` on the root ([ADR 0004](adr/0004-asset-interaction-architecture.md))
 5. **Optimize** — meshopt / Draco as needed; generate KTX2/Basis mipmapped textures; atlas where useful; build LODs
-6. **Validate** — glTF validator; triangle/texture class vs [photoreal-realtime](../docs/performance/photoreal-realtime.md); sidecar schema sanity
+6. **Validate** — glTF validator; triangle/texture class vs [photoreal-realtime](../docs/performance/photoreal-realtime.md) and [quest-3-target](../docs/shipping/quest-3-target.md); sidecar + `targetDevice`/`perf` sanity
 7. **Integrate** — versioned URL or app assets folder; loading screen with progress; ingest attaches components and **hides colliders**
-8. **Verify on device** — lighting, scale, material proxies, FFR readability, hover/grab/activity ([quality-bar](quality-bar.md) interactive assets)
+8. **Verify on Quest 3** — 90 Hz, FFR medium/high, lighting, scale, hover/grab/activity ([quality-bar](quality-bar.md))
 
 Steps 2–3 and 5–8 are the original DCC → headset path. Steps 1, 4, and the interaction half of 8 are required for any prop the user operates.
 
 ## Budgets (template — tune per product)
 
-Starting numbers for Quest-class standalone. Override in the project brief if measured otherwise. Details: [photoreal-realtime](../docs/performance/photoreal-realtime.md).
+Gate: [Quest 3](../docs/shipping/quest-3-target.md) @ 90 Hz. Scene soft caps: ≲100 draw calls, ≲750k tris/eye. Details: [photoreal-realtime](../docs/performance/photoreal-realtime.md).
 
 | Class | Triangles (LOD0) | Texture |
 | --- | --- | --- |
-| Hero interactive prop | 5–20 k | 1–2K albedo + 1–2K normal + 1K ORM |
-| Held tool | 2–8 k | 1K set |
-| Set dressing (in reach) | 1–5 k | 512–1K |
+| Hero interactive prop | 5–20 k | **≤1024²** preferred (2048² max) + packed ORM |
+| Held tool | 2–8 k | 512–1024 |
+| Set dressing (in reach) | 1–5 k | 512–1024 |
 | Background / far | LOD2 or card | 256–512 |
 | Collision hull | 12–200 | none (hidden) |
 

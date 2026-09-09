@@ -23,7 +23,7 @@ This repository is intentionally documentation-first: mental models, stack choic
 - docs/stack/ — Three.js, Babylon, A-Frame, R3F, WebGPU
 - docs/design/ — comfort, locomotion, spatial UI, a11y, audio, haptics, interactive objects
 - docs/performance/ — frame budgets, draw calls, textures, foveation, photoreal realtime
-- docs/shipping/ — device/browser matrix, HTTPS, permissions
+- docs/shipping/ — device/browser matrix, [Quest 3 gate](docs/shipping/quest-3-target.md), HTTPS, permissions
 - docs/testing/ — headset + emulator QA
 - studio/playbook.md, quality-bar.md, content-pipeline.md, [asset-to-interaction-workflow.md](studio/asset-to-interaction-workflow.md), [additive-object-iteration.md](studio/additive-object-iteration.md), adr/
 - examples/webxr-starter/ — Vite + Three.js immersive-vr demo
