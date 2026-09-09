@@ -44,3 +44,7 @@ Leave headroom for browser + compositor. Target ~70–80% of budget on device, n
 8. Verify no GC spikes on interaction storms
 
 Fail the build if the lowest-tier target device cannot hold target Hz in the hero scene.
+
+## Photoreal props
+
+Interactive hero assets have their own class budgets, IBL rules, and “do not path-trace on-device” constraints: [photoreal-realtime.md](photoreal-realtime.md). Pair with [asset-to-interaction-workflow](../../studio/asset-to-interaction-workflow.md) so optimization does not strip colliders or bake lighting into albedo.

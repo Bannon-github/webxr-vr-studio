@@ -31,6 +31,7 @@ Emulators do not prove performance, thermals, or true comfort.
 - [ ] Recenter / seated height
 - [ ] inputsourceschange (drop/reconnect battery controllers)
 - [ ] Hand tracking path if advertised (optional feature)
+- [ ] Interactive props: hover / use / grab; activity states; collider debug vs hero mesh ([quality-bar](../../studio/quality-bar.md) interactive assets)
 - [ ] Exit VR cleanly; can re-enter without reload
 
 ## Automation notes

@@ -9,6 +9,7 @@ Immersive VR fails if users feel sick, lost, or excluded. This section is mandat
 - spatial-ui.md — readable panels, diegetic vs HUD, laser UI
 - accessibility.md — seated mode, IPD/height, captions, alternatives
 - audio-haptics-presence.md — spatial audio, haptics, presence cues
+- interactive-objects.md — photoreal props: affordances, grab/use, multi-step activities
 
 ## Non-negotiables
 
