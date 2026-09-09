@@ -52,4 +52,4 @@ Copy [`_template/`](_template/) to `assets/objects/<objectId>/` and replace plac
 
 | objectId | Version | Layers | Notes |
 | --- | --- | --- | --- |
-| [crate-toolbox](crate-toolbox/) | 0.2.1 | L0–L2, L4 | Seed; `targetDevice: quest3`; runtime in [examples/interactive-prop](../../examples/interactive-prop/) |
+| [crate-toolbox](crate-toolbox/) | 0.3.0 | L0–L4 | Seed; Quest 3; LOD0/1/2 (240/96/24 tris); runtime in [examples/interactive-prop](../../examples/interactive-prop/) |

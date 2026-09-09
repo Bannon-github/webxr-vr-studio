@@ -2,7 +2,7 @@
 
 Vite + Three.js demo of a **photoreal-looking PBR crate** with hover, grab/throw, and a multi-state open activity. Companion to the WebXR VR Studio playbook — specifically [asset-to-interaction-workflow](../../studio/asset-to-interaction-workflow.md), [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md), and [interactive-objects](../../docs/design/interactive-objects.md).
 
-Meshes here are **procedural stand-ins** (wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.2.1, `targetDevice: quest3`). Later DCC GLBs UPGRADE that id ([additive iteration](../../studio/additive-object-iteration.md)); they do not replace it with a new folder. Visual mesh ≠ collider ≠ behavior.
+Meshes here are **procedural stand-ins** (wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.3.0, `targetDevice: quest3`). LOD0/1/2 are additive visual sets (only one draws). Later DCC GLBs UPGRADE that id ([additive iteration](../../studio/additive-object-iteration.md)); they do not replace it with a new folder. Visual mesh ≠ collider ≠ behavior.
 
 ## Run
 
@@ -24,6 +24,7 @@ Use the WebXR API Emulator, **or** stay in inline view:
 - Drag the crate (grab hull) to move it on the table
 - Click the dark **reset** plate, or press `R`
 - Press `C` to draw collider wireframes
+- Press `0` for auto LOD (distance); `1` / `2` / `3` force LOD0 / LOD1 / LOD2 — HUD shows tris/draws. Latch/lid/tool still use the same hulls.
 
 ### Production preview
 
@@ -44,6 +45,7 @@ Use the `build` and `preview` scripts in package.json.
 | Hands (optional) | `requestSession` `optionalFeatures: ["hand-tracking"]`; pinch measured on `XRHand` joints `thumb-tip` / `index-finger-tip`. Core loop does not require hands. |
 | Feedback | Short Web Audio ticks + `gamepad.hapticActuators.pulse` when the source exposes it |
 | Quest 3 session | On `sessionstart`: `updateTargetFrameRate(90)` if listed, else 72; `renderer.xr.setFoveation(0.75)`. No 120/207/240 requirement. |
+| L3 LODs | LOD0 240 tris / 14 draws; LOD1 96 / 8; LOD2 24 / 2 (Three.js index counts). Auto switch 2.4 m / 4.5 m. Colliders are not LOD meshes. |
 
 ## Activity table
 

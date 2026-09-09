@@ -1,0 +1,27 @@
+{
+  "id": "crate-toolbox",
+  "version": "0.2.1",
+  "displayName": "Crate toolbox",
+  "targetDevice": "quest3",
+  "layersComplete": ["L0", "L1", "L2", "L4"],
+  "layerTarget": "L5",
+  "interactions": ["hover", "grab", "use-latch", "use-lid", "grab-tool"],
+  "deps": ["examples/interactive-prop"],
+  "perf": {
+    "frameHz": 90,
+    "frameHzFallback": 72,
+    "lod0Tris": 1200,
+    "lod1Tris": null,
+    "textureMax": 1024,
+    "texturePref": 1024,
+    "drawCallsEstimate": 14,
+    "collider": "box hulls (grab/latch/lid/tool), not hero mesh",
+    "notes": "Procedural PBR stand-in (no GLB/KTX2 yet). lod0Tris/drawCallsEstimate counted from examples/interactive-prop meshes. L3 unset until a GLB LOD set exists. TODO: confirm frame time and FFR readability on Quest 3 Browser @ 90 Hz."
+  },
+  "source": {
+    "kind": "procedural",
+    "runtime": "examples/interactive-prop",
+    "behavior": "behavior.json"
+  },
+  "variants": []
+}

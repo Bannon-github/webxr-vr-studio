@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.5.0] — 2026-09-09
+
+### Added
+
+- `crate-toolbox` **v0.3.0** L3 pulse: procedural LOD1/LOD2 (96/24 tris) beside LOD0 (240); distance + key switch in `examples/interactive-prop`. Geometry counts only — Quest 3 frame time still TODO.
+
 ## [0.4.0] — 2026-09-09
 
 ### Added

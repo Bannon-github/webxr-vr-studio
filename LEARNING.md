@@ -29,7 +29,7 @@ A pragmatic path from “can I enter VR?” to “can we ship a comfortable prod
 ## 5. Photoreal interactive assets
 
 1. Read [asset-to-interaction-workflow](studio/asset-to-interaction-workflow.md) and [ADR 0004](studio/adr/0004-asset-interaction-architecture.md).
-2. Run [`examples/interactive-prop`](examples/interactive-prop/) — hover the latch, `select` to unlatch/open, `squeeze` to grab. Toggle collider debug (`C`) to see why rays do not hit the hero mesh.
+2. Run [`examples/interactive-prop`](examples/interactive-prop/) — hover the latch, `select` to unlatch/open, `squeeze` to grab. Toggle collider debug (`C`) to see why rays do not hit the hero mesh. Press `1`/`2`/`3` to force cheaper L3 LODs (same `crate-toolbox` id, same activity).
 3. Pair with [interactive-objects](docs/design/interactive-objects.md) (affordances) and [photoreal-realtime](docs/performance/photoreal-realtime.md) (budgets).
 4. Do not ship a generator or scan mesh as a grab target without retopo, UVs, and a collider split.
 

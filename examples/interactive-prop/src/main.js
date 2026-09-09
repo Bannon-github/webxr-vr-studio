@@ -12,7 +12,9 @@ import {
   resetToolbox,
   restPose,
   setColliderDebug,
+  setToolboxLod,
   updateStatePlaque,
+  updateToolboxLod,
 } from "./toolbox.js";
 import {
   beginGrab,
@@ -100,6 +102,20 @@ const movable = [toolbox, toolbox.userData.parts.tool];
 let colliderDebug = false;
 let lastState = activityState(toolbox);
 updateStatePlaque(plaque, lastState);
+const lodStatus = document.getElementById("lod-status");
+let lastLodKey = "";
+
+function refreshLodStatus() {
+  const lod = toolbox.userData.lod;
+  if (!lod || !lodStatus) return;
+  const key = `${lod.mode}:${lod.current}`;
+  if (key === lastLodKey) return;
+  lastLodKey = key;
+  const stats = lod.stats[lod.current];
+  lodStatus.textContent = `${lod.mode} / ${lod.current} · ${stats.tris} tris · ${stats.draws} draws`;
+}
+refreshLodStatus();
+console.info("[crate-toolbox] LOD geometry stats (not Quest frame time)", toolbox.userData.lod.stats);
 
 const controllerModelFactory = new XRControllerModelFactory();
 const handModelFactory = new XRHandModelFactory();
@@ -273,6 +289,13 @@ window.addEventListener("keydown", (e) => {
     setColliderDebug(entities, colliderDebug);
   }
   if (e.key === "r" || e.key === "R") resetAll();
+  if (e.key === "0") {
+    toolbox.userData.lod.mode = "auto";
+  }
+  if (e.key === "1" || e.key === "2" || e.key === "3") {
+    toolbox.userData.lod.mode = "force";
+    setToolboxLod(toolbox, Number(e.key) - 1);
+  }
 });
 
 window.addEventListener("resize", () => {
@@ -362,6 +385,9 @@ renderer.setAnimationLoop(() => {
   const now = performance.now() / 1000;
 
   applyActivityVisual(toolbox, 0.18);
+  const viewCam = renderer.xr.isPresenting ? renderer.xr.getCamera() : camera;
+  updateToolboxLod(toolbox, viewCam);
+  refreshLodStatus();
   const state = activityState(toolbox);
   if (state !== lastState) {
     lastState = state;

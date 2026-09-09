@@ -29,6 +29,29 @@ function boxMesh(w, h, d, material, x, y, z) {
   return mesh;
 }
 
+function lodGroup(level) {
+  const g = new THREE.Group();
+  g.name = `lod${level}`;
+  g.userData.lodLevel = level;
+  return g;
+}
+
+function countGroupStats(group) {
+  let tris = 0;
+  let draws = 0;
+  group.traverse((o) => {
+    if (!o.isMesh || o.userData.collider) return;
+    const geo = o.geometry;
+    if (!geo) return;
+    const idx = geo.index;
+    const pos = geo.getAttribute("position");
+    if (idx) tris += idx.count / 3;
+    else if (pos) tris += pos.count / 3;
+    draws += 1;
+  });
+  return { tris, draws };
+}
+
 function makeCollider(name, w, h, d, x, y, z) {
   const mat = new THREE.MeshBasicMaterial({
     color: 0x22ff66,
@@ -66,35 +89,57 @@ export function createToolbox() {
   const wall = 0.016;
   const innerW = 0.36 - wall * 2;
   const innerD = 0.24 - wall * 2;
-  body.add(boxMesh(0.36, 0.02, 0.24, woodDark, 0, 0.01, 0));
-  body.add(boxMesh(0.36, 0.14, wall, wood, 0, 0.09, -0.12 + wall / 2));
-  body.add(boxMesh(0.36, 0.14, wall, wood, 0, 0.09, 0.12 - wall / 2));
-  body.add(boxMesh(wall, 0.14, innerD, wood, -0.18 + wall / 2, 0.09, 0));
-  body.add(boxMesh(wall, 0.14, innerD, wood, 0.18 - wall / 2, 0.09, 0));
-  body.add(boxMesh(innerW, 0.008, innerD, woodDark, 0, 0.024, 0));
-  body.add(boxMesh(0.355, 0.012, 0.03, woodDark, 0, 0.155, -0.04));
-  body.add(boxMesh(0.355, 0.012, 0.03, woodDark, 0, 0.155, 0.05));
+  const bodyL0 = lodGroup(0);
+  bodyL0.add(boxMesh(0.36, 0.02, 0.24, woodDark, 0, 0.01, 0));
+  bodyL0.add(boxMesh(0.36, 0.14, wall, wood, 0, 0.09, -0.12 + wall / 2));
+  bodyL0.add(boxMesh(0.36, 0.14, wall, wood, 0, 0.09, 0.12 - wall / 2));
+  bodyL0.add(boxMesh(wall, 0.14, innerD, wood, -0.18 + wall / 2, 0.09, 0));
+  bodyL0.add(boxMesh(wall, 0.14, innerD, wood, 0.18 - wall / 2, 0.09, 0));
+  bodyL0.add(boxMesh(innerW, 0.008, innerD, woodDark, 0, 0.024, 0));
+  bodyL0.add(boxMesh(0.355, 0.012, 0.03, woodDark, 0, 0.155, -0.04));
+  bodyL0.add(boxMesh(0.355, 0.012, 0.03, woodDark, 0, 0.155, 0.05));
+  const bodyL1 = lodGroup(1);
+  bodyL1.add(boxMesh(0.36, 0.02, 0.24, woodDark, 0, 0.01, 0));
+  bodyL1.add(boxMesh(0.36, 0.14, wall, wood, 0, 0.09, -0.12 + wall / 2));
+  bodyL1.add(boxMesh(0.36, 0.14, wall, wood, 0, 0.09, 0.12 - wall / 2));
+  bodyL1.add(boxMesh(wall, 0.14, innerD, wood, -0.18 + wall / 2, 0.09, 0));
+  bodyL1.add(boxMesh(wall, 0.14, innerD, wood, 0.18 - wall / 2, 0.09, 0));
+  const bodyL2 = lodGroup(2);
+  bodyL2.add(boxMesh(0.36, 0.16, 0.24, wood, 0, 0.08, 0));
+  body.add(bodyL0, bodyL1, bodyL2);
   root.add(body);
 
   const lidPivot = new THREE.Group();
   lidPivot.name = "lid";
   lidPivot.position.set(0, 0.16, -0.12);
+  const lidL0 = lodGroup(0);
   const lid = boxMesh(0.36, 0.025, 0.24, wood, 0, 0.012, 0.12);
   lid.name = "lidMesh";
-  lidPivot.add(lid);
-  lidPivot.add(boxMesh(0.12, 0.02, 0.04, brass, 0, 0.028, 0.22));
+  lidL0.add(lid);
+  lidL0.add(boxMesh(0.12, 0.02, 0.04, brass, 0, 0.028, 0.22));
+  const lidL1 = lodGroup(1);
+  lidL1.add(boxMesh(0.36, 0.025, 0.24, wood, 0, 0.012, 0.12));
+  const lidL2 = lodGroup(2);
+  lidL2.add(boxMesh(0.36, 0.02, 0.24, wood, 0, 0.01, 0.12));
+  lidPivot.add(lidL0, lidL1, lidL2);
   root.add(lidPivot);
 
   const latchPivot = new THREE.Group();
   latchPivot.name = "latch";
   latchPivot.position.set(0, 0.1, 0.125);
+  const latchL0 = lodGroup(0);
   const latch = boxMesh(0.04, 0.07, 0.012, brass, 0, 0, 0);
   latch.name = "latchMesh";
-  latchPivot.add(latch);
+  latchL0.add(latch);
+  const latchL1 = lodGroup(1);
+  latchL1.add(boxMesh(0.04, 0.07, 0.012, brass, 0, 0, 0));
+  const latchL2 = lodGroup(2);
+  latchPivot.add(latchL0, latchL1, latchL2);
   root.add(latchPivot);
 
   const tool = new THREE.Group();
   tool.name = "tool";
+  const toolL0 = lodGroup(0);
   const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.18, 12), steel);
   shaft.rotation.z = Math.PI / 2;
   shaft.position.set(0.03, 0, 0);
@@ -103,7 +148,12 @@ export function createToolbox() {
   grip.position.set(-0.08, 0, 0);
   const tip = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.005, 0.014), steel);
   tip.position.set(0.125, 0, 0);
-  tool.add(shaft, grip, tip);
+  toolL0.add(shaft, grip, tip);
+  const toolL1 = lodGroup(1);
+  const stub = boxMesh(0.2, 0.02, 0.02, handleMat, 0, 0, 0);
+  toolL1.add(stub);
+  const toolL2 = lodGroup(2);
+  tool.add(toolL0, toolL1, toolL2);
   tool.position.set(0, 0.045, 0);
   tool.userData.restLocal = tool.position.clone();
   root.add(tool);
@@ -132,10 +182,80 @@ export function createToolbox() {
   root.userData.parts = { body, lidPivot, latchPivot, tool };
   root.userData.highlightables = highlightables;
   root.userData.colliders = [colliderGrab, colliderLatch, colliderLid, colliderTool];
+  root.userData.lod = {
+    current: 0,
+    mode: "auto",
+    distances: { lod1: 2.4, lod2: 4.5, hysteresis: 0.2 },
+    groups: {
+      0: [bodyL0, lidL0, latchL0, toolL0],
+      1: [bodyL1, lidL1, latchL1, toolL1],
+      2: [bodyL2, lidL2, latchL2, toolL2],
+    },
+    stats: {
+      0: mergeStats([bodyL0, lidL0, latchL0, toolL0]),
+      1: mergeStats([bodyL1, lidL1, latchL1, toolL1]),
+      2: mergeStats([bodyL2, lidL2, latchL2, toolL2]),
+    },
+  };
 
   applyActivityVisual(root, 1);
+  setToolboxLod(root, 0);
 
   return root;
+}
+
+export function getToolboxLodStats(entity) {
+  return entity.userData.lod?.stats ?? null;
+}
+
+function mergeStats(groups) {
+  return groups.reduce(
+    (acc, g) => {
+      const s = countGroupStats(g);
+      acc.tris += s.tris;
+      acc.draws += s.draws;
+      return acc;
+    },
+    { tris: 0, draws: 0 }
+  );
+}
+
+const _lodCam = new THREE.Vector3();
+const _lodObj = new THREE.Vector3();
+
+/** Show exactly one visual LOD. Colliders are not in these groups. */
+export function setToolboxLod(entity, level) {
+  const lod = entity.userData.lod;
+  if (!lod) return lod;
+  const next = Math.max(0, Math.min(2, level | 0));
+  for (const [key, groups] of Object.entries(lod.groups)) {
+    const on = Number(key) === next;
+    for (const g of groups) g.visible = on;
+  }
+  lod.current = next;
+  return lod;
+}
+
+/**
+ * Distance switch from the active camera (XR viewer or desktop).
+ * Hysteresis avoids flicker at the 2.4 m / 4.5 m bands (studio L3).
+ */
+export function updateToolboxLod(entity, camera) {
+  const lod = entity.userData.lod;
+  if (!lod || lod.mode !== "auto") return lod;
+  camera.getWorldPosition(_lodCam);
+  entity.getWorldPosition(_lodObj);
+  const dist = _lodCam.distanceTo(_lodObj);
+  const { lod1, lod2, hysteresis } = lod.distances;
+  let next = lod.current;
+  if (lod.current === 0 && dist > lod1 + hysteresis) next = 1;
+  else if (lod.current === 1 && dist < lod1 - hysteresis) next = 0;
+  else if (lod.current === 1 && dist > lod2 + hysteresis) next = 2;
+  else if (lod.current === 2 && dist < lod2 - hysteresis) next = 1;
+  else if (lod.current === 0 && dist > lod2) next = 2;
+  else if (lod.current === 2 && dist < lod1) next = 0;
+  if (next !== lod.current) setToolboxLod(entity, next);
+  return lod;
 }
 
 export function createResetPlate() {
