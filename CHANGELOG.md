@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.8.0] — 2026-09-09
+
+### Changed
+
+- `crate-toolbox` **v0.6.0** L2 quality UPGRADE: shared procedural 512² albedo + ORM (wood / brass / steel). Same draws as v0.5.0. KTX2/Basis deferred until a DCC GLB. Headset ms still unmeasured.
+
 ## [0.7.0] — 2026-09-09
 
 ### Added

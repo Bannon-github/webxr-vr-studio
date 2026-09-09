@@ -1,17 +1,12 @@
 import * as THREE from "three";
 import behaviorTemplate from "./behavior.json";
+import { getCrateL2Maps, mappedStandard } from "./pbr-maps.js";
 
 /**
  * Procedural crate that follows ADR 0004: visual meshes, collider_* hulls,
  * and extras.studio-equivalent metadata on userData.studio.
  * Production swaps this for a GLB + sidecar; the component split stays.
  */
-
-const WOOD = { color: 0x6b4226, roughness: 0.88, metalness: 0.02 };
-const WOOD_DARK = { color: 0x3d2616, roughness: 0.92, metalness: 0.02 };
-const BRASS = { color: 0xb08a3e, roughness: 0.38, metalness: 0.85 };
-const STEEL = { color: 0xc5ccd3, roughness: 0.28, metalness: 0.92 };
-const HANDLE = { color: 0xd4a017, roughness: 0.55, metalness: 0.12 };
 
 function std(spec) {
   return new THREE.MeshStandardMaterial({
@@ -77,11 +72,13 @@ export function createToolbox() {
   root.userData.studio = studio;
   root.userData.kind = "entity";
 
-  const wood = std(WOOD);
-  const woodDark = std(WOOD_DARK);
-  const brass = std(BRASS);
-  const steel = std(STEEL);
-  const handleMat = std(HANDLE);
+  const l2 = getCrateL2Maps();
+  // Same five materials as v0.5 (shared across parts). Maps are 512² albedo+ORM.
+  const wood = mappedStandard(0xffffff, l2.wood);
+  const woodDark = mappedStandard(0x7a5840, l2.wood);
+  const brass = mappedStandard(0xffffff, l2.brass);
+  const steel = mappedStandard(0xffffff, l2.steel);
+  const handleMat = mappedStandard(0xe8b42a, l2.wood);
 
   const body = new THREE.Group();
   body.name = "body";
@@ -192,6 +189,12 @@ export function createToolbox() {
   root.userData.highlightables = highlightables;
   root.userData.colliders = [colliderGrab, colliderLatch, colliderLid, colliderTool, colliderFastener];
   root.userData.fastener = { mesh: fastener, turns: 0, needed: 4, seated: false };
+  root.userData.l2 = {
+    textureSize: l2.size,
+    uniqueTextures: l2.uniqueTextures,
+    maps: "albedo+ORM",
+    note: "procedural canvas stand-in; KTX2/Basis when a DCC GLB lands",
+  };
   root.userData.lod = {
     current: 0,
     mode: "auto",

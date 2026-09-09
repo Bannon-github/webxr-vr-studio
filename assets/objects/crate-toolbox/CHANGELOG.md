@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.6.0 — 2026-09-09
+
+- **Delta (additive, L2 quality UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Flat color-only PBR replaced by **shared procedural 512² albedo + ORM** for wood / brass / steel (6 unique canvases, mipmapped). Dark wood and tool grip tint the wood maps. LOD0–2 geometry, hull names, and L4/L5 activity unchanged. Draw estimates unchanged (14 / 8 / 2 + fastener 1).
+- **Layers:** still L0–L5. This revisits already-claimed L2 (maps instead of plastic colors).
+- **Quest 3:** `texturePref` 512, `textureMax` 1024. No 4K. Draws must not worsen. 90 Hz / 72 fallback. Headset ms / FFR still **TODO**. Next packaging step for a DCC GLB: **KTX2 / Basis** — not blocking this pulse.
+- **Revision:** `revisions/v0.6.0/`
+
 ## 0.5.0 — 2026-09-09
 
 - **Delta (additive, shipping/perf gate):** Same L0–L5 activity. `perf.notes` now points at [quest-3-on-device-qa](../../../docs/shipping/quest-3-on-device-qa.md). Example **`P`** overlay captures supported/requested Hz, FFR, and approximate rAF Δ (off = ~zero cost). **No headset numbers added** — the results table stays blank until a Quest 3 + Quest Browser run.

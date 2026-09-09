@@ -51,6 +51,8 @@ LODs: switch ~2–3 m → LOD1 (≈30–50% tris, half res), farther → imposto
 
 Three.js lookdev (examples follow this): `outputColorSpace = SRGBColorSpace`, `toneMapping = ACESFilmicToneMapping`, a `PMREM` from `RoomEnvironment` or a authored cubemap. That is IBL, not a new renderer.
 
+`crate-toolbox` L2 is a **procedural canvas stand-in** (512² albedo + packed ORM, shared materials). That is not a DCC bake. When a GLB lands, package maps as **KTX2 / Basis** (`KHR_texture_basisu`) — do not ship raw 4K PNG/JPEG on Quest 3.
+
 ## Lighting
 
 - **One IBL** for the space. Swap probes between rooms, not per prop.
