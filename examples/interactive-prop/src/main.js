@@ -227,7 +227,13 @@ renderer.domElement.addEventListener("pointermove", (e) => {
   const ray = rayFromNdc(camera, pointer.x, pointer.y);
   if (pointer.dragging) {
     if (ray.ray.intersectPlane(plane, planeHit)) {
-      pointer.dragging.position.set(planeHit.x + pointer.offset.x, table.position.y + 0.04, planeHit.z + pointer.offset.z);
+      pointer.dragging.position.set(
+        planeHit.x + pointer.offset.x,
+        table.position.y + 0.04,
+        planeHit.z + pointer.offset.z
+      );
+      const v = pointer.dragging.userData.velocity;
+      if (v) v.set(0, 0, 0);
     }
     return;
   }
@@ -250,11 +256,13 @@ renderer.domElement.addEventListener("pointerdown", (e) => {
   if (target) {
     if (target.parent !== scene) scene.attach(target);
     pointer.dragging = target;
+    target.userData.heldBy = "desktop";
     pointer.offset.set(target.position.x - hit.point.x, 0, target.position.z - hit.point.z);
   }
 });
 
 window.addEventListener("pointerup", () => {
+  if (pointer.dragging) pointer.dragging.userData.heldBy = null;
   pointer.down = false;
   pointer.dragging = null;
 });

@@ -79,7 +79,12 @@ export function rayFromNdc(camera, nx, ny) {
 
 export function firstHit(raycaster, pickables) {
   const hits = raycaster.intersectObjects(pickables, false);
-  return hits[0] || null;
+  if (!hits.length) return null;
+  // Prefer a use-target that is almost as near as the grab hull so a large
+  // body collider cannot steal latch/lid clicks (interactive-objects.md).
+  const nearest = hits[0];
+  const use = hits.find((h) => h.object.userData.layer === "use" && h.distance <= nearest.distance + 0.08);
+  return use || nearest;
 }
 
 function emissiveFor(obj, hex) {
