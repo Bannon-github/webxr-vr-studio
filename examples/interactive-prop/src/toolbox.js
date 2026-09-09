@@ -193,7 +193,12 @@ export function createToolbox() {
     textureSize: l2.size,
     uniqueTextures: l2.uniqueTextures,
     maps: "albedo+ORM",
-    note: "procedural canvas stand-in; KTX2/Basis when a DCC GLB lands",
+    note: "procedural canvas stand-in",
+  };
+  root.userData.packaging = {
+    source: "procedural-canvas",
+    probedUrl: studio.source?.packagedUrl ?? "/packaged/crate-toolbox.glb",
+    found: false,
   };
   root.userData.lod = {
     current: 0,

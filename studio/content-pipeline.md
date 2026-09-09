@@ -10,7 +10,7 @@ For generation choices (scan vs AI vs DCC), cleanup, interaction metadata, WebXR
 2. **Author** — Blender/Maya/etc. real-world scale (1 unit = 1 meter). Moving parts are separate nodes; colliders are `collider_*` meshes, not the hero
 3. **Export** — GLB (glTF 2.0); y-up as engine expects; apply transforms
 4. **Metadata** — `*.behavior.json` sidecar (source of truth) and/or `extras.studio` on the root ([ADR 0004](adr/0004-asset-interaction-architecture.md))
-5. **Optimize** — meshopt / Draco as needed; generate KTX2/Basis mipmapped textures; atlas where useful; build LODs
+5. **Optimize** — meshopt / Draco as needed; generate KTX2/Basis mipmapped textures; atlas where useful; build LODs. **How:** [ktx2-quest3-packaging](../docs/performance/ktx2-quest3-packaging.md)
 6. **Validate** — glTF validator; triangle/texture class vs [photoreal-realtime](../docs/performance/photoreal-realtime.md) and [quest-3-target](../docs/shipping/quest-3-target.md); sidecar + `targetDevice`/`perf` sanity
 7. **Integrate** — versioned URL or app assets folder; loading screen with progress; ingest attaches components and **hides colliders**
 8. **Verify on Quest 3** — 90 Hz, FFR medium/high, lighting, scale, hover/grab/activity ([quality-bar](quality-bar.md))

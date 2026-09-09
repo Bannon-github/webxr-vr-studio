@@ -2,7 +2,7 @@
 
 Vite + Three.js demo of a **photoreal-looking PBR crate** with hover, grab/throw, and a multi-state open activity. Companion to the WebXR VR Studio playbook — specifically [asset-to-interaction-workflow](../../studio/asset-to-interaction-workflow.md), [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md), and [interactive-objects](../../docs/design/interactive-objects.md).
 
-Meshes here are **procedural stand-ins** (512² albedo + ORM for wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.6.0, `targetDevice: quest3`). LOD0/1/2 are additive visual sets (only one draws). L5 adds tool-drive + re-latch cancel. Later DCC GLBs + **KTX2/Basis** UPGRADE that id ([additive iteration](../../studio/additive-object-iteration.md)). Visual mesh ≠ collider ≠ behavior.
+Meshes here are **procedural stand-ins** (512² albedo + ORM for wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.7.0, `targetDevice: quest3`). Drop a KTX2/meshopt GLB at [`public/packaged/crate-toolbox.glb`](public/packaged/) (or `?packaged=`) and the loader prefers it; 404 keeps canvases. Recipe: [ktx2-quest3-packaging](../../docs/performance/ktx2-quest3-packaging.md). LOD0/1/2 are additive visual sets (only one draws). L5 adds tool-drive + re-latch cancel. Visual mesh ≠ collider ≠ behavior.
 
 ## Run
 
@@ -36,7 +36,7 @@ Use the `build` and `preview` scripts in package.json.
 
 | Concern | Implementation |
 | --- | --- |
-| Photoreal-ish look | Shared `MeshStandardMaterial`s + 512² procedural albedo/ORM + `RoomEnvironment` PMREM. Not 4K; KTX2 when a GLB lands. |
+| Photoreal-ish look | Shared `MeshStandardMaterial`s + 512² procedural albedo/ORM + IBL, **or** a probed KTX2 GLB when present. Not 4K. |
 | Visual vs collider | `collider_grab` / `collider_latch` / `collider_lid` / `collider_tool` / `collider_fastener` — raycasts hit these only |
 | Behavior metadata | [`src/behavior.json`](src/behavior.json) matches ADR 0004; cloned onto `userData.studio` |
 | Hover | Local emissive on the *part*, not an unlit hero tint |

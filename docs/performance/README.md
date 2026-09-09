@@ -24,7 +24,7 @@ Leave headroom for browser + compositor. Target ~70–80% of budget on device, n
 ## Geometry and textures
 
 - Budget triangles per scene for the lowest target device
-- Power-of-two textures; ASTC/ETC2/Basis/KTX2 where supported
+- Power-of-two textures; ASTC/ETC2/Basis/KTX2 where supported — Quest 3 prop recipe: [ktx2-quest3-packaging.md](ktx2-quest3-packaging.md)
 - Mipmaps on; avoid 4K textures on props
 - Atlas UI when practical
 

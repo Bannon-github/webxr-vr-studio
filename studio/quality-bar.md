@@ -25,7 +25,7 @@ An immersive feature or release is **done** only when all applicable boxes pass.
 
 - [ ] Quest 3 holds **90 Hz** in the hero scene (≈11.1 ms); 72 Hz is a recorded fallback, not the happy path ([quest-3-target](../docs/shipping/quest-3-target.md))
 - [ ] Thermal soak 10+ minutes on Quest 3 without collapse
-- [ ] Hero view: draw calls ≲100; triangles ≲750k/eye soft ceiling; props prefer ≤1024² (max 2048²); KTX2 + mipmaps
+- [ ] Hero view: draw calls ≲100; triangles ≲750k/eye soft ceiling; props prefer ≤1024² (max 2048²); KTX2 + mipmaps ([ktx2-quest3-packaging](../docs/performance/ktx2-quest3-packaging.md))
 - [ ] FFR medium/high (`fixedFoveation` ≈0.5–1) when the UA exposes it
 - [ ] No allocations / `new` materials in the XR frame loop
 - [ ] Texture/draw/tri budgets written on the object manifest `perf` block

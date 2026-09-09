@@ -1,6 +1,6 @@
 # Brief — crate-toolbox
 
-- **Photoreal target:** Worn wooden crate, brass latch, steel screwdriver; arm’s-length product shot. Runtime is a PBR stand-in: **512² procedural albedo + ORM** (wood / brass / steel) + IBL. Not a DCC bake. **KTX2 / Basis** is the next packaging step when a GLB lands.
+- **Photoreal target:** Worn wooden crate, brass latch, steel screwdriver; arm’s-length product shot. Runtime is a PBR stand-in: **512² procedural albedo + ORM** + IBL, unless a packaged GLB is present at the probed URL. Packaging recipe: [ktx2-quest3-packaging](../../docs/performance/ktx2-quest3-packaging.md).
 - **Affordance class:** Open-latch (multi-stage). Grab the body; use latch then lid.
 - **Named states:** `closed` → `unlatched` → `open` (unlatched + latch cancels). Fastener progress is L5, not a fourth box state.
 - **Grab vs use parts:** `collider_grab` (body), `collider_latch` / `collider_lid` (use), `collider_tool` (grab, only when `open`), `collider_fastener` (use while tool held/out)

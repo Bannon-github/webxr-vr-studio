@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.9.0] — 2026-09-09
+
+### Added
+
+- [Quest 3 KTX2/Basis packaging](docs/performance/ktx2-quest3-packaging.md) — `gltf-transform` recipe (cap ≤1024², UASTC/ETC1S, meshopt). `crate-toolbox` **v0.7.0** probes `/packaged/crate-toolbox.glb` and falls back to procedural canvases. No invented GLB or headset ms.
+
 ## [0.8.0] — 2026-09-09
 
 ### Changed

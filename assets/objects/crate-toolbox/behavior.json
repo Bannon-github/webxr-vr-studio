@@ -2,7 +2,12 @@
   "version": 1,
   "entity": "toolbox",
   "objectId": "crate-toolbox",
-  "objectVersion": "0.6.0",
+  "objectVersion": "0.7.0",
+  "source": {
+    "kind": "procedural",
+    "preferPackaged": true,
+    "packagedUrl": "/packaged/crate-toolbox.glb"
+  },
   "components": {
     "visual": { "lodGroup": "toolbox_lod" },
     "colliders": [

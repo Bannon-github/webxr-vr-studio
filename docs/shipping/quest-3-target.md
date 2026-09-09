@@ -38,7 +38,7 @@ These are **studio defaults** for WebXR on Quest 3 — conservative versus Meta�
 | --- | --- | --- |
 | Draw calls (hero view) | **&lt; ~100** | Merge, instance, fewer materials. Each call has CPU/driver cost independent of triangle count ([Meta workflow](https://developers.meta.com/horizon/documentation/web/webxr-perf-workflow/)). |
 | Triangles (whole view, per eye) | **&lt; ~750k soft ceiling** | Prefer far lower. Interactive **prop** LOD0: see [photoreal-realtime](../performance/photoreal-realtime.md) (5–20k hero). |
-| Textures | **≤ 2048² max; prefer ≤ 1024²** on props | Power-of-two. **KTX2 / Basis** (`KHR_texture_basisu`). **Mipmaps on.** No 4K handheld props. |
+| Textures | **≤ 2048² max; prefer ≤ 1024²** on props | Power-of-two. **KTX2 / Basis** (`KHR_texture_basisu`). **Mipmaps on.** No 4K handheld props. Recipe: [ktx2-quest3-packaging](../performance/ktx2-quest3-packaging.md). |
 | FFR | **Medium–high** when available | `XRWebGLLayer.fixedFoveation` in (0, 1]; studio start **0.5–1.0** ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/XRWebGLLayer/fixedFoveation), [Meta FFR](https://developers.meta.com/horizon/documentation/web/webxr-ffr/)). Three.js: `renderer.xr.setFoveation`. |
 | CPU / GC | **No allocations in the XR frame loop** | No `new` materials, geometries, or large arrays in `requestAnimationFrame`. |
 | Collision | **Simple hulls, not the hero mesh** | [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md) |

@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.7.0 — 2026-09-09
+
+- **Delta (additive, L3 packaging UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Documented Quest 3 `gltf-transform` KTX2/Basis recipe (≤1024², prefer 512; UASTC on ORM/normal; ETC1S on albedo; meshopt). Example **probes** `/packaged/crate-toolbox.glb` and loads it with `KTX2Loader` when present; otherwise keeps v0.6 procedural canvases. No binary GLB/KTX2 checked in.
+- **Layers:** still L0–L5. This revisits already-claimed L3 (packaging / GPU-ready textures), not a new layer.
+- **Quest 3:** Draws and texture caps unchanged vs v0.6.0. 90 Hz / 72 fallback. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.7.0/`
+
 ## 0.6.0 — 2026-09-09
 
 - **Delta (additive, L2 quality UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Flat color-only PBR replaced by **shared procedural 512² albedo + ORM** for wood / brass / steel (6 unique canvases, mipmapped). Dark wood and tool grip tint the wood maps. LOD0–2 geometry, hull names, and L4/L5 activity unchanged. Draw estimates unchanged (14 / 8 / 2 + fastener 1).

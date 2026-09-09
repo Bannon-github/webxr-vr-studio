@@ -47,6 +47,8 @@ import {
   sampleQuest3Diagnostics,
   toggleQuest3Diagnostics,
 } from "./quest3-diagnostics.js";
+import behaviorTemplate from "./behavior.json";
+import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 
 /**
  * Interactive crate demo — visual mesh ≠ collider ≠ activity.
@@ -97,7 +99,7 @@ floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
 scene.add(new THREE.GridHelper(8, 16, 0x3a3228, 0x241e18));
 
-const toolbox = createToolbox();
+const toolbox = (await tryLoadPackagedToolbox(renderer, behaviorTemplate)) ?? createToolbox();
 restPose(toolbox);
 toolbox.userData.homeParent = scene;
 scene.add(toolbox);

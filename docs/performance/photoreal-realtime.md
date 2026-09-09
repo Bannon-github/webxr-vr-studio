@@ -51,7 +51,7 @@ LODs: switch ~2–3 m → LOD1 (≈30–50% tris, half res), farther → imposto
 
 Three.js lookdev (examples follow this): `outputColorSpace = SRGBColorSpace`, `toneMapping = ACESFilmicToneMapping`, a `PMREM` from `RoomEnvironment` or a authored cubemap. That is IBL, not a new renderer.
 
-`crate-toolbox` L2 is a **procedural canvas stand-in** (512² albedo + packed ORM, shared materials). That is not a DCC bake. When a GLB lands, package maps as **KTX2 / Basis** (`KHR_texture_basisu`) — do not ship raw 4K PNG/JPEG on Quest 3.
+`crate-toolbox` L2 is a **procedural canvas stand-in** (512² albedo + packed ORM, shared materials). L3 packaging: the example **probes** `/packaged/crate-toolbox.glb` and loads KTX2/meshopt when present; otherwise it keeps the canvases. Do not ship raw 4K PNG/JPEG on Quest 3. See [ktx2-quest3-packaging](ktx2-quest3-packaging.md).
 
 ## Lighting
 
@@ -78,6 +78,8 @@ Three.js lookdev (examples follow this): `outputColorSpace = SRGBColorSpace`, `t
 | KTX2 UASTC | Normals | Larger; better high-frequency |
 
 Do not Draco + meshopt + giant PNG “just in case.” Validate with the glTF Validator and an on-device memory readout.
+
+**Recipe (Quest 3 props):** [ktx2-quest3-packaging.md](ktx2-quest3-packaging.md) — `gltf-transform` resize ≤1024² (prefer 512), UASTC on normal/ORM, ETC1S on albedo, then meshopt. Keep LOD nodes and `collider_*` off the hero mesh.
 
 ## Foveation and mipmaps
 

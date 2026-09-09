@@ -81,7 +81,7 @@ Export **glTF 2.0** as `.glb` (binary). This is the studio interchange ([ADR 000
 | --- | --- |
 | Format | glTF 2.0 GLB; metallic-roughness workflow |
 | Compression | **meshopt** (`EXT_meshopt_compression`) for runtime decode; Draco (`KHR_draco_mesh_compression`) when download size dominates and load-time decode is acceptable. Do not double-compress blindly — measure. |
-| Textures | KTX2 / Basis Universal (`KHR_texture_basisu`): ETC1S for albedo-like, UASTC for normals. Power-of-two. Mipmaps on. |
+| Textures | KTX2 / Basis Universal (`KHR_texture_basisu`): ETC1S for albedo-like, UASTC for normals. Power-of-two. Mipmaps on. Commands: [ktx2-quest3-packaging](../docs/performance/ktx2-quest3-packaging.md). |
 | Texture size | [Quest 3](../docs/shipping/quest-3-target.md): **≤2048² max, prefer ≤1024²** on props. KTX2 + mipmaps. No 4K handheld. See [photoreal-realtime](../docs/performance/photoreal-realtime.md). |
 | LODs | `LOD0` (arm’s length), `LOD1` (~2–3 m), `LOD2` impostor or 512-atlas flake. Switch on camera distance, not magic. |
 | Collision | Separate low-poly convex hulls or boxes/capsules as nodes. Export them in the same GLB (no materials, or a debug material stripped at ingest) **or** as extras-referenced primitives. |

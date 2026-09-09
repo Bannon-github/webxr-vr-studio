@@ -145,11 +145,13 @@ function paintBudgetOnce() {
   const s1 = lod?.stats?.[1];
   const s2 = lod?.stats?.[2];
   const l2 = getToolbox()?.userData?.l2;
+  const pack = getToolbox()?.userData?.packaging;
   const tex = l2
     ? `${l2.textureSize}² ${l2.maps} ×${l2.uniqueTextures} (authoring est.)`
     : "tex ≤1024²";
+  const src = pack?.source ? ` · visual ${pack.source}` : "";
   const line = s0
-    ? `LOD0 ${s0.tris} tris / ${s0.draws} draws · LOD1 ${s1.tris}/${s1.draws} · LOD2 ${s2.tris}/${s2.draws} · fastener +12/1 · ${tex}`
+    ? `LOD0 ${s0.tris} tris / ${s0.draws} draws · LOD1 ${s1.tris}/${s1.draws} · LOD2 ${s2.tris}/${s2.draws} · fastener +12/1 · ${tex}${src}`
     : "LOD stats unavailable";
   els.budget.textContent = line;
 }

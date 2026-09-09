@@ -53,7 +53,7 @@ Layers complete **upward**. A higher layer may refine a lower one; it may not si
 | **L0** Blockout | Scale, origin, part empties, 1 unit = 1 m | Guessed size; no `objectId` |
 | **L1** Readable mesh | Silhouette + separate moving parts; collider stubs | One merged sculpt; rays hit the hero |
 | **L2** PBR photoreal | Metallic-roughness, no baked lighting in albedo. Maps **≤2048², prefer ≤1024²**; KTX2 + mipmaps. Look from bakes, not scan density. Must fit [Quest 3](../docs/shipping/quest-3-target.md). | Plastic gray, photo-lit albedo, or 4K handheld maps |
-| **L3** LODs / perf | LOD1+, holds **Quest 3 90 Hz**; scene draw calls ≲100; view tris ≲750k/eye soft cap; FFR-safe. | LOD0 only; misses 90 Hz; desktop-only “it looks fine” |
+| **L3** LODs / perf | LOD1+, holds **Quest 3 90 Hz**; scene draw calls ≲100; view tris ≲750k/eye soft cap; FFR-safe. GPU textures: [ktx2-quest3-packaging](../docs/performance/ktx2-quest3-packaging.md). | LOD0 only; misses 90 Hz; desktop-only “it looks fine” |
 | **L4** Interaction states | Hover / grab / use; named `Activity` states | Pretty sculpture; no latch/lid contract |
 | **L5** Complex activity | Multi-step, physics hull, audio/haptics, hands optional | States exist; drop soft-locks; no nack |
 
