@@ -10,8 +10,8 @@ import behaviorTemplate from "./behavior.json";
 const WOOD = { color: 0x6b4226, roughness: 0.88, metalness: 0.02 };
 const WOOD_DARK = { color: 0x3d2616, roughness: 0.92, metalness: 0.02 };
 const BRASS = { color: 0xb08a3e, roughness: 0.38, metalness: 0.85 };
-const STEEL = { color: 0x8a9199, roughness: 0.32, metalness: 0.9 };
-const HANDLE = { color: 0x2a241c, roughness: 0.7, metalness: 0.08 };
+const STEEL = { color: 0xc5ccd3, roughness: 0.28, metalness: 0.92 };
+const HANDLE = { color: 0xd4a017, roughness: 0.55, metalness: 0.12 };
 
 function std(spec) {
   return new THREE.MeshStandardMaterial({
@@ -31,7 +31,7 @@ function boxMesh(w, h, d, material, x, y, z) {
 
 function makeCollider(name, w, h, d, x, y, z) {
   const mat = new THREE.MeshBasicMaterial({
-    color: 0x5dffb0,
+    color: 0x22ff66,
     wireframe: true,
     transparent: true,
     opacity: 0.55,
@@ -62,9 +62,16 @@ export function createToolbox() {
 
   const body = new THREE.Group();
   body.name = "body";
-  // Outer shell + visible plank cuts (still cheap; one material reused).
-  body.add(boxMesh(0.36, 0.16, 0.24, wood, 0, 0.08, 0));
-  body.add(boxMesh(0.34, 0.02, 0.22, woodDark, 0, 0.015, 0));
+  // Hollow crate: walls + floor only. A solid shell would hide the tool.
+  const wall = 0.016;
+  const innerW = 0.36 - wall * 2;
+  const innerD = 0.24 - wall * 2;
+  body.add(boxMesh(0.36, 0.02, 0.24, woodDark, 0, 0.01, 0));
+  body.add(boxMesh(0.36, 0.14, wall, wood, 0, 0.09, -0.12 + wall / 2));
+  body.add(boxMesh(0.36, 0.14, wall, wood, 0, 0.09, 0.12 - wall / 2));
+  body.add(boxMesh(wall, 0.14, innerD, wood, -0.18 + wall / 2, 0.09, 0));
+  body.add(boxMesh(wall, 0.14, innerD, wood, 0.18 - wall / 2, 0.09, 0));
+  body.add(boxMesh(innerW, 0.008, innerD, woodDark, 0, 0.024, 0));
   body.add(boxMesh(0.355, 0.012, 0.03, woodDark, 0, 0.155, -0.04));
   body.add(boxMesh(0.355, 0.012, 0.03, woodDark, 0, 0.155, 0.05));
   root.add(body);
@@ -88,16 +95,16 @@ export function createToolbox() {
 
   const tool = new THREE.Group();
   tool.name = "tool";
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.16, 12), steel);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.18, 12), steel);
   shaft.rotation.z = Math.PI / 2;
-  shaft.position.set(0.02, 0, 0);
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.012, 0.07, 12), handleMat);
+  shaft.position.set(0.03, 0, 0);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.014, 0.08, 12), handleMat);
   grip.rotation.z = Math.PI / 2;
-  grip.position.set(-0.07, 0, 0);
-  const tip = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.004, 0.012), steel);
-  tip.position.set(0.105, 0, 0);
+  grip.position.set(-0.08, 0, 0);
+  const tip = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.005, 0.014), steel);
+  tip.position.set(0.125, 0, 0);
   tool.add(shaft, grip, tip);
-  tool.position.set(0, 0.06, 0);
+  tool.position.set(0, 0.045, 0);
   tool.userData.restLocal = tool.position.clone();
   root.add(tool);
 
