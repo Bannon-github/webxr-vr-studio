@@ -85,6 +85,11 @@ export function firstHit(raycaster, pickables) {
   const nearest = hits[0];
   const entity = nearest.object.userData.entity;
   const tool = entity?.userData?.parts?.tool;
+  // Nested tool sits inside collider_grab; contents must win when pickable.
+  const toolHit = hits.find(
+    (h) => h.object.name === "collider_tool" && h.object.userData.pickable !== false && h.distance <= nearest.distance + 0.22
+  );
+  if (toolHit) return toolHit;
   // Prefer the fastener only while the tool is in play so it cannot steal latch/lid.
   if (tool && toolIsHeldOrOut(tool, entity)) {
     const fastener = hits.find((h) => h.object.name === "collider_fastener" && h.distance <= nearest.distance + 0.16);

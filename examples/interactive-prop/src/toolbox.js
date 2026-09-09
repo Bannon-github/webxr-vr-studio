@@ -167,7 +167,7 @@ export function createToolbox() {
   const colliderGrab = makeCollider("collider_grab", 0.38, 0.15, 0.24, 0, 0.075, 0);
   const colliderLatch = makeCollider("collider_latch", 0.08, 0.1, 0.06, 0, 0.1, 0.15);
   const colliderLid = makeCollider("collider_lid", 0.38, 0.06, 0.26, 0, 0.012, 0.12);
-  const colliderTool = makeCollider("collider_tool", 0.2, 0.04, 0.04, 0, 0, 0);
+  const colliderTool = makeCollider("collider_tool", 0.26, 0.08, 0.08, 0, 0, 0);
   const colliderFastener = makeCollider("collider_fastener", 0.09, 0.09, 0.08, -0.12, 0.07, 0.16);
   colliderGrab.userData.layer = "grab";
   colliderLatch.userData.layer = "use";

@@ -348,6 +348,22 @@ window.addEventListener("keydown", (e) => {
     setColliderDebug(entities, colliderDebug);
   }
   if (e.key === "r" || e.key === "R") resetAll();
+  if (e.key === "e" || e.key === "E") {
+    const tool = toolbox.userData.parts.tool;
+    if (activityState(toolbox) === "open" && tool.parent === toolbox) {
+      scene.attach(tool);
+      tool.position.set(0.32, table.position.y + 0.05, -0.35);
+      tool.rotation.set(0, 0, 0);
+      tool.userData.heldBy = null;
+      tool.userData.extracted = true;
+      if (tool.userData.velocity) tool.userData.velocity.set(0, 0, 0);
+      playFeedback(toolbox, "grab", null);
+      setAction("tool extracted — F drives, T returns");
+    } else {
+      playFeedback(toolbox, "nack", null);
+      setAction("nack — cannot extract (need open, tool in tray)");
+    }
+  }
   if (e.key === "f" || e.key === "F") {
     const tool = toolbox.userData.parts.tool;
     if (toolIsHeldOrOut(tool, toolbox)) {

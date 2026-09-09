@@ -2,7 +2,7 @@
 
 ## 0.4.0 — 2026-09-09
 
-- **Delta (additive, L5):** Re-latch cancel (`unlatched` + latch → `closed`). Tool remains unpickable while closed. After `open`, grab the screwdriver; use `collider_fastener` (4 turns, plaque `DRIVE n/4` → `SEATED`). Release near the slot (or `T`) returns the tool. Declared `feedback` keys pulse `gamepad.hapticActuators` when present. LOD0–2 and L4 hull names unchanged; fastener is +12 tris / +1 draw.
+- **Delta (additive, L5):** Re-latch cancel (`unlatched` + latch → `closed`). Tool remains unpickable while closed. After `open`, grab the screwdriver (`collider_tool` wins over the body grab hull); use `collider_fastener` (4 turns, plaque `DRIVE n/4` → `SEATED`). Release near the slot (or `T`) returns the tool. Desktop `E` extracts. Declared `feedback` keys pulse `gamepad.hapticActuators` when present. LOD0–2 and L4 hull names unchanged; fastener is +12 tris / +1 draw.
 - **Layers:** L5 complete. `layerTarget` met.
 - **Quest 3:** Still ≪750k tris / ≪100 draws. Frame time / FFR on headset still **TODO**.
 - **Revision:** `revisions/v0.4.0/`

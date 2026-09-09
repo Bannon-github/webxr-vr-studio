@@ -3,7 +3,7 @@
 L5 on the same `objectId`. No GLB.
 
 - Cancel: `unlatched` + `collider_latch` → `closed` (lid never opened).
-- Tool grab only when `open` (`collider_tool.pickable`).
+- Tool grab only when `open` (`collider_tool.pickable`). The tool hull wins over `collider_grab` so the nested bit is pickable. Desktop `E` extracts to the table.
 - Drive: `collider_fastener` while tool held/out; 4 turns then seated. Visual is one brass box (+12 tris).
 - Return: snap if released within 0.2 m of the rest slot and crate is `open`. Desktop `T` force-returns from any distance.
 - Feedback table drives `hapticActuators.pulse` when the XR gamepad exposes it.

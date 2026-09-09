@@ -21,7 +21,7 @@ Use the WebXR API Emulator, **or** stay in inline view:
 
 - Mouse hover highlights the part under the ray (collider, not the hero mesh)
 - Click the **latch** (`unlatched`); click latch again to **cancel** back to `closed`, or click the **lid** to `open`
-- Drag the **tool** out (only when open). Click the front **fastener** (4 turns → seated). Drop near the crate or press `T` to return
+- Drag the **tool** out (only when open; the tool hull wins over the body grab). Desktop `E` extracts to the table. Click the front **fastener** (4 turns → seated). Drop near the crate or press `T` to return
 - Drag the crate (grab hull) to move it on the table
 - Click the dark **reset** plate, or press `R`
 - Press `C` to draw collider wireframes
