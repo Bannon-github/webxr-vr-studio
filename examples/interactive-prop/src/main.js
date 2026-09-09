@@ -511,7 +511,7 @@ renderer.setAnimationLoop(() => {
   for (const obj of movable) {
     sampleHeldPose(obj, now);
     if (obj === toolbox.userData.parts.tool && obj.parent === toolbox) continue;
-    stepKinematics(obj, dt, obj === toolbox ? table.position.y + 0.04 : 0);
+    stepKinematics(obj, dt, table.position.y + 0.04);
   }
 
   renderer.render(scene, camera);
@@ -524,3 +524,32 @@ if (navigator.xr) {
 } else {
   console.warn("[interactive-prop] navigator.xr missing — use a WebXR browser or emulator");
 }
+
+/** Desktop QA snapshot + collider projection for pointer tests. */
+const _qaNdc = new THREE.Vector3();
+window.__qa = {
+  snap() {
+    const tool = toolbox.userData.parts.tool;
+    const f = toolbox.userData.fastener;
+    return {
+      state: activityState(toolbox),
+      turns: f.turns,
+      seated: f.seated,
+      toolOut: toolIsHeldOrOut(tool, toolbox),
+      toolInCrate: tool.parent === toolbox,
+      extracted: Boolean(tool.userData.extracted),
+      action: document.getElementById("action-status")?.textContent ?? "",
+    };
+  },
+  project(colliderName) {
+    const list = [...toolbox.userData.colliders, ...(resetPlate.userData.colliders || [])];
+    const c = list.find((m) => m.name === colliderName);
+    if (!c) return null;
+    c.getWorldPosition(_qaNdc);
+    _qaNdc.project(camera);
+    return {
+      x: (_qaNdc.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-_qaNdc.y * 0.5 + 0.5) * window.innerHeight,
+    };
+  },
+};
