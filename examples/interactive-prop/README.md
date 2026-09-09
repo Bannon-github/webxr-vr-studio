@@ -2,7 +2,7 @@
 
 Vite + Three.js demo of a **photoreal-looking PBR crate** with hover, grab/throw, and a multi-state open activity. Companion to the WebXR VR Studio playbook — specifically [asset-to-interaction-workflow](../../studio/asset-to-interaction-workflow.md), [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md), and [interactive-objects](../../docs/design/interactive-objects.md).
 
-Meshes here are **procedural stand-ins** (wood / brass / steel + IBL). Production replaces them with a GLB from the content pipeline; the split stays the same: visual mesh ≠ collider ≠ behavior.
+Meshes here are **procedural stand-ins** (wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.2.0). Later DCC GLBs UPGRADE that id ([additive iteration](../../studio/additive-object-iteration.md)); they do not replace it with a new folder. Visual mesh ≠ collider ≠ behavior.
 
 ## Run
 

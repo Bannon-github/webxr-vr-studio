@@ -1,0 +1,15 @@
+{
+  "id": "crate-toolbox",
+  "version": "0.1.0",
+  "displayName": "Crate toolbox",
+  "layersComplete": ["L0", "L1", "L2", "L4"],
+  "layerTarget": "L5",
+  "interactions": ["hover", "grab", "use-latch", "use-lid", "grab-tool"],
+  "deps": ["examples/interactive-prop"],
+  "source": {
+    "kind": "procedural",
+    "runtime": "examples/interactive-prop",
+    "behavior": "behavior.json"
+  },
+  "variants": []
+}

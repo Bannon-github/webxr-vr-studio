@@ -9,10 +9,9 @@
       { "node": "collider_grab", "layer": "grab", "shape": "box" },
       { "node": "collider_latch", "layer": "use", "shape": "box" },
       { "node": "collider_lid", "layer": "use", "shape": "box" },
-      { "node": "collider_tool", "layer": "grab", "shape": "box" },
-      { "node": "collider_reset", "layer": "use", "shape": "box" }
+      { "node": "collider_tool", "layer": "grab", "shape": "box" }
     ],
-    "hoverable": { "parts": ["latch", "lid", "body", "tool", "reset"] },
+    "hoverable": { "parts": ["latch", "lid", "body", "tool"] },
     "grabbable": { "attachNode": "toolbox", "nearMeters": 0.28, "throwOnRelease": true },
     "activity": {
       "id": "open-box",

@@ -2,7 +2,7 @@
 
 End-to-end studio path from a photoreal brief to a WebXR prop that users can hover, grab, and drive through multi-step activities.
 
-This is the **production** path. [`content-pipeline.md`](content-pipeline.md) is the shorter DCC → headset export checklist; this document owns generation choices, cleanup, realtime packaging, behavior, and QA. Architecture lives in [ADR 0004](adr/0004-asset-interaction-architecture.md). Interaction *feel* lives in [`docs/design/interactive-objects.md`](../docs/design/interactive-objects.md). Frame-budget photoreal lives in [`docs/performance/photoreal-realtime.md`](../docs/performance/photoreal-realtime.md).
+This is the **production** path. [`content-pipeline.md`](content-pipeline.md) is the shorter DCC → headset export checklist; this document owns generation choices, cleanup, realtime packaging, behavior, and QA. Architecture lives in [ADR 0004](adr/0004-asset-interaction-architecture.md). Interaction *feel* lives in [`docs/design/interactive-objects.md`](../docs/design/interactive-objects.md). Frame-budget photoreal lives in [`docs/performance/photoreal-realtime.md`](../docs/performance/photoreal-realtime.md). After the first shippable revision, grow the same `objectId` via [additive-object-iteration](additive-object-iteration.md) ([ADR 0005](adr/0005-additive-object-evolution.md)) — do not start a parallel folder “for the new look.”
 
 **Invariant:** visual mesh, interaction collider, and behavior are three artifacts. Do not raycast or simulate against the hero mesh.
 
@@ -33,7 +33,7 @@ Answer these before generation:
 5. **Hands or controllers required?** Core loop must work with `select` / `squeeze` on tracked pointers ([ADR 0003](adr/0003-interaction.md)). Hand joints are an enhancement.
 6. **Failure and reset?** What happens if they drop it mid-sequence, or recenter?
 
-Store the brief next to the content revision: `content/<project>/<revision>/BRIEF.md`.
+Store the brief on the object: `assets/objects/<objectId>/BRIEF.md` ([catalog](../assets/objects/README.md)). Copy it into the CDN snapshot `content/<project>/<revision>/BRIEF.md` at ship time.
 
 ## 2. Generation paths
 
@@ -231,6 +231,8 @@ Fail the revision if any applicable box is unchecked.
 
 | Doc | Role |
 | --- | --- |
+| [additive-object-iteration.md](additive-object-iteration.md) | UPGRADE vs NEW; L0–L5 stack; revision retention |
+| [ADR 0005](adr/0005-additive-object-evolution.md) | Stable ids + layered manifests |
 | [content-pipeline.md](content-pipeline.md) | Short export / optimize / verify checklist |
 | [quality-bar.md](quality-bar.md) | Definition of done |
 | [ADR 0003](adr/0003-interaction.md) | Rays, select, squeeze, hybrid grab |

@@ -1,0 +1,15 @@
+{
+  "id": "replace-with-object-id",
+  "version": "0.1.0",
+  "displayName": "Replace with display name",
+  "layersComplete": ["L0"],
+  "layerTarget": "L5",
+  "interactions": [],
+  "deps": [],
+  "source": {
+    "kind": "gltf",
+    "glb": "current.glb",
+    "behavior": "behavior.json"
+  },
+  "variants": []
+}

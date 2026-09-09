@@ -2,6 +2,18 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.3.0] — 2026-09-09
+
+### Added
+
+- [Additive object iteration](studio/additive-object-iteration.md) — stable `objectId`, UPGRADE / variant / NEW tree, L0–L5 stack, revision retention, two-hour pulse
+- [ADR 0005](studio/adr/0005-additive-object-evolution.md) — layered manifests + keep prior revisions
+- Object catalog [`assets/objects/`](assets/objects/) with `_template/` and seed [`crate-toolbox`](assets/objects/crate-toolbox/) (v0.1 → v0.2 additive notes)
+
+### Changed
+
+- Workflow, content-pipeline, playbook, and README point at the catalog instead of one-off replace-in-place folders
+
 ## [0.2.0] — 2026-09-09
 
 ### Added

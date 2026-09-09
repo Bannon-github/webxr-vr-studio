@@ -11,6 +11,7 @@ How a productive WebXR VR app studio operates week to week.
 | Matrix update | Every release candidate | docs/shipping table filled |
 | ADR office hours | As needed | Decisions recorded in studio/adr |
 | Content freeze | RC cut | Pipeline revision pinned |
+| Object improvement pulse | ~2 hours, as scheduled | One additive delta on the weakest layer below target ([additive iteration](additive-object-iteration.md)) |
 
 ## Roles (lightweight)
 
@@ -18,7 +19,7 @@ How a productive WebXR VR app studio operates week to week.
 - **App eng** — product logic, networking, tooling
 - **Design** — spatial UI, comfort, presence
 - **QA** — emulator + headset matrix
-- **Content** — assets through [content-pipeline.md](content-pipeline.md); interactive heroes follow [asset-to-interaction-workflow.md](asset-to-interaction-workflow.md)
+- **Content** — assets through [content-pipeline.md](content-pipeline.md); interactive heroes follow [asset-to-interaction-workflow.md](asset-to-interaction-workflow.md); objects grow in [assets/objects](../assets/objects/README.md)
 
 ## Branch / ship flow
 

@@ -2,7 +2,7 @@
 
 Asset path from DCC to headset. This page is the **export and ingest checklist**.
 
-For generation choices (scan vs AI vs DCC), cleanup, interaction metadata, WebXR binding, and QA gates, use the full **[asset-to-interaction workflow](asset-to-interaction-workflow.md)**. Architecture: [ADR 0004](adr/0004-asset-interaction-architecture.md). Frame-budget photoreal: [photoreal-realtime](../docs/performance/photoreal-realtime.md).
+For generation choices (scan vs AI vs DCC), cleanup, interaction metadata, WebXR binding, and QA gates, use the full **[asset-to-interaction workflow](asset-to-interaction-workflow.md)**. Architecture: [ADR 0004](adr/0004-asset-interaction-architecture.md). Growing an existing object (not replacing it): [additive-object-iteration](additive-object-iteration.md), [ADR 0005](adr/0005-additive-object-evolution.md), catalog [`assets/objects/`](../assets/objects/README.md). Frame-budget photoreal: [photoreal-realtime](../docs/performance/photoreal-realtime.md).
 
 ## Flow
 
@@ -33,11 +33,13 @@ Avatar class remains product-specific (TBD per title).
 
 ## Naming
 
-`content/<project>/<revision>/` with immutable revision folders for CDN.
+**Identity:** `assets/objects/<objectId>/` — stable id, `manifest.json`, object CHANGELOG, retained `revisions/<semver>/` ([catalog](../assets/objects/README.md)).
 
-Typical revision contents:
+**Ship snapshot:** `content/<project>/<revision>/` — immutable CDN folder copied from the object’s current files (plus `objectId` + object semver in the snapshot notes). Do not treat a replaced filename on CDN as a new object.
 
-- `prop.glb`
+Typical snapshot contents:
+
+- `prop.glb` (from `current.glb` when `source.kind` is `gltf`)
 - `prop.behavior.json`
 - `BRIEF.md`
 - baked sources / lofted only if the revision needs a rebuild (optional)

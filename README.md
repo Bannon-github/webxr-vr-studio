@@ -25,16 +25,17 @@ This repository is intentionally documentation-first: mental models, stack choic
 - docs/performance/ — frame budgets, draw calls, textures, foveation, photoreal realtime
 - docs/shipping/ — device/browser matrix, HTTPS, permissions
 - docs/testing/ — headset + emulator QA
-- studio/playbook.md, quality-bar.md, content-pipeline.md, [asset-to-interaction-workflow.md](studio/asset-to-interaction-workflow.md), adr/
+- studio/playbook.md, quality-bar.md, content-pipeline.md, [asset-to-interaction-workflow.md](studio/asset-to-interaction-workflow.md), [additive-object-iteration.md](studio/additive-object-iteration.md), adr/
 - examples/webxr-starter/ — Vite + Three.js immersive-vr demo
 - examples/interactive-prop/ — hover + grab + multi-state PBR crate (visual ≠ collider ≠ behavior)
+- assets/objects/ — additive object catalog (`crate-toolbox` seed)
 - LEARNING.md, CHANGELOG.md
 
 ## Quick start (starter demo)
 
 See examples/webxr-starter/README.md for run steps (install deps, start Vite dev server).
 
-Interactive assets (hover, grab, multi-step activity): [examples/interactive-prop](examples/interactive-prop/) and the [asset-to-interaction workflow](studio/asset-to-interaction-workflow.md).
+Interactive assets (hover, grab, multi-step activity): [examples/interactive-prop](examples/interactive-prop/) and the [asset-to-interaction workflow](studio/asset-to-interaction-workflow.md). Grow shipped objects additively ([catalog](assets/objects/), [iteration](studio/additive-object-iteration.md)) instead of replacing them.
 
 Use a headset browser or the WebXR API Emulator. Needs HTTPS or localhost and a user gesture to enter immersive VR.
 
