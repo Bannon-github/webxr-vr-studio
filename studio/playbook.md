@@ -18,7 +18,7 @@ How a productive WebXR VR app studio operates week to week.
 - **App eng** — product logic, networking, tooling
 - **Design** — spatial UI, comfort, presence
 - **QA** — emulator + headset matrix
-- **Content** — assets through content-pipeline.md
+- **Content** — assets through [content-pipeline.md](content-pipeline.md); interactive heroes follow [asset-to-interaction-workflow.md](asset-to-interaction-workflow.md)
 
 ## Branch / ship flow
 
@@ -39,5 +39,5 @@ P2: visual polish, secondary device gaps
 
 - Vite for app shells
 - Three.js unless ADR 0001 superseded
-- GLB + KTX2 content path
+- GLB + KTX2 content path; behavior sidecar per [ADR 0004](adr/0004-asset-interaction-architecture.md)
 - gh for PR / release notes
