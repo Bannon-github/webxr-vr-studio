@@ -29,6 +29,7 @@ An immersive feature or release is **done** only when all applicable boxes pass.
 - [ ] FFR medium/high (`fixedFoveation` ≈0.5–1) when the UA exposes it
 - [ ] No allocations / `new` materials in the XR frame loop
 - [ ] Texture/draw/tri budgets written on the object manifest `perf` block
+- [ ] On-device matrix filled per [quest-3-on-device-qa](../docs/shipping/quest-3-on-device-qa.md) (Browser, firmware, SHA, requested Hz, FFR, method). Leave cells blank until a headset run — do not invent ms.
 
 ## Interactive assets
 

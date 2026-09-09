@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.7.0] — 2026-09-09
+
+### Added
+
+- [Quest 3 on-device QA](docs/shipping/quest-3-on-device-qa.md) — checklist + blank results table for Browser / firmware / SHA / Hz / FFR / soak. `examples/interactive-prop` **P** overlay. `crate-toolbox` **v0.5.0** (same L0–L5; headset ms still unmeasured).
+
 ## [0.6.0] — 2026-09-09
 
 ### Added

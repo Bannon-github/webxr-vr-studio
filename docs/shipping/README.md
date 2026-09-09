@@ -41,7 +41,7 @@ WebXR is not Baseline; capabilities differ. Always call isSessionSupported at ru
 
 - [ ] Matrix filled and signed by QA
 - [ ] Comfort tier defaults verified
-- [ ] Quest 3 90 Hz soak (10+ min); 72 Hz fallback documented if used
+- [ ] Quest 3 90 Hz soak (10+ min); 72 Hz fallback documented if used — fill [quest-3-on-device-qa](quest-3-on-device-qa.md) (no invented ms)
 - [ ] Privacy policy covers camera/mic/hand if used
 - [ ] Crash/analytics pipeline does not log secrets
 - [ ] Rollback plan for CDN assets

@@ -6,7 +6,7 @@
 2. **Emulator** — WebXR API Emulator (Chrome/Firefox extensions) for session smoke, controllers, poses
 3. **Headset smoke** — enter/exit session, both controllers, recenter, teleport
 4. **Headset soak** — 10–20 minutes thermal + comfort on **Quest 3 @ 90 Hz**
-5. **Device matrix** — per [docs/shipping](../shipping/); gate is [quest-3-target](../shipping/quest-3-target.md)
+5. **Device matrix** — per [docs/shipping](../shipping/); gate is [quest-3-target](../shipping/quest-3-target.md). Record Quest 3 Browser numbers with [quest-3-on-device-qa](../shipping/quest-3-on-device-qa.md) (blank table until a headset run).
 
 ## Emulator checklist
 
@@ -37,7 +37,7 @@ Emulators do not prove performance, thermals, or true comfort.
 ## Automation notes
 
 - Prefer screenshot/visual diffs for inline canvas; immersive automation is limited.
-- Record manual test runs with build SHA, device OS, browser version.
+- Record manual test runs with build SHA, device OS, browser version. Quest 3 frame-rate / FFR / soak rows: [quest-3-on-device-qa](../shipping/quest-3-on-device-qa.md).
 
 ## Bug triage labels
 

@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.5.0 — 2026-09-09
+
+- **Delta (additive, shipping/perf gate):** Same L0–L5 activity. `perf.notes` now points at [quest-3-on-device-qa](../../../docs/shipping/quest-3-on-device-qa.md). Example **`P`** overlay captures supported/requested Hz, FFR, and approximate rAF Δ (off = ~zero cost). **No headset numbers added** — the results table stays blank until a Quest 3 + Quest Browser run.
+- **Layers:** unchanged (L0–L5). Not a new layer claim.
+- **Quest 3:** Authoring caps unchanged. Frame time / FFR on headset still **TODO**.
+- **Revision:** `revisions/v0.5.0/`
+
 ## 0.4.0 — 2026-09-09
 
 - **Delta (additive, L5):** Re-latch cancel (`unlatched` + latch → `closed`). Tool remains unpickable while closed. After `open`, grab the screwdriver (`collider_tool` wins over the body grab hull); use `collider_fastener` (4 turns, plaque `DRIVE n/4` → `SEATED`). Release near the slot (or `T`) returns the tool. Desktop `E` extracts. Declared `feedback` keys pulse `gamepad.hapticActuators` when present. LOD0–2 and L4 hull names unchanged; fastener is +12 tris / +1 draw.

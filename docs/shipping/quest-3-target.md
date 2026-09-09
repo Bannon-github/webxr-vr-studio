@@ -66,4 +66,6 @@ if (renderer.xr.setFoveation) renderer.xr.setFoveation(0.75);
 
 Gate: [quality-bar](../../studio/quality-bar.md) Performance + Interactive assets on **Quest 3 @ 90 Hz** (72 Hz fallback noted, not the happy path). Soak ≥10 minutes. FFR on (medium/high). See [testing](../testing/README.md).
 
+**On-device recording:** [quest-3-on-device-qa](quest-3-on-device-qa.md) — how to read `supportedFrameRates` / `updateTargetFrameRate`, confirm FFR, run the 10 min soak, and fill the blank results table. Numbers stay empty until a human on Quest 3 + Quest Browser writes them. `examples/interactive-prop` **`P`** overlay is the in-page capture (no fabricated rates).
+
 Runnable slice: [`examples/interactive-prop`](../../examples/interactive-prop/) applies the session defaults above.

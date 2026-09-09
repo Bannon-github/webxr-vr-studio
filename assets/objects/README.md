@@ -52,4 +52,4 @@ Copy [`_template/`](_template/) to `assets/objects/<objectId>/` and replace plac
 
 | objectId | Version | Layers | Notes |
 | --- | --- | --- | --- |
-| [crate-toolbox](crate-toolbox/) | 0.4.0 | L0–L5 | Seed; Quest 3; L5 tool-drive + re-latch; runtime in [examples/interactive-prop](../../examples/interactive-prop/) |
+| [crate-toolbox](crate-toolbox/) | 0.5.0 | L0–L5 | Seed; Quest 3; L5 activity + on-device QA hook (headset ms still unmeasured); runtime in [examples/interactive-prop](../../examples/interactive-prop/) |

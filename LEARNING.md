@@ -29,14 +29,14 @@ A pragmatic path from “can I enter VR?” to “can we ship a comfortable prod
 ## 5. Photoreal interactive assets
 
 1. Read [asset-to-interaction-workflow](studio/asset-to-interaction-workflow.md) and [ADR 0004](studio/adr/0004-asset-interaction-architecture.md).
-2. Run [`examples/interactive-prop`](examples/interactive-prop/) — latch (cancel by latching again), open, grab the tool, drive the front fastener four times. `C` = colliders; `1`/`2`/`3` = L3 LODs. Same `crate-toolbox` id.
+2. Run [`examples/interactive-prop`](examples/interactive-prop/) — latch (cancel by latching again), open, grab the tool, drive the front fastener four times. `C` = colliders; `1`/`2`/`3` = L3 LODs; `P` = Quest 3 diag overlay. Same `crate-toolbox` id.
 3. Pair with [interactive-objects](docs/design/interactive-objects.md) (affordances) and [photoreal-realtime](docs/performance/photoreal-realtime.md) (budgets).
 4. Do not ship a generator or scan mesh as a grab target without retopo, UVs, and a collider split.
 
 ## 6. Ship discipline
 
 1. [`docs/performance/`](docs/performance/) checklist before feature freeze.
-2. [`docs/shipping/`](docs/shipping/) matrix filled for the release.
+2. [`docs/shipping/`](docs/shipping/) matrix filled for the release. Quest 3 Browser timings: [quest-3-on-device-qa](docs/shipping/quest-3-on-device-qa.md) (blank until a headset run).
 3. [`docs/testing/`](docs/testing/) headset + emulator pass.
 4. Meet [`studio/quality-bar.md`](studio/quality-bar.md).
 

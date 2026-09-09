@@ -38,6 +38,15 @@ import {
   setHover,
   stepKinematics,
 } from "./interaction.js";
+import {
+  initQuest3Diagnostics,
+  isQuest3DiagnosticsEnabled,
+  recordQuest3FfrSet,
+  recordQuest3Session,
+  recordQuest3SessionEnd,
+  sampleQuest3Diagnostics,
+  toggleQuest3Diagnostics,
+} from "./quest3-diagnostics.js";
 
 /**
  * Interactive crate demo — visual mesh ≠ collider ≠ activity.
@@ -129,6 +138,16 @@ function refreshLodStatus() {
 }
 refreshLodStatus();
 console.info("[crate-toolbox] LOD geometry stats (not Quest frame time)", toolbox.userData.lod.stats);
+
+const quest3Panel = document.getElementById("quest3-diag");
+initQuest3Diagnostics({
+  panel: quest3Panel,
+  renderer,
+  getToolbox: () => toolbox,
+});
+document.getElementById("quest3-diag-btn")?.addEventListener("click", () => {
+  toggleQuest3Diagnostics();
+});
 
 const controllerModelFactory = new XRControllerModelFactory();
 const handModelFactory = new XRHandModelFactory();
@@ -391,6 +410,7 @@ window.addEventListener("keydown", (e) => {
     toolbox.userData.lod.mode = "force";
     setToolboxLod(toolbox, Number(e.key) - 1);
   }
+  if (e.key === "p" || e.key === "P") toggleQuest3Diagnostics();
 });
 
 window.addEventListener("resize", () => {
@@ -409,22 +429,33 @@ function applyQuest3SessionDefaults(session) {
   if (!session) return;
   const rates = session.supportedFrameRates ? Array.from(session.supportedFrameRates) : [];
   const hz = rates.includes(90) ? 90 : rates.includes(72) ? 72 : null;
+  recordQuest3Session(session, hz, false);
   if (hz && typeof session.updateTargetFrameRate === "function") {
     session.updateTargetFrameRate(hz).then(
-      () => console.info("[interactive-prop] target frameRate", hz, "supported:", rates),
-      () => console.info("[interactive-prop] updateTargetFrameRate rejected; UA default. supported:", rates)
+      () => {
+        recordQuest3Session(session, hz, true);
+        console.info("[interactive-prop] target frameRate", hz, "supported:", rates);
+      },
+      () => {
+        recordQuest3Session(session, hz, false);
+        console.info("[interactive-prop] updateTargetFrameRate rejected; UA default. supported:", rates);
+      }
     );
   } else {
     console.info("[interactive-prop] frame-rate API unavailable; UA default. supported:", rates);
   }
   if (typeof renderer.xr.setFoveation === "function") {
     renderer.xr.setFoveation(0.75);
+    recordQuest3FfrSet(0.75);
   }
 }
 
 renderer.xr.addEventListener("sessionstart", () => {
   resumeAudio();
   applyQuest3SessionDefaults(renderer.xr.getSession());
+});
+renderer.xr.addEventListener("sessionend", () => {
+  recordQuest3SessionEnd();
 });
 
 const clock = new THREE.Clock();
@@ -515,6 +546,7 @@ renderer.setAnimationLoop(() => {
   }
 
   renderer.render(scene, camera);
+  if (isQuest3DiagnosticsEnabled()) sampleQuest3Diagnostics(performance.now());
 });
 
 if (navigator.xr) {
