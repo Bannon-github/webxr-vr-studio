@@ -39,6 +39,11 @@ import {
   stepKinematics,
 } from "./interaction.js";
 import {
+  forceReleaseHold,
+  releaseIfSourceRemoved,
+  releaseLostHold,
+} from "./hold-tracking.js";
+import {
   initQuest3Diagnostics,
   isQuest3DiagnosticsEnabled,
   recordQuest3FfrSet,
@@ -52,8 +57,10 @@ import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 
 /**
  * Interactive crate demo — visual mesh ≠ collider ≠ activity.
- * APIs: MDN WebXR (select/squeeze, targetRaySpace/gripSpace, optional XRHand)
- * plus Three.js WebXRManager helpers. No invented session methods.
+ * APIs: MDN WebXR (select/squeeze, targetRaySpace/gripSpace, optional XRHand,
+ * inputsourceschange, XRFrame.getPose / getJointPose) plus Three.js WebXRManager
+ * helpers. Null grip/ray/joint poses and a removed holding source call endGrab.
+ * No invented session methods.
  */
 
 const scene = new THREE.Scene();
@@ -174,12 +181,16 @@ function buildRayLine() {
 
 function setupController(index) {
   const controller = renderer.xr.getController(index);
+  const grip = renderer.xr.getControllerGrip(index);
+  const hand = renderer.xr.getHand(index);
   controller.userData.kind = "controller";
   controller.addEventListener("selectstart", () => onUse(controller));
-  controller.addEventListener("squeezestart", () => onGrabStart(controller, renderer.xr.getControllerGrip(index)));
+  controller.addEventListener("squeezestart", () => onGrabStart(controller, grip));
   controller.addEventListener("squeezeend", () => onGrabEnd(controller));
   controller.addEventListener("connected", (event) => {
-    controller.userData.inputSource = event.data;
+    const src = event.data;
+    controller.userData.inputSource = src;
+    hand.userData.inputSource = src?.hand ? src : null;
     let ray = controller.userData.ray;
     if (!ray) {
       ray = buildRayLine();
@@ -188,17 +199,18 @@ function setupController(index) {
     if (!ray.parent) controller.add(ray);
   });
   controller.addEventListener("disconnected", () => {
+    forceReleaseHold(controller, endGrab, scene, toolbox);
+    forceReleaseHold(hand, endGrab, scene, toolbox);
     controller.userData.inputSource = null;
+    hand.userData.inputSource = null;
     const ray = controller.userData.ray;
     if (ray?.parent) controller.remove(ray);
   });
   scene.add(controller);
 
-  const grip = renderer.xr.getControllerGrip(index);
   grip.add(controllerModelFactory.createControllerModel(grip));
   scene.add(grip);
 
-  const hand = renderer.xr.getHand(index);
   hand.userData.kind = "hand";
   hand.userData.pinching = false;
   hand.add(handModelFactory.createHandModel(hand, "mesh"));
@@ -311,10 +323,54 @@ function onGrabStart(controller, grip) {
 }
 
 function onGrabEnd(controller) {
-  const held = controller.userData.held;
-  if (!held) return;
-  endGrab(held, scene, toolbox);
-  controller.userData.held = null;
+  forceReleaseHold(controller, endGrab, scene, toolbox);
+}
+
+/** Null pose / removed source: same `endGrab` as squeezeend (return-tool / throw / table). */
+function releaseLostHolds(frame, referenceSpace) {
+  for (let i = 0; i < pairs.length; i++) {
+    const { controller, grip, hand } = pairs[i];
+    if (controller.userData.held) {
+      releaseLostHold(
+        controller,
+        frame,
+        referenceSpace,
+        controller.userData.inputSource,
+        grip || controller,
+        endGrab,
+        scene,
+        toolbox
+      );
+    }
+    if (hand.userData.held) {
+      const wrist = hand.joints?.["wrist"] || hand;
+      releaseLostHold(
+        hand,
+        frame,
+        referenceSpace,
+        hand.userData.inputSource,
+        wrist,
+        endGrab,
+        scene,
+        toolbox
+      );
+    }
+  }
+}
+
+function onInputSourcesChange(event) {
+  const removed = event.removed || [];
+  for (let i = 0; i < pairs.length; i++) {
+    releaseIfSourceRemoved(pairs[i].controller, removed, endGrab, scene, toolbox);
+    releaseIfSourceRemoved(pairs[i].hand, removed, endGrab, scene, toolbox);
+  }
+}
+
+function releaseAllHolds() {
+  for (let i = 0; i < pairs.length; i++) {
+    forceReleaseHold(pairs[i].controller, endGrab, scene, toolbox);
+    forceReleaseHold(pairs[i].hand, endGrab, scene, toolbox);
+  }
 }
 
 function resetAll() {
@@ -498,11 +554,20 @@ function applyQuest3SessionDefaults(session) {
   }
 }
 
+let xrSession = null;
 renderer.xr.addEventListener("sessionstart", () => {
   resumeAudio();
-  applyQuest3SessionDefaults(renderer.xr.getSession());
+  const session = renderer.xr.getSession();
+  xrSession = session;
+  applyQuest3SessionDefaults(session);
+  session?.addEventListener("inputsourceschange", onInputSourcesChange);
 });
 renderer.xr.addEventListener("sessionend", () => {
+  if (xrSession) {
+    xrSession.removeEventListener("inputsourceschange", onInputSourcesChange);
+    xrSession = null;
+  }
+  releaseAllHolds();
   recordQuest3SessionEnd();
 });
 
@@ -511,6 +576,13 @@ const clock = new THREE.Clock();
 function updateHands(list) {
   const pickList = list || pickables();
   for (const { hand } of pairs) {
+    if (hand.userData.held) {
+      const wrist = hand.joints?.["wrist"] || hand;
+      if (!hand.visible || wrist.visible === false) {
+        forceReleaseHold(hand, endGrab, scene, toolbox);
+        continue;
+      }
+    }
     if (!hand.visible && hand.children.length === 0) continue;
     const pinching = isPinching(hand);
     if (pinching && !hand.userData.pinching) {
@@ -531,16 +603,13 @@ function updateHands(list) {
         const target = grabTargetFromHit(hit, hand);
         if (target) {
           const wrist = hand.joints?.["wrist"] || hand;
-          beginGrab(target, wrist, null);
+          beginGrab(target, wrist, hand.userData.inputSource);
           hand.userData.held = target;
         }
       }
     } else if (!pinching && hand.userData.pinching && pinchReleased(hand)) {
       hand.userData.pinching = false;
-      if (hand.userData.held) {
-        endGrab(hand.userData.held, scene, toolbox);
-        hand.userData.held = null;
-      }
+      forceReleaseHold(hand, endGrab, scene, toolbox);
     }
   }
 }
@@ -562,7 +631,7 @@ function nearestColliderTo(obj3d, list) {
   return best;
 }
 
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((_time, frame) => {
   const dt = Math.min(0.05, clock.getDelta());
   const now = performance.now() / 1000;
 
@@ -575,6 +644,7 @@ renderer.setAnimationLoop(() => {
   // Quest 3 gate: no per-frame `new` / array alloc on this path when overlay is off.
   const list = pickables();
   if (renderer.xr.isPresenting) {
+    if (frame) releaseLostHolds(frame, renderer.xr.getReferenceSpace());
     let hovered = false;
     for (const { controller } of pairs) {
       const hit = firstHit(rayFromController(controller), list);
@@ -611,6 +681,25 @@ if (navigator.xr) {
 
 /** Desktop QA snapshot + collider projection for pointer tests. */
 const _qaNdc = new THREE.Vector3();
+const _qaLostFrame = {
+  getPose() {
+    return null;
+  },
+  getJointPose() {
+    return null;
+  },
+};
+
+function qaHoldSnapshot() {
+  const tool = toolbox.userData.parts.tool;
+  return {
+    crateHeldBy: toolbox.userData.heldBy,
+    toolHeldBy: tool.userData.heldBy,
+    controllerHeld: pairs[0].controller.userData.held || pairs[1].controller.userData.held || null,
+    handHeld: pairs[0].hand.userData.held || pairs[1].hand.userData.held || null,
+  };
+}
+
 window.__qa = {
   snap() {
     const tool = toolbox.userData.parts.tool;
@@ -624,6 +713,37 @@ window.__qa = {
       extracted: Boolean(tool.userData.extracted),
       action: document.getElementById("action-status")?.textContent ?? "",
     };
+  },
+  /** Attach crate or tool to grip 0 so tracking-loss can be simulated without a headset. */
+  forceHold(which = "crate") {
+    const target = which === "tool" ? toolbox.userData.parts.tool : toolbox;
+    const { controller, grip } = pairs[0];
+    if (target.userData.heldBy || controller.userData.held) {
+      return { ok: false, reason: "already-held" };
+    }
+    const dummy = { gripSpace: {}, profiles: ["qa-simulate"] };
+    controller.userData.inputSource = dummy;
+    beginGrab(target, grip, dummy);
+    controller.userData.held = target;
+    return { ok: true, name: target.name, ...qaHoldSnapshot() };
+  },
+  /** Same path as a null grip/joint pose this frame. */
+  simulateTrackingLoss() {
+    releaseLostHolds(_qaLostFrame, {});
+    return { ok: true, ...qaHoldSnapshot() };
+  },
+  /** Same path as `inputsourceschange` when the holding source is removed. */
+  simulateSourceRemoved() {
+    for (let i = 0; i < pairs.length; i++) {
+      const { controller, hand } = pairs[i];
+      const cSrc = controller.userData.inputSource;
+      const hSrc = hand.userData.inputSource;
+      if (cSrc) releaseIfSourceRemoved(controller, [cSrc], endGrab, scene, toolbox);
+      else forceReleaseHold(controller, endGrab, scene, toolbox);
+      if (hSrc) releaseIfSourceRemoved(hand, [hSrc], endGrab, scene, toolbox);
+      else forceReleaseHold(hand, endGrab, scene, toolbox);
+    }
+    return { ok: true, ...qaHoldSnapshot() };
   },
   project(colliderName) {
     const list = [...toolbox.userData.colliders, ...(resetPlate.userData.colliders || [])];
