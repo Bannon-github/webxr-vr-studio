@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.13.0 — 2026-09-10
+
+- **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After the v0.12 normal pass, **LOD2 no longer samples normal maps**. The five shared LOD0/LOD1 materials keep v0.12 `normalMap` + modest `normalScale`. LOD2 body + lid use a separate wood material with the same 512² albedo + ORM and `normalMap = null` (visibility-only `setToolboxLod`; no extra draws). LOD1 keeps the shared normals (simpler Quest-safe choice vs a second material split). Fastener is not an LOD mesh and stays on shared brass. Draw / tri counts unchanged (14 / 8 / 2 + fastener 1). v0.12 normals, v0.11 visibility-loss, v0.10 tracking-loss, v0.9 hand hover, and v0.8 allocation scrub kept.
+- **Layers:** still L0–L5. This revisits already-claimed L3 (far-LOD fragment cost), not a new layer.
+- **Quest 3:** Cheaper LOD2 fragments at distance (no tangent-space normal sample). Draws / tris / texture caps unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.13.0/`
+
 ## 0.12.0 — 2026-09-10
 
 - **Delta (additive, L2 quality UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Shared procedural **512² normal maps** (wood / brass / steel) wired through `MeshStandardMaterial.normalMap` + modest `normalScale`. Height fields follow the v0.6 albedo grain / wear so lighting matches color. Still 5 shared materials; unique canvases 6 → 9 (albedo + ORM + normal). LOD0–2 geometry, hull names, and L4/L5 activity unchanged. Draw estimates unchanged (14 / 8 / 2 + fastener 1). v0.11 visibility-loss, v0.10 tracking-loss, v0.9 hand hover, and v0.8 allocation scrub kept.

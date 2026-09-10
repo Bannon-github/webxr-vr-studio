@@ -269,16 +269,25 @@ export function getCrateL2Maps() {
   return cached;
 }
 
-export function mappedStandard(colorHex, maps) {
-  const [nx, ny] = maps.normalScale ?? [0.5, 0.5];
-  return new THREE.MeshStandardMaterial({
+/**
+ * Shared MeshStandardMaterial. LOD0 / LOD1 bind v0.12 normalMap.
+ * Pass `{ normalMap: false }` for far LODs so the fragment shader skips
+ * tangent-space sampling (same albedo + ORM, no extra texture bind).
+ */
+export function mappedStandard(colorHex, maps, opts = {}) {
+  const useNormal = opts.normalMap !== false && Boolean(maps.normal);
+  const spec = {
     color: colorHex,
     map: maps.albedo,
     roughness: 1,
     metalness: 1,
     roughnessMap: maps.orm,
     metalnessMap: maps.orm,
-    normalMap: maps.normal,
-    normalScale: new THREE.Vector2(nx, ny),
-  });
+  };
+  if (useNormal) {
+    const [nx, ny] = maps.normalScale ?? [0.5, 0.5];
+    spec.normalMap = maps.normal;
+    spec.normalScale = new THREE.Vector2(nx, ny);
+  }
+  return new THREE.MeshStandardMaterial(spec);
 }

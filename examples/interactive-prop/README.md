@@ -2,7 +2,7 @@
 
 Vite + Three.js demo of a **photoreal-looking PBR crate** with hover, grab/throw, and a multi-state open activity. Companion to the WebXR VR Studio playbook — specifically [asset-to-interaction-workflow](../../studio/asset-to-interaction-workflow.md), [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md), and [interactive-objects](../../docs/design/interactive-objects.md).
 
-Meshes here are **procedural stand-ins** (512² albedo + ORM + normal for wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.12.0, `targetDevice: quest3`). Drop a KTX2/meshopt GLB at [`public/packaged/crate-toolbox.glb`](public/packaged/) (or `?packaged=`) and the loader prefers it; 404 keeps canvases. Recipe: [ktx2-quest3-packaging](../../docs/performance/ktx2-quest3-packaging.md). LOD0/1/2 are additive visual sets (only one draws). L5 adds tool-drive + re-latch cancel. Visual mesh ≠ collider ≠ behavior. v0.8 scrubs per-frame allocations on the XR animation path (overlay off). v0.9 adds bare-hand hover before pinch. v0.10 releases a held crate or tool via `endGrab` when the grip/ray/wrist pose is null or the holding input source is removed. v0.11 releases the same way when the XR session or page loses visibility (`hidden` / `visible-blurred`, or `document.hidden` while presenting); restore does not auto-regrab. v0.12 adds shared 512² normal maps on the procedural materials (no extra draws).
+Meshes here are **procedural stand-ins** (512² albedo + ORM + normal for wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.13.0, `targetDevice: quest3`). Drop a KTX2/meshopt GLB at [`public/packaged/crate-toolbox.glb`](public/packaged/) (or `?packaged=`) and the loader prefers it; 404 keeps canvases. Recipe: [ktx2-quest3-packaging](../../docs/performance/ktx2-quest3-packaging.md). LOD0/1/2 are additive visual sets (only one draws). L5 adds tool-drive + re-latch cancel. Visual mesh ≠ collider ≠ behavior. v0.8 scrubs per-frame allocations on the XR animation path (overlay off). v0.9 adds bare-hand hover before pinch. v0.10 releases a held crate or tool via `endGrab` when the grip/ray/wrist pose is null or the holding input source is removed. v0.11 releases the same way when the XR session or page loses visibility (`hidden` / `visible-blurred`, or `document.hidden` while presenting); restore does not auto-regrab. v0.12 adds shared 512² normal maps on the procedural materials (no extra draws). v0.13: LOD2 drops `normalMap`; LOD0/1 keep v0.12 normals.
 
 ## Run
 
@@ -36,7 +36,7 @@ Use the `build` and `preview` scripts in package.json.
 
 | Concern | Implementation |
 | --- | --- |
-| Photoreal-ish look | Shared `MeshStandardMaterial`s + 512² procedural albedo/ORM/normal + IBL, **or** a probed KTX2 GLB when present. Not 4K. |
+| Photoreal-ish look | Shared `MeshStandardMaterial`s + 512² procedural albedo/ORM/normal + IBL on LOD0/1; LOD2 uses albedo+ORM only. Or a probed KTX2 GLB when present. Not 4K. |
 | Visual vs collider | `collider_grab` / `collider_latch` / `collider_lid` / `collider_tool` / `collider_fastener` — raycasts hit these only |
 | Behavior metadata | [`src/behavior.json`](src/behavior.json) matches ADR 0004; cloned onto `userData.studio` |
 | Hover | Local emissive on the *part*, not an unlit hero tint |
@@ -48,7 +48,7 @@ Use the `build` and `preview` scripts in package.json.
 | Hands (optional) | `requestSession` `optionalFeatures: ["hand-tracking"]`; pinch measured on `XRHand` joints `thumb-tip` / `index-finger-tip`. v0.9: index-tip near-collider (then hand ray) hovers like a controller when no controller ray hit. Pinch still use/grab/drive. v0.10: missing wrist / invisible hand mid-hold calls `endGrab`. v0.11: visibility loss releases a hand hold the same way. Core loop does not require hands. |
 | Feedback | Short Web Audio ticks + `gamepad.hapticActuators.pulse` when the source exposes it |
 | Quest 3 session | On `sessionstart`: `updateTargetFrameRate(90)` if listed, else 72; `renderer.xr.setFoveation(0.75)`. No 120/207/240 requirement. **`P`** overlay shows captured rates / FFR / rAF Δ (off = no sample). v0.8: no per-frame `new` / pick-array alloc on the animation path when overlay is off. v0.10: `inputsourceschange` + per-frame null-pose check before hover/hands. v0.11: `visibilitychange` + `document.visibilitychange` (and a cheap `visibilityState` read while presenting) release holds; desktop `__qa.simulateVisibilityHidden()` / `simulateVisibilityRestore()` / `simulateDocumentHidden()`. |
-| L3 LODs | LOD0 240 tris / 14 draws; LOD1 96 / 8; LOD2 24 / 2 (Three.js index counts). Auto switch 2.4 m / 4.5 m. Colliders are not LOD meshes. |
+| L3 LODs | LOD0 240 tris / 14 draws; LOD1 96 / 8; LOD2 24 / 2 (Three.js index counts). Auto switch 2.4 m / 4.5 m. LOD2 materials omit `normalMap`. Colliders are not LOD meshes. |
 
 ## Activity table
 

@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.15.0] — 2026-09-10
+
+### Changed
+
+- `crate-toolbox` **v0.13.0** L3 packaging/perf UPGRADE: LOD2 visual materials omit `normalMap` (cheaper far fragments after the v0.12 normal pass). LOD0/1 keep shared v0.12 normals. Same draws / tris as v0.12. Headset ms / FFR still unmeasured.
+
 ## [0.14.0] — 2026-09-10
 
 ### Changed

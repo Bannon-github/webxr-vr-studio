@@ -74,12 +74,14 @@ export function createToolbox() {
   root.userData.kind = "entity";
 
   const l2 = getCrateL2Maps();
-  // Same five materials as v0.5 (shared across parts). Maps are 512² albedo+ORM+normal.
+  // LOD0 + LOD1 share the five v0.12 materials (512² albedo+ORM+normal).
   const wood = mappedStandard(0xffffff, l2.wood);
   const woodDark = mappedStandard(0x7a5840, l2.wood);
   const brass = mappedStandard(0xffffff, l2.brass);
   const steel = mappedStandard(0xffffff, l2.steel);
   const handleMat = mappedStandard(0xe8b42a, l2.wood);
+  // LOD2 far crate + lid: same albedo/ORM, no normalMap (L3 fragment-cost gate).
+  const woodFar = mappedStandard(0xffffff, l2.wood, { normalMap: false });
 
   const body = new THREE.Group();
   body.name = "body";
@@ -103,7 +105,7 @@ export function createToolbox() {
   bodyL1.add(boxMesh(wall, 0.14, innerD, wood, -0.18 + wall / 2, 0.09, 0));
   bodyL1.add(boxMesh(wall, 0.14, innerD, wood, 0.18 - wall / 2, 0.09, 0));
   const bodyL2 = lodGroup(2);
-  bodyL2.add(boxMesh(0.36, 0.16, 0.24, wood, 0, 0.08, 0));
+  bodyL2.add(boxMesh(0.36, 0.16, 0.24, woodFar, 0, 0.08, 0));
   body.add(bodyL0, bodyL1, bodyL2);
   root.add(body);
 
@@ -118,7 +120,7 @@ export function createToolbox() {
   const lidL1 = lodGroup(1);
   lidL1.add(boxMesh(0.36, 0.025, 0.24, wood, 0, 0.012, 0.12));
   const lidL2 = lodGroup(2);
-  lidL2.add(boxMesh(0.36, 0.02, 0.24, wood, 0, 0.01, 0.12));
+  lidL2.add(boxMesh(0.36, 0.02, 0.24, woodFar, 0, 0.01, 0.12));
   lidPivot.add(lidL0, lidL1, lidL2);
   root.add(lidPivot);
 
@@ -195,7 +197,12 @@ export function createToolbox() {
     textureSize: l2.size,
     uniqueTextures: l2.uniqueTextures,
     maps: "albedo+ORM+normal",
-    note: "procedural canvas stand-in",
+    lodNormalMaps: { 0: true, 1: true, 2: false },
+    note: "procedural canvas stand-in; LOD2 omits normalMap",
+  };
+  root.userData.materials = {
+    lod01: { wood, woodDark, brass, steel, handleMat },
+    lod2: { wood: woodFar },
   };
   root.userData.packaging = {
     source: "procedural-canvas",
@@ -226,6 +233,21 @@ export function createToolbox() {
 
 export function getToolboxLodStats(entity) {
   return entity.userData.lod?.stats ?? null;
+}
+
+/** Unique visual materials bound on one LOD set (colliders skipped). */
+export function collectLodVisualMaterials(entity, level) {
+  const mats = [];
+  const seen = new Set();
+  for (const g of entity.userData.lod?.groups?.[level] ?? []) {
+    g.traverse((o) => {
+      if (!o.isMesh || o.userData.collider || !o.material) return;
+      if (seen.has(o.material)) return;
+      seen.add(o.material);
+      mats.push(o.material);
+    });
+  }
+  return mats;
 }
 
 function mergeStats(groups) {
