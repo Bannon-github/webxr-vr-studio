@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.10.0] — 2026-09-10
+
+### Changed
+
+- `crate-toolbox` **v0.8.0** Quest 3 shipping/perf gate: XR frame-loop allocation scrub in `examples/interactive-prop` (reused pick list, AABB first-hit, pose-history ring). Same L0–L5. Draws unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.9.0] — 2026-09-09
 
 ### Added

@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.8.0 — 2026-09-10
+
+- **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **frame-loop allocation scrub** in `examples/interactive-prop`: reused pick list, AABB first-hit (no `intersectObjects` garbage), hoisted grip/nearest vectors, pose-history ring, cached tool collider + controller ray, hover without `Object.entries`. Overlay off stays one boolean. L5 activity and LOD draws unchanged.
+- **Layers:** still L0–L5. Quality / shipping-gate revisit (like v0.5 / v0.7), not a new layer.
+- **Quest 3:** Removes per-frame `new THREE.Vector3` / array construction on the present + non-present animation path. Draw / tri / texture caps unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.8.0/`
+
 ## 0.7.0 — 2026-09-09
 
 - **Delta (additive, L3 packaging UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Documented Quest 3 `gltf-transform` KTX2/Basis recipe (≤1024², prefer 512; UASTC on ORM/normal; ETC1S on albedo; meshopt). Example **probes** `/packaged/crate-toolbox.glb` and loads it with `KTX2Loader` when present; otherwise keeps v0.6 procedural canvases. No binary GLB/KTX2 checked in.

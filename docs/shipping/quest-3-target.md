@@ -40,7 +40,7 @@ These are **studio defaults** for WebXR on Quest 3 — conservative versus Meta�
 | Triangles (whole view, per eye) | **&lt; ~750k soft ceiling** | Prefer far lower. Interactive **prop** LOD0: see [photoreal-realtime](../performance/photoreal-realtime.md) (5–20k hero). |
 | Textures | **≤ 2048² max; prefer ≤ 1024²** on props | Power-of-two. **KTX2 / Basis** (`KHR_texture_basisu`). **Mipmaps on.** No 4K handheld props. Recipe: [ktx2-quest3-packaging](../performance/ktx2-quest3-packaging.md). |
 | FFR | **Medium–high** when available | `XRWebGLLayer.fixedFoveation` in (0, 1]; studio start **0.5–1.0** ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/XRWebGLLayer/fixedFoveation), [Meta FFR](https://developers.meta.com/horizon/documentation/web/webxr-ffr/)). Three.js: `renderer.xr.setFoveation`. |
-| CPU / GC | **No allocations in the XR frame loop** | No `new` materials, geometries, or large arrays in `requestAnimationFrame`. |
+| CPU / GC | **No allocations in the XR frame loop** | **Frame-loop allocation scrub:** hoist scratch vectors; no `new THREE.*`, per-frame pick arrays, or `intersectObjects` garbage on the present path. Overlay off must stay one boolean. See `crate-toolbox` v0.8. |
 | Collision | **Simple hulls, not the hero mesh** | [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md) |
 
 **TODO:** confirm draw-call and triangle ceilings on-device for *this* product’s hero scene (Browser version + scene). The 100 / 750k figures are the gate we author to until a measured override is written on the release matrix.

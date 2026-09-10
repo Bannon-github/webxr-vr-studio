@@ -13,6 +13,7 @@ Runnable slice: [`examples/interactive-prop`](../../examples/interactive-prop/).
 3. Note **Browser version** (Quest Browser settings / UA) and **OS / firmware** (Settings → System → Software).
 4. Record the **git SHA** you loaded (`git rev-parse HEAD` on the machine that served the build).
 5. Enter VR from a **user gesture** (Enter VR). Desktop / emulator is smoke — do not put emulator numbers in the results table.
+6. **Frame-loop allocation scrub** (pre-headset authoring gate): with the `P` overlay **off**, the XR rAF path must not `new` vectors/arrays or call `intersectObjects`. `crate-toolbox` v0.8 is the reference scrub. This does **not** count as a 90 Hz measurement.
 
 ## Frame rate (`supportedFrameRates` / `updateTargetFrameRate`)
 
