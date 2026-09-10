@@ -3,6 +3,8 @@
  *
  * Real WebXR: XRFrame.getPose (grip / targetRay), XRFrame.getJointPose
  * (hand wrist), XRSession `inputsourceschange` removed[].
+ * Controller and hand XRInputSources are independent — a missing pointer
+ * on one slot is not a lost hold on the other.
  * Three fallback: Object3D.visible after WebXRManager wrote a null pose.
  *
  * No allocations — safe on the XR animation path when P is off.
@@ -12,8 +14,15 @@
  * True when the holding source has no usable pose this frame.
  * Call only while presenting with a live XRFrame (or a test double).
  */
+export function isHandInputSource(inputSource) {
+  return Boolean(inputSource?.hand);
+}
+
 export function isHoldPoseLost(frame, referenceSpace, inputSource, holder) {
-  if (!inputSource) return true;
+  // Missing source is not automatically lost: controller and hand sources
+  // connect independently. Fall back to the attach holder's Three visibility
+  // (WebXRManager sets visible=false after a null pose).
+  if (!inputSource) return !holder || holder.visible === false;
 
   const hand = inputSource.hand;
   if (hand && typeof hand.get === "function") {
@@ -76,16 +85,16 @@ export function releaseLostHold(
 export function releaseIfSourceRemoved(inputObj, removed, endGrab, scene, crate) {
   if (!inputObj?.userData?.held) return false;
   const src = inputObj.userData.inputSource;
-  if (src) {
-    if (!removed) return false;
-    let listed = false;
-    for (let i = 0; i < removed.length; i++) {
-      if (removed[i] === src) {
-        listed = true;
-        break;
-      }
+  // No stored source: do not infer removal (the other device's disconnect
+  // must not drop this hold). Per-frame pose / visibility covers the gap.
+  if (!src || !removed) return false;
+  let listed = false;
+  for (let i = 0; i < removed.length; i++) {
+    if (removed[i] === src) {
+      listed = true;
+      break;
     }
-    if (!listed) return false;
   }
+  if (!listed) return false;
   return forceReleaseHold(inputObj, endGrab, scene, crate);
 }

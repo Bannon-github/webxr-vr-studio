@@ -40,6 +40,7 @@ import {
 } from "./interaction.js";
 import {
   forceReleaseHold,
+  isHandInputSource,
   releaseIfSourceRemoved,
   releaseLostHold,
 } from "./hold-tracking.js";
@@ -189,8 +190,16 @@ function setupController(index) {
   controller.addEventListener("squeezeend", () => onGrabEnd(controller));
   controller.addEventListener("connected", (event) => {
     const src = event.data;
+    // Three dispatches this on target-ray, grip, and hand for the same slot.
+    // A hand XRInputSource must not overwrite the controller pointer.
+    if (isHandInputSource(src)) {
+      forceReleaseHold(controller, endGrab, scene, toolbox);
+      controller.userData.inputSource = null;
+      const staleRay = controller.userData.ray;
+      if (staleRay?.parent) controller.remove(staleRay);
+      return;
+    }
     controller.userData.inputSource = src;
-    hand.userData.inputSource = src?.hand ? src : null;
     let ray = controller.userData.ray;
     if (!ray) {
       ray = buildRayLine();
@@ -198,11 +207,10 @@ function setupController(index) {
     }
     if (!ray.parent) controller.add(ray);
   });
-  controller.addEventListener("disconnected", () => {
+  controller.addEventListener("disconnected", (event) => {
+    if (isHandInputSource(event.data)) return;
     forceReleaseHold(controller, endGrab, scene, toolbox);
-    forceReleaseHold(hand, endGrab, scene, toolbox);
     controller.userData.inputSource = null;
-    hand.userData.inputSource = null;
     const ray = controller.userData.ray;
     if (ray?.parent) controller.remove(ray);
   });
@@ -213,6 +221,16 @@ function setupController(index) {
 
   hand.userData.kind = "hand";
   hand.userData.pinching = false;
+  hand.addEventListener("connected", (event) => {
+    const src = event.data;
+    if (!isHandInputSource(src)) return;
+    hand.userData.inputSource = src;
+  });
+  hand.addEventListener("disconnected", (event) => {
+    if (!isHandInputSource(event.data)) return;
+    forceReleaseHold(hand, endGrab, scene, toolbox);
+    hand.userData.inputSource = null;
+  });
   hand.add(handModelFactory.createHandModel(hand, "mesh"));
   scene.add(hand);
 

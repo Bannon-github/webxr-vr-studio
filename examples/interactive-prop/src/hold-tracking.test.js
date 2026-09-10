@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   forceReleaseHold,
+  isHandInputSource,
   isHoldPoseLost,
   releaseIfSourceRemoved,
   releaseLostHold,
@@ -19,8 +20,16 @@ function endGrabStub(object) {
   object.userData.heldBy = null;
 }
 
-test("missing inputSource is a lost hold", () => {
-  assert.equal(isHoldPoseLost({}, {}, null, { visible: true }), true);
+test("missing inputSource uses holder visibility (sources are independent)", () => {
+  assert.equal(isHoldPoseLost({}, {}, null, { visible: true }), false);
+  assert.equal(isHoldPoseLost({}, {}, null, { visible: false }), true);
+  assert.equal(isHoldPoseLost({}, {}, null, null), true);
+});
+
+test("isHandInputSource is true only when XRHand is present", () => {
+  assert.equal(isHandInputSource({ hand: {} }), true);
+  assert.equal(isHandInputSource({ gripSpace: {} }), false);
+  assert.equal(isHandInputSource(null), false);
 });
 
 test("null grip pose is lost", () => {
@@ -122,9 +131,10 @@ test("releaseIfSourceRemoved ignores an unrelated removed source", () => {
   assert.equal(input.userData.held, object);
 });
 
-test("releaseIfSourceRemoved fires when the holding source pointer is already gone", () => {
+test("releaseIfSourceRemoved does not drop a hold when this slot has no stored source", () => {
   const object = prop({});
   const input = slot(object, null);
-  assert.equal(releaseIfSourceRemoved(input, [], endGrabStub, {}, null), true);
-  assert.equal(input.userData.held, null);
+  const other = { gripSpace: {} };
+  assert.equal(releaseIfSourceRemoved(input, [other], endGrabStub, {}, null), false);
+  assert.equal(input.userData.held, object);
 });
