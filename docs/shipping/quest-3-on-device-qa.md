@@ -66,7 +66,7 @@ Quality-bar shipping/a11y gate (`crate-toolbox` v0.10). While holding the crate 
 1. Enter VR on `interactive-prop`. Squeeze-grab the **crate**, then occlude or set down that controller until tracking is lost (or unpair / walk the controller out of view). Repeat with a **pinch-held screwdriver** after the crate is `open`.
 2. **Pass:** the held prop detaches immediately and behaves like a normal release (drops / throws / snap-returns if the tool is over the slot). You can grab it again with the other hand or after tracking returns. **Fail:** the crate or tool stays glued to the last grip/wrist pose, or will not accept a new grab.
 3. Optional: drop a battery controller mid-hold (`inputsourceschange` removed) or exit VR while holding — session end should also leave the prop free in the scene, not parented to a gone node.
-4. Desktop/emulator smoke: `window.__qa.forceHold("crate")` then `window.__qa.simulateTrackingLoss()` (or `simulateSourceRemoved()`) — `crateHeldBy` / `controllerHeld` must be `null`. Same for `"tool"` when extracted. Emulator is not a headset pass.
+4. Desktop/emulator smoke: `window.__qa.forceHold("crate")` then `window.__qa.simulateTrackingLoss()` (or `simulateSourceRemoved()`) — `crateHeldBy` / `toolHeldBy` must be `null` and `controllerHeld` / `handHeld` false. Same for `"tool"` when extracted. Emulator is not a headset pass.
 
 Leave the results table blank. Note “tracking-loss release: pass/fail” in the Notes cell only after a real headset run.
 

@@ -693,10 +693,10 @@ const _qaLostFrame = {
 function qaHoldSnapshot() {
   const tool = toolbox.userData.parts.tool;
   return {
-    crateHeldBy: toolbox.userData.heldBy,
-    toolHeldBy: tool.userData.heldBy,
-    controllerHeld: pairs[0].controller.userData.held || pairs[1].controller.userData.held || null,
-    handHeld: pairs[0].hand.userData.held || pairs[1].hand.userData.held || null,
+    crateHeldBy: toolbox.userData.heldBy ? "held" : null,
+    toolHeldBy: tool.userData.heldBy ? "held" : null,
+    controllerHeld: Boolean(pairs[0].controller.userData.held || pairs[1].controller.userData.held),
+    handHeld: Boolean(pairs[0].hand.userData.held || pairs[1].hand.userData.held),
   };
 }
 
