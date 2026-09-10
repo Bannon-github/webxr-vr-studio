@@ -100,11 +100,13 @@ export function steelHeight(u, v) {
 
 /**
  * OpenGL tangent-space normal (Three.js +Y) from four height samples.
- * `hDown`/`hUp` are canvas-space (y increases downward). Encoded RGB 0–255.
+ * Neighbors are along canvas +X / +Y (y increases downward, same as +V).
+ * `hYMinus` is y-1 (toward the top of the image); `hYPlus` is y+1.
+ * Higher height toward y-1 encodes G > 128. RGB 0–255.
  */
-export function heightToNormalRgb(hLeft, hRight, hDown, hUp, strength = 2.5) {
+export function heightToNormalRgb(hLeft, hRight, hYMinus, hYPlus, strength = 2.5) {
   const dx = (hRight - hLeft) * strength;
-  const dy = (hUp - hDown) * strength;
+  const dy = (hYPlus - hYMinus) * strength;
   let nx = -dx;
   let ny = -dy;
   let nz = 1;
@@ -134,9 +136,15 @@ function normalFromHeightField(size, heights, strength) {
     const y = (p - x) / size;
     const xL = (x + size - 1) % size;
     const xR = (x + 1) % size;
-    const yD = (y + size - 1) % size;
-    const yU = (y + 1) % size;
-    const [r, g, b] = heightToNormalRgb(heights[y * size + xL], heights[y * size + xR], heights[yD * size + x], heights[yU * size + x], strength);
+    const yMinus = (y + size - 1) % size;
+    const yPlus = (y + 1) % size;
+    const [r, g, b] = heightToNormalRgb(
+      heights[y * size + xL],
+      heights[y * size + xR],
+      heights[yMinus * size + x],
+      heights[yPlus * size + x],
+      strength
+    );
     d[i] = r;
     d[i + 1] = g;
     d[i + 2] = b;

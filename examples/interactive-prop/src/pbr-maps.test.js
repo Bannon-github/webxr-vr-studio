@@ -35,7 +35,7 @@ test("higher height to the right tilts the normal left (R < 128)", () => {
   assert.ok(b > 128);
 });
 
-test("higher height toward canvas-up raises G (> 128)", () => {
+test("higher height toward canvas y-1 (image top) raises G (> 128)", () => {
   const [r, g, b] = heightToNormalRgb(0.5, 0.5, 1, 0, 2.5);
   assert.equal(r, 128);
   assert.ok(g > 128);
