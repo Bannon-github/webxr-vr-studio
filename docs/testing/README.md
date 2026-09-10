@@ -30,6 +30,7 @@ Emulators do not prove performance, thermals, or true comfort.
 - [ ] Haptics pulse on select when hardware supports
 - [ ] Recenter / seated height
 - [ ] inputsourceschange (drop/reconnect battery controllers)
+- [ ] Visibility loss (lift headset / session blur / tab hide) releases held props; restore does not auto-regrab
 - [ ] Hand tracking path if advertised (optional feature)
 - [ ] Interactive props: hover / use / grab; activity states; collider debug vs hero mesh ([quality-bar](../../studio/quality-bar.md) interactive assets)
 - [ ] Exit VR cleanly; can re-enter without reload
@@ -41,4 +42,4 @@ Emulators do not prove performance, thermals, or true comfort.
 
 ## Bug triage labels
 
-comfort · perf-frame · tracking-loss · input-binding · shipping-https · a11y
+comfort · perf-frame · tracking-loss · visibility-loss · input-binding · shipping-https · a11y
