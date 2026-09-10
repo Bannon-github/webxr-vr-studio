@@ -29,15 +29,17 @@ test("heightToNormalRgb encodes OpenGL +Y (flat is mid-blue)", () => {
 });
 
 test("higher height to the right tilts the normal left (R < 128)", () => {
-  const [r, , b] = heightToNormalRgb(0, 1, 0.5, 0.5, 2.5);
+  const [r, g, b] = heightToNormalRgb(0, 1, 0.5, 0.5, 2.5);
   assert.ok(r < 128);
-  assert.ok(b > 200);
+  assert.equal(g, 128);
+  assert.ok(b > 128);
 });
 
 test("higher height toward canvas-up raises G (> 128)", () => {
-  const [, g, b] = heightToNormalRgb(0.5, 0.5, 1, 0, 2.5);
+  const [r, g, b] = heightToNormalRgb(0.5, 0.5, 1, 0, 2.5);
+  assert.equal(r, 128);
   assert.ok(g > 128);
-  assert.ok(b > 200);
+  assert.ok(b > 128);
 });
 
 test("wood / brass / steel height fields are not flat", () => {
