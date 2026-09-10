@@ -40,8 +40,12 @@ import {
 } from "./interaction.js";
 import {
   forceReleaseHold,
+  isDocumentVisibilityLost,
   isHandInputSource,
+  isSessionVisibilityLost,
+  releaseIfDocumentHidden,
   releaseIfSourceRemoved,
+  releaseIfVisibilityLost,
   releaseLostHold,
 } from "./hold-tracking.js";
 import {
@@ -59,8 +63,9 @@ import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 /**
  * Interactive crate demo — visual mesh ≠ collider ≠ activity.
  * APIs: MDN WebXR (select/squeeze, targetRaySpace/gripSpace, optional XRHand,
- * inputsourceschange, XRFrame.getPose / getJointPose) plus Three.js WebXRManager
- * helpers. Null grip/ray/joint poses and a removed holding source call endGrab.
+ * inputsourceschange, XRFrame.getPose / getJointPose, XRSession.visibilityState)
+ * plus Three.js WebXRManager helpers. Null grip/ray/joint poses, a removed
+ * holding source, and session/page visibility loss call endGrab.
  * No invented session methods.
  */
 
@@ -391,6 +396,39 @@ function releaseAllHolds() {
   }
 }
 
+/**
+ * Session hidden / visible-blurred, or document.hidden while presenting.
+ * Same `endGrab` as tracking loss. Returning to `visible` does not regrab.
+ */
+function releaseHoldsForLostVisibility(visibilityState, documentHidden, isPresenting) {
+  let released = false;
+  for (let i = 0; i < pairs.length; i++) {
+    const { controller, hand } = pairs[i];
+    if (releaseIfVisibilityLost(controller, visibilityState, endGrab, scene, toolbox)) released = true;
+    if (releaseIfVisibilityLost(hand, visibilityState, endGrab, scene, toolbox)) released = true;
+    if (releaseIfDocumentHidden(controller, documentHidden, isPresenting, endGrab, scene, toolbox)) {
+      released = true;
+    }
+    if (releaseIfDocumentHidden(hand, documentHidden, isPresenting, endGrab, scene, toolbox)) {
+      released = true;
+    }
+  }
+  return released;
+}
+
+function onSessionVisibilityChange(event) {
+  const session = event?.session || xrSession;
+  if (isSessionVisibilityLost(session?.visibilityState)) {
+    releaseHoldsForLostVisibility(session.visibilityState, false, true);
+  }
+}
+
+function onDocumentVisibilityChange() {
+  if (isDocumentVisibilityLost(document.hidden, renderer.xr.isPresenting)) {
+    releaseHoldsForLostVisibility("visible", document.hidden, true);
+  }
+}
+
 function resetAll() {
   resetToolbox(toolbox, table.position.y + 0.04);
   lastPlaqueState = "";
@@ -579,15 +617,18 @@ renderer.xr.addEventListener("sessionstart", () => {
   xrSession = session;
   applyQuest3SessionDefaults(session);
   session?.addEventListener("inputsourceschange", onInputSourcesChange);
+  session?.addEventListener("visibilitychange", onSessionVisibilityChange);
 });
 renderer.xr.addEventListener("sessionend", () => {
   if (xrSession) {
     xrSession.removeEventListener("inputsourceschange", onInputSourcesChange);
+    xrSession.removeEventListener("visibilitychange", onSessionVisibilityChange);
     xrSession = null;
   }
   releaseAllHolds();
   recordQuest3SessionEnd();
 });
+document.addEventListener("visibilitychange", onDocumentVisibilityChange);
 
 const clock = new THREE.Clock();
 
@@ -662,6 +703,10 @@ renderer.setAnimationLoop((_time, frame) => {
   // Quest 3 gate: no per-frame `new` / array alloc on this path when overlay is off.
   const list = pickables();
   if (renderer.xr.isPresenting) {
+    const session = xrSession || renderer.xr.getSession();
+    if (isSessionVisibilityLost(session?.visibilityState) || document.hidden) {
+      releaseHoldsForLostVisibility(session?.visibilityState, document.hidden, true);
+    }
     if (frame) releaseLostHolds(frame, renderer.xr.getReferenceSpace());
     let hovered = false;
     for (const { controller } of pairs) {
@@ -762,6 +807,25 @@ window.__qa = {
       else forceReleaseHold(hand, endGrab, scene, toolbox);
     }
     return { ok: true, ...qaHoldSnapshot() };
+  },
+  /** Same path as XRSession visibilityState `hidden` (lift headset / blur). */
+  simulateVisibilityHidden() {
+    releaseHoldsForLostVisibility("hidden", false, true);
+    return { ok: true, visibilityState: "hidden", ...qaHoldSnapshot() };
+  },
+  /**
+   * Session back to `visible`. Does not re-attach — user must grab again.
+   * Also exercises the document.hidden-while-presenting helper as a no-op
+   * when the page is visible.
+   */
+  simulateVisibilityRestore() {
+    releaseHoldsForLostVisibility("visible", false, true);
+    return { ok: true, visibilityState: "visible", autoRegrab: false, ...qaHoldSnapshot() };
+  },
+  /** Belt-and-suspenders: document.hidden while presenting. */
+  simulateDocumentHidden() {
+    releaseHoldsForLostVisibility("visible", true, true);
+    return { ok: true, documentHidden: true, presenting: true, ...qaHoldSnapshot() };
   },
   project(colliderName) {
     const list = [...toolbox.userData.colliders, ...(resetPlate.userData.colliders || [])];

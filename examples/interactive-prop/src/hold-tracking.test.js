@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   forceReleaseHold,
+  isDocumentVisibilityLost,
   isHandInputSource,
   isHoldPoseLost,
+  isSessionVisibilityLost,
+  releaseIfDocumentHidden,
   releaseIfSourceRemoved,
+  releaseIfVisibilityLost,
   releaseLostHold,
 } from "./hold-tracking.js";
 
@@ -137,4 +141,83 @@ test("releaseIfSourceRemoved does not drop a hold when this slot has no stored s
   const other = { gripSpace: {} };
   assert.equal(releaseIfSourceRemoved(input, [other], endGrabStub, {}, null), false);
   assert.equal(input.userData.held, object);
+});
+
+test("session visibility is lost only for hidden and visible-blurred", () => {
+  assert.equal(isSessionVisibilityLost("hidden"), true);
+  assert.equal(isSessionVisibilityLost("visible-blurred"), true);
+  assert.equal(isSessionVisibilityLost("visible"), false);
+  assert.equal(isSessionVisibilityLost(undefined), false);
+  assert.equal(isSessionVisibilityLost(""), false);
+});
+
+test("document visibility is lost only when hidden while presenting", () => {
+  assert.equal(isDocumentVisibilityLost(true, true), true);
+  assert.equal(isDocumentVisibilityLost(true, false), false);
+  assert.equal(isDocumentVisibilityLost(false, true), false);
+  assert.equal(isDocumentVisibilityLost(false, false), false);
+});
+
+test("releaseIfVisibilityLost uses endGrab on hidden and visible-blurred", () => {
+  const object = prop({});
+  const input = slot(object);
+  assert.equal(releaseIfVisibilityLost(input, "hidden", endGrabStub, {}, null), true);
+  assert.equal(input.userData.held, null);
+  assert.equal(input.userData.pinching, false);
+  assert.equal(object.userData.heldBy, null);
+
+  const blurred = prop({});
+  const blurredSlot = slot(blurred);
+  assert.equal(releaseIfVisibilityLost(blurredSlot, "visible-blurred", endGrabStub, {}, null), true);
+  assert.equal(blurredSlot.userData.held, null);
+  assert.equal(blurred.userData.heldBy, null);
+});
+
+test("releaseIfVisibilityLost is a no-op on visible and does not regrab", () => {
+  const holder = {};
+  const object = prop(holder);
+  const input = slot(object);
+  assert.equal(releaseIfVisibilityLost(input, "visible", endGrabStub, {}, null), false);
+  assert.equal(input.userData.held, object);
+  assert.equal(object.userData.heldBy, holder);
+
+  object.userData.heldBy = null;
+  input.userData.held = null;
+  input.userData.pinching = false;
+  assert.equal(releaseIfVisibilityLost(input, "visible", endGrabStub, {}, null), false);
+  assert.equal(input.userData.held, null);
+  assert.equal(object.userData.heldBy, null);
+});
+
+test("visibility restore after hidden does not auto-regrab", () => {
+  const object = prop({});
+  const input = slot(object);
+  assert.equal(releaseIfVisibilityLost(input, "hidden", endGrabStub, {}, null), true);
+  assert.equal(releaseIfVisibilityLost(input, "visible", endGrabStub, {}, null), false);
+  assert.equal(input.userData.held, null);
+  assert.equal(object.userData.heldBy, null);
+});
+
+test("controller and hand holds both release on visibility loss independently", () => {
+  const crate = prop({});
+  const tool = { name: "tool", userData: { heldBy: true } };
+  const controller = slot(crate);
+  const hand = slot(tool);
+  assert.equal(releaseIfVisibilityLost(controller, "hidden", endGrabStub, {}, null), true);
+  assert.equal(controller.userData.held, null);
+  assert.equal(crate.userData.heldBy, null);
+  assert.equal(hand.userData.held, tool);
+  assert.equal(releaseIfVisibilityLost(hand, "hidden", endGrabStub, {}, null), true);
+  assert.equal(hand.userData.held, null);
+  assert.equal(tool.userData.heldBy, null);
+});
+
+test("releaseIfDocumentHidden uses endGrab only while presenting", () => {
+  const object = prop({});
+  const input = slot(object);
+  assert.equal(releaseIfDocumentHidden(input, true, false, endGrabStub, {}, null), false);
+  assert.equal(input.userData.held, object);
+  assert.equal(releaseIfDocumentHidden(input, true, true, endGrabStub, {}, null), true);
+  assert.equal(input.userData.held, null);
+  assert.equal(object.userData.heldBy, null);
 });

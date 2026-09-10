@@ -1,10 +1,14 @@
 /**
- * Quest 3 tracking-loss / null-pose gate.
+ * Quest 3 hold-release gates (tracking-loss + session/page visibility).
  *
  * Real WebXR: XRFrame.getPose (grip / targetRay), XRFrame.getJointPose
- * (hand wrist), XRSession `inputsourceschange` removed[].
+ * (hand wrist), XRSession `inputsourceschange` removed[], XRSession
+ * `visibilitychange` / `visibilityState` (MDN XRVisibilityState).
+ * Belt-and-suspenders: document.visibilitychange while presenting
+ * (Quest Browser tab/app switch if session events lag).
  * Controller and hand XRInputSources are independent — a missing pointer
- * on one slot is not a lost hold on the other.
+ * on one slot is not a lost hold on the other. Visibility loss is
+ * session-wide and releases every slot that is holding.
  * Three fallback: Object3D.visible after WebXRManager wrote a null pose.
  *
  * No allocations — safe on the XR animation path when P is off.
@@ -96,5 +100,40 @@ export function releaseIfSourceRemoved(inputObj, removed, endGrab, scene, crate)
     }
   }
   if (!listed) return false;
+  return forceReleaseHold(inputObj, endGrab, scene, crate);
+}
+
+/**
+ * True when XRSession.visibilityState is not the user's primary focus.
+ * `hidden`: scene not shown; rAF paused; input not handled.
+ * `visible-blurred`: not primary focus; rAF may throttle; input not handled.
+ * `visible` (and unknown) keep the hold — restore never auto-regrabs.
+ */
+export function isSessionVisibilityLost(visibilityState) {
+  return visibilityState === "hidden" || visibilityState === "visible-blurred";
+}
+
+/**
+ * Quest Browser tab/app switch: Page Visibility `document.hidden` while
+ * an immersive session is presenting. Do not release on a 2D tab hide.
+ */
+export function isDocumentVisibilityLost(documentHidden, isPresenting) {
+  return Boolean(isPresenting && documentHidden);
+}
+
+/**
+ * Release this controller or hand slot via `endGrab` when session
+ * visibility is lost. No-op on `visible` (caller must not re-attach).
+ */
+export function releaseIfVisibilityLost(inputObj, visibilityState, endGrab, scene, crate) {
+  if (!isSessionVisibilityLost(visibilityState)) return false;
+  return forceReleaseHold(inputObj, endGrab, scene, crate);
+}
+
+/**
+ * Document-hidden path. Same `endGrab` as session visibility / tracking loss.
+ */
+export function releaseIfDocumentHidden(inputObj, documentHidden, isPresenting, endGrab, scene, crate) {
+  if (!isDocumentVisibilityLost(documentHidden, isPresenting)) return false;
   return forceReleaseHold(inputObj, endGrab, scene, crate);
 }
