@@ -10,6 +10,7 @@ An immersive feature or release is **done** only when all applicable boxes pass.
 - [ ] isSessionSupported gates the Enter VR CTA
 - [ ] requestSession only on user gesture
 - [ ] Tracking loss handled (null poses) (`crate-toolbox` v0.10: held crate/tool `endGrab` on null grip/ray/joint pose or removed input source)
+- [ ] Visibility loss handled (session `hidden` / `visible-blurred`, or `document.hidden` while presenting) (`crate-toolbox` v0.11: same `endGrab`; no auto-regrab on restore)
 - [ ] Session end restores 2D UI; re-entry works
 - [ ] Controllers: rays, select, squeeze as designed
 - [ ] Reference space fallback chain works

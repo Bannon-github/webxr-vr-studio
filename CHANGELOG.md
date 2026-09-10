@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.13.0] — 2026-09-10
+
+### Changed
+
+- `crate-toolbox` **v0.11.0** Quest 3 shipping/a11y gate: visibility-loss safe release in `examples/interactive-prop` (held crate or tool `endGrab` when `XRSession.visibilityState` is `hidden` / `visible-blurred`, or `document.hidden` while presenting; no auto-regrab on restore). Same L0–L5. v0.8 allocation scrub, v0.9 hand hover, and v0.10 tracking-loss kept. Headset ms / FFR still unmeasured.
+
 ## [0.12.0] — 2026-09-10
 
 ### Changed

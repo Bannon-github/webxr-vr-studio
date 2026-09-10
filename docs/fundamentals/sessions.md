@@ -35,4 +35,16 @@ If a required feature is unavailable, the promise rejects — prefer optionalFea
 6. session.requestAnimationFrame loop
 7. On exit: session.end(); restore inline canvas / UI
 
-Refs: MDN XRSystem.requestSession; MDN Starting up and shutting down a WebXR session.
+## Visibility
+
+`XRSession.visibilityState` is not the same as `document.visibilityState`. Listen for session `visibilitychange` and read `visibilityState` ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/XRSession/visibilityState)):
+
+| State | Meaning (spec) |
+| --- | --- |
+| `visible` | Primary focus; rAF at device rate; input processed |
+| `visible-blurred` | Not primary focus; rAF may throttle; **input not processed** |
+| `hidden` | Not shown; rAF paused; **input not processed** |
+
+On Quest 3, lifting the headset, a system overlay, or Quest Browser blurring the immersive session can leave a held prop parented to a grip/wrist that is no longer receiving input. `crate-toolbox` v0.11 releases via the existing `endGrab` path on `hidden` / `visible-blurred`, and also on `document.hidden` while presenting (tab/app switch if session events lag). Restore to `visible` must not auto-regrab.
+
+Refs: MDN XRSystem.requestSession; MDN Starting up and shutting down a WebXR session; MDN XRSession.visibilitychange.

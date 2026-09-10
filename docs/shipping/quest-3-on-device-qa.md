@@ -70,6 +70,19 @@ Quality-bar shipping/a11y gate (`crate-toolbox` v0.10). While holding the crate 
 
 Leave the results table blank. Note “tracking-loss release: pass/fail” in the Notes cell only after a real headset run.
 
+## Visibility loss (lift headset / session blur)
+
+Quality-bar shipping/a11y gate (`crate-toolbox` v0.11). While holding the crate or screwdriver, an immersive session that becomes **`hidden` or `visible-blurred`** (`XRSession.visibilitychange` / `visibilityState`) — or the **page** becoming `document.hidden` while presenting — must call the same `endGrab` as a normal squeeze or tracking-loss release (return-tool / throw / table). Returning to `visible` must **not** auto-regrab. The prop must not stay frozen on the last grip/wrist while the user lifts the headset, a system overlay blurs the session, or Quest Browser switches apps. This is **not** a frame-time measurement. Do not invent timings.
+
+**How to confirm (qualitative)**
+
+1. Enter VR on `interactive-prop`. Squeeze-grab the **crate**, then lift the headset (or open the Quest overlay / switch apps so the immersive session blurs or hides). Repeat with a **pinch-held screwdriver** after the crate is `open`.
+2. **Pass:** the held prop detaches as a normal release (drops / throws / snap-returns if the tool is over the slot). After you put the headset back on and the session is `visible` again, the crate/tool is free — you must grab it again. **Fail:** the crate or tool stays glued to the last grip/wrist, or snaps back into the hand on restore without a new squeeze/pinch.
+3. Optional: switch Quest Browser tabs or leave the app mid-hold (`document.hidden` while presenting). Session end should still leave the prop free (v0.10).
+4. Desktop/emulator smoke: `window.__qa.forceHold("crate")` then `window.__qa.simulateVisibilityHidden()` — `crateHeldBy` / `toolHeldBy` must be `null` and `controllerHeld` / `handHeld` false. Then `simulateVisibilityRestore()` must keep those null (`autoRegrab: false`). Same for `"tool"` when extracted. `simulateDocumentHidden()` is the page-visibility path. Emulator is not a headset pass.
+
+Leave the results table blank. Note “visibility-loss release: pass/fail” in the Notes cell only after a real headset run.
+
 ## ≥10 minute thermal soak
 
 Use the **interactive-prop** crate (`crate-toolbox`), not an empty scene.

@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.11.0 — 2026-09-10
+
+- **Delta (additive, shipping/a11y UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **visibility-loss safe release** in `examples/interactive-prop`: if the XR session or page loses visibility (`XRSession.visibilityState` `hidden` / `visible-blurred` via `visibilitychange`, or `document.hidden` while presenting) while holding the crate or screwdriver, the prop is released via the existing `endGrab` path (same return-tool / throw / table logic as squeezeend / tracking loss). Returning to `visible` does **not** auto-regrab. v0.10 tracking-loss, v0.9 hover-before-pinch, and v0.8 allocation scrub kept.
+- **Layers:** still L0–L5. Quality / shipping-gate revisit (like v0.5 / v0.8 / v0.9 / v0.10), not a new layer.
+- **Quest 3:** Props detach when the user lifts the headset, the immersive session blurs, or Quest Browser hides the tab. Draws / tris / textures unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.11.0/`
+
 ## 0.10.0 — 2026-09-10
 
 - **Delta (additive, shipping/a11y UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **tracking-loss / null-pose safe release** in `examples/interactive-prop`: if a controller or hand loses tracking (null `getPose` / `getJointPose` on grip, targetRay, or wrist) while holding the crate or screwdriver, or the holding `XRInputSource` disappears mid-grab (`inputsourceschange` removed / Three `disconnected`), the prop is released via the existing `endGrab` path (same return-tool / throw / table logic as squeezeend). Does not leave a prop frozen on a dead grip or wrist. v0.9 hover-before-pinch and v0.8 allocation scrub kept.
