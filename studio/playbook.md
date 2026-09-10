@@ -7,10 +7,11 @@ How a productive WebXR VR app studio operates week to week.
 | Ritual | When | Outcome |
 | --- | --- | --- |
 | Comfort review | Before merging loco/camera PRs | Tier classification + tester sign-off |
-| Perf budget check | Mid-sprint + release | On-device ms vs target Hz |
+| Perf budget check | Mid-sprint + release | Quest 3 ms vs **90 Hz** ([quest-3-target](../docs/shipping/quest-3-target.md)) |
 | Matrix update | Every release candidate | docs/shipping table filled |
 | ADR office hours | As needed | Decisions recorded in studio/adr |
 | Content freeze | RC cut | Pipeline revision pinned |
+| Object improvement pulse | ~2 hours, as scheduled | One additive delta on the weakest layer below target ([additive iteration](additive-object-iteration.md)) |
 
 ## Roles (lightweight)
 
@@ -18,7 +19,7 @@ How a productive WebXR VR app studio operates week to week.
 - **App eng** — product logic, networking, tooling
 - **Design** — spatial UI, comfort, presence
 - **QA** — emulator + headset matrix
-- **Content** — assets through content-pipeline.md
+- **Content** — assets through [content-pipeline.md](content-pipeline.md); interactive heroes follow [asset-to-interaction-workflow.md](asset-to-interaction-workflow.md); objects grow in [assets/objects](../assets/objects/README.md)
 
 ## Branch / ship flow
 
@@ -39,5 +40,5 @@ P2: visual polish, secondary device gaps
 
 - Vite for app shells
 - Three.js unless ADR 0001 superseded
-- GLB + KTX2 content path
+- GLB + KTX2 content path; behavior sidecar per [ADR 0004](adr/0004-asset-interaction-architecture.md)
 - gh for PR / release notes

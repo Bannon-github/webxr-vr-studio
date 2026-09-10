@@ -2,6 +2,8 @@
 
 Standalone HMDs are thermally and GPU constrained. Comfort collapses when you miss v-sync.
 
+**Gate device:** [Quest 3](../shipping/quest-3-target.md) @ 90 Hz. Do not author against a desktop GPU and “see if Quest holds.”
+
 ## Frame budgets
 
 | Refresh | Budget (approx) |
@@ -22,7 +24,7 @@ Leave headroom for browser + compositor. Target ~70–80% of budget on device, n
 ## Geometry and textures
 
 - Budget triangles per scene for the lowest target device
-- Power-of-two textures; ASTC/ETC2/Basis/KTX2 where supported
+- Power-of-two textures; ASTC/ETC2/Basis/KTX2 where supported — Quest 3 prop recipe: [ktx2-quest3-packaging.md](ktx2-quest3-packaging.md)
 - Mipmaps on; avoid 4K textures on props
 - Atlas UI when practical
 
@@ -43,4 +45,8 @@ Leave headroom for browser + compositor. Target ~70–80% of budget on device, n
 7. Retest with FFR 0 / 0.5 / 1
 8. Verify no GC spikes on interaction storms
 
-Fail the build if the lowest-tier target device cannot hold target Hz in the hero scene.
+Fail the build if **Quest 3** cannot hold **90 Hz** in the hero scene ([quest-3-target](../shipping/quest-3-target.md); 72 Hz is fallback only).
+
+## Photoreal props
+
+Interactive hero assets have their own class budgets, IBL rules, and “do not path-trace on-device” constraints: [photoreal-realtime.md](photoreal-realtime.md). Pair with [asset-to-interaction-workflow](../../studio/asset-to-interaction-workflow.md) so optimization does not strip colliders or bake lighting into albedo.

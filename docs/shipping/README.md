@@ -1,13 +1,17 @@
 # Shipping WebXR VR
 
+**Gate device:** [Quest 3](quest-3-target.md) — Meta Quest Browser, immersive-vr, **90 Hz**. Other rows in the matrix are coverage, not the performance bar.
+
 ## Device / browser matrix (maintain per release)
 
 Fill this table for every release; do not ship with empty cells.
 
 | Device | Browser | Mode | Status | Notes |
 | --- | --- | --- | --- | --- |
-| Meta Quest 2/3/3S/Pro | Meta Quest Browser | immersive-vr | Required | Primary standalone target |
-| Desktop Windows | Chrome | Emulator / tethered (if avail.) | Required | Dev + smoke |
+| **Meta Quest 3** | Meta Quest Browser | immersive-vr | **Required (gate)** | 90 Hz ship; 72 Hz fallback; see [quest-3-target](quest-3-target.md) |
+| Meta Quest 3S | Meta Quest Browser | immersive-vr | In-family | Same GPU class; smoke if you ship it |
+| Meta Quest 2 / Pro | Meta Quest Browser | immersive-vr | Optional soak | Not the studio default |
+| Desktop Windows | Chrome | Emulator / tethered (if avail.) | Required | Dev + smoke — not the perf gate |
 | Desktop Windows | Edge | immersive-vr when device available | Secondary | Chromium parity |
 | Pico / other | Vendor browser | immersive-vr | Optional | Track if product requires |
 | Safari / visionOS | As documented by Apple for WebXR | Optional | Verify current support before promising |
@@ -37,7 +41,7 @@ WebXR is not Baseline; capabilities differ. Always call isSessionSupported at ru
 
 - [ ] Matrix filled and signed by QA
 - [ ] Comfort tier defaults verified
-- [ ] Perf soak on lowest tier device
+- [ ] Quest 3 90 Hz soak (10+ min); 72 Hz fallback documented if used — fill [quest-3-on-device-qa](quest-3-on-device-qa.md) (no invented ms)
 - [ ] Privacy policy covers camera/mic/hand if used
 - [ ] Crash/analytics pipeline does not log secrets
 - [ ] Rollback plan for CDN assets

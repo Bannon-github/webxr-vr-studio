@@ -22,7 +22,7 @@ Some runtimes also accept optional session feature hints for foveation levels; p
 ## Studio guidance
 
 1. Start with XRWebGLLayer + Three.js/Babylon WebXR helpers.
-2. Enable FFR when GPU-bound on standalone HMDs; A/B at 0.5 vs 1.0.
+2. Enable FFR when GPU-bound on standalone HMDs. **Quest 3 default: medium–high** (`fixedFoveation` ≈0.5–1.0; Three `setFoveation(0.75)`). A/B 0.5 vs 1.0. See [quest-3-target](../shipping/quest-3-target.md).
 3. Adopt composition layers for video / large HUD quads when targeting runtimes with solid Layers support.
 4. Never invent vendor-only APIs in shared docs — link vendor notes separately.
 

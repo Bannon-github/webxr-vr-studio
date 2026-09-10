@@ -1,0 +1,26 @@
+{
+  "id": "replace-with-object-id",
+  "version": "0.1.0",
+  "displayName": "Replace with display name",
+  "targetDevice": "quest3",
+  "layersComplete": ["L0"],
+  "layerTarget": "L5",
+  "interactions": [],
+  "deps": [],
+  "perf": {
+    "frameHz": 90,
+    "frameHzFallback": 72,
+    "lod0Tris": 0,
+    "lod1Tris": null,
+    "textureMax": 2048,
+    "texturePref": 1024,
+    "drawCallsEstimate": 0,
+    "notes": "Fill tris/textures before claiming L2/L3. TODO: confirm GPU time on Quest 3."
+  },
+  "source": {
+    "kind": "gltf",
+    "glb": "current.glb",
+    "behavior": "behavior.json"
+  },
+  "variants": []
+}

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebXR VR Studio — Interactive prop</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #0b0d12; color: #e8ecf5; font-family: system-ui, sans-serif; }
+      #hud {
+        position: fixed; left: 16px; bottom: 16px; z-index: 2;
+        max-width: min(460px, 92vw); padding: 12px 14px; border-radius: 12px;
+        background: rgba(10, 14, 22, 0.72); backdrop-filter: blur(8px);
+        border: 1px solid rgba(255,255,255,0.08); line-height: 1.45; font-size: 14px;
+      }
+      #hud code { color: #9ad1ff; }
+      #hud kbd { background: #1c2433; padding: 1px 6px; border-radius: 6px; font-size: 12px; }
+      #hud button {
+        margin-top: 8px; background: #1c2433; color: #e8ecf5; border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 8px; padding: 4px 10px; font: inherit; cursor: pointer;
+      }
+      #quest3-diag {
+        position: fixed; right: 16px; top: 16px; z-index: 2;
+        max-width: min(420px, 92vw); padding: 12px 14px; border-radius: 12px;
+        background: rgba(10, 14, 22, 0.82); backdrop-filter: blur(8px);
+        border: 1px solid rgba(154, 209, 255, 0.25); line-height: 1.4; font-size: 13px;
+      }
+      #quest3-diag strong { color: #9ad1ff; }
+      #quest3-diag .q3-row { margin: 0.35em 0; }
+      #quest3-diag .q3-label { color: #8aa0c0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+      canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <strong>Interactive prop</strong> — photoreal PBR stand-in, not the pick target.<br />
+      <strong>XR:</strong> ray hover · trigger <code>select</code> = use latch/lid · grip <code>squeeze</code> = grab/throw<br />
+      <strong>Desktop:</strong> hover + click to use · drag the crate to move · <kbd>C</kbd> colliders · <kbd>R</kbd> reset<br />
+      Activity: latch → <code>unlatched</code> (latch again cancels) → lid <code>open</code> → grab tool (or <kbd>E</kbd>) → <kbd>F</kbd> / front fastener drives 4 turns. Drop near crate or <kbd>T</kbd> returns from anywhere.<br />
+      <span id="action-status">idle</span><br />
+      Gate: <strong>Quest 3</strong> @ 90 Hz (72 fallback). Session requests that rate + FFR 0.75 when the UA exposes the APIs.<br />
+      LOD: <code id="lod-status">auto / 0</code> — <kbd>0</kbd> auto · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> force LOD0–2 (only one visual level draws; colliders stay).<br />
+      Quest 3 diag: <kbd>P</kbd> or <button type="button" id="quest3-diag-btn">toggle overlay</button> — rates/FFR when the UA exposes them; rAF Δ is approximate. Headset matrix: still unmeasured.
+    </div>
+    <div id="quest3-diag" hidden>
+      <strong>Quest 3 diagnostics</strong> — authoring + session capture, not a filled headset matrix<br />
+      <div class="q3-row"><span class="q3-label">Frame rates</span><br /><span data-q3="rates">n/a</span></div>
+      <div class="q3-row"><span class="q3-label">FFR / foveation</span><br /><span data-q3="ffr">n/a</span></div>
+      <div class="q3-row"><span class="q3-label">Approx frame ms</span><br /><span data-q3="frame">—</span></div>
+      <div class="q3-row"><span class="q3-label">Prop budget (authoring estimates)</span><br /><span data-q3="budget"></span></div>
+      <div class="q3-row" data-q3="note"></div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

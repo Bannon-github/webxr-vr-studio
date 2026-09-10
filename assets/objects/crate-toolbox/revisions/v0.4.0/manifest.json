@@ -1,0 +1,43 @@
+{
+  "id": "crate-toolbox",
+  "version": "0.4.0",
+  "displayName": "Crate toolbox",
+  "targetDevice": "quest3",
+  "layersComplete": ["L0", "L1", "L2", "L3", "L4", "L5"],
+  "layerTarget": "L5",
+  "interactions": [
+    "hover",
+    "grab",
+    "use-latch",
+    "use-lid",
+    "relatch-cancel",
+    "grab-tool",
+    "drive-fastener",
+    "return-tool"
+  ],
+  "deps": ["examples/interactive-prop"],
+  "perf": {
+    "frameHz": 90,
+    "frameHzFallback": 72,
+    "lod0Tris": 240,
+    "lod1Tris": 96,
+    "lod2Tris": 24,
+    "lod0Draws": 14,
+    "lod1Draws": 8,
+    "lod2Draws": 2,
+    "fastenerTris": 12,
+    "fastenerDraws": 1,
+    "drawCallsEstimate": 15,
+    "lodSwitchMeters": { "lod1": 2.4, "lod2": 4.5 },
+    "textureMax": 1024,
+    "texturePref": 1024,
+    "collider": "box hulls (grab/latch/lid/tool/fastener), not hero LOD meshes",
+    "notes": "L5 fastener is +12 tris / +1 draw outside the LOD set. LOD counts unchanged from v0.3.0 (Three.js indexes). No XR-loop allocations on drive/return. TODO: Quest 3 Browser frame time / FFR — not measured."
+  },
+  "source": {
+    "kind": "procedural",
+    "runtime": "examples/interactive-prop",
+    "behavior": "behavior.json"
+  },
+  "variants": []
+}

@@ -1,0 +1,43 @@
+{
+  "id": "crate-toolbox",
+  "version": "0.8.0",
+  "displayName": "Crate toolbox",
+  "targetDevice": "quest3",
+  "layersComplete": ["L0", "L1", "L2", "L3", "L4", "L5"],
+  "layerTarget": "L5",
+  "interactions": [
+    "hover",
+    "grab",
+    "use-latch",
+    "use-lid",
+    "relatch-cancel",
+    "grab-tool",
+    "drive-fastener",
+    "return-tool"
+  ],
+  "deps": ["examples/interactive-prop"],
+  "perf": {
+    "frameHz": 90,
+    "frameHzFallback": 72,
+    "lod0Tris": 240,
+    "lod1Tris": 96,
+    "lod2Tris": 24,
+    "lod0Draws": 14,
+    "lod1Draws": 8,
+    "lod2Draws": 2,
+    "fastenerTris": 12,
+    "fastenerDraws": 1,
+    "drawCallsEstimate": 15,
+    "lodSwitchMeters": { "lod1": 2.4, "lod2": 4.5 },
+    "textureMax": 1024,
+    "texturePref": 512,
+    "collider": "box hulls (grab/latch/lid/tool/fastener), not hero LOD meshes",
+    "notes": "v0.8 shipping/perf UPGRADE: XR frame-loop allocation scrub (reused pick list, AABB first-hit, pose-history ring; no per-frame new THREE.* when P overlay is off). L3 packaging recipe still docs/performance/ktx2-quest3-packaging.md; runtime probes /packaged/crate-toolbox.glb and falls back to v0.6 512² canvases. No GLB in this revision. LOD draws unchanged (14/8/2 + fastener 1). Quest 3 frame time / FFR still unmeasured."
+  },
+  "source": {
+    "kind": "procedural",
+    "runtime": "examples/interactive-prop",
+    "behavior": "behavior.json"
+  },
+  "variants": []
+}
