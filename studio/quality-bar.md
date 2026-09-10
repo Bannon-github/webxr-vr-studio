@@ -39,7 +39,7 @@ Applies when the user hovers, grabs, or drives a multi-step activity. Full path:
 - [ ] Hover / pressed / disabled / grabbed affordances readable under FFR
 - [ ] Activity states named; illegal transitions nack; drop does not soft-lock
 - [ ] Controllers: `select` = use, `squeeze` = grab; core loop works without hands
-- [ ] Hand path (if advertised) is optional; pinch maps to the same intents
+- [ ] Hand path (if advertised) is optional; pinch maps to the same intents; hover-before-pinch matches controller emissive (`crate-toolbox` v0.9)
 - [ ] Texture / LOD / triangle class meets [photoreal-realtime](../docs/performance/photoreal-realtime.md) **on Quest 3** (L2/L3 inside [quest-3-target](../docs/shipping/quest-3-target.md); baked maps + LODs, not scan density)
 - [ ] Scale 1 unit = 1 m; seated reach or ray-use for every required step
 - [ ] Throw / physics never applies impulse to the camera rig

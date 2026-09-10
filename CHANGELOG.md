@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.11.0] — 2026-09-10
+
+### Changed
+
+- `crate-toolbox` **v0.9.0** Quest 3 shipping/input-parity gate: bare-hand hover before pinch in `examples/interactive-prop` (controllers still win on a ray hit). Same L0–L5. v0.8 allocation scrub kept. Headset ms / FFR still unmeasured.
+
 ## [0.10.0] — 2026-09-10
 
 ### Changed

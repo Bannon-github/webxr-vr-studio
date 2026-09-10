@@ -43,6 +43,20 @@ Studio start: **0.5–1.0** (example sets **0.75** via `renderer.xr.setFoveation
 2. In-headset: periphery should look slightly softer than the center at 0.75. If the UA ignores FFR, the getter may still report the set value — say so in notes; do not treat a set() call as proof the GPU applied it.
 3. Optional A/B: temporarily set 0.5 vs 1.0 and note comfort / aliasing. Do not change the ship default in the example unless the matrix says so.
 
+## Hands (hover before pinch)
+
+Optional `hand-tracking` on Quest 3 + Quest Browser (`crate-toolbox` v0.9). Controllers still win if a target-ray hits a hull this frame. This is **input parity**, not a frame-time measurement. Do not invent matrix numbers.
+
+**How to confirm (qualitative)**
+
+1. Enter VR. Set controllers aside (or keep rays off the crate) so the animation loop has no controller hover.
+2. Rest or point an **index fingertip** on the latch, lid, grab hull, or — when `open` — the tool / fastener. Do **not** pinch yet.
+3. **Pass:** the matching part gets the same emissive hover as a controller ray. **Fail:** nothing highlights until pinch (v0.8).
+4. Pinch still maps to the same intents as today (use-layer → use, grab-layer → grab, fastener → drive/nack). Hover must not use, grab, or drive.
+5. If a controller ray is also on a hull, that hover wins. Switching sources should not flicker the highlight every frame.
+
+Leave the results table blank. Note “hand hover before pinch: pass/fail” in the Notes cell only after a real headset run.
+
 ## ≥10 minute thermal soak
 
 Use the **interactive-prop** crate (`crate-toolbox`), not an empty scene.

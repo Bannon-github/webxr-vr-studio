@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.9.0 — 2026-09-10
+
+- **Delta (additive, shipping/input-parity UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **hand-tracking hover** in `examples/interactive-prop`: when presenting, if no controller ray hit this frame, index-finger-tip near-collider (then a tip-origin ray) drives the same `setHover` / `hoverEnter` emissive path. Pinch still use/grab/drive only. Controllers win on a ray hit. v0.8 allocation scrub kept (shared pick list, no per-frame `new` when `P` is off).
+- **Layers:** still L0–L5. Quality / shipping-gate revisit (like v0.5 / v0.8), not a new layer.
+- **Quest 3:** Hover-before-pinch for bare hands. Draws / tris / textures unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.9.0/`
+
 ## 0.8.0 — 2026-09-10
 
 - **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **frame-loop allocation scrub** in `examples/interactive-prop`: reused pick list, AABB first-hit (no `intersectObjects` garbage), hoisted grip/nearest vectors, pose-history ring, cached tool collider + controller ray, hover without `Object.entries`. Overlay off stays one boolean. L5 activity and LOD draws unchanged.
