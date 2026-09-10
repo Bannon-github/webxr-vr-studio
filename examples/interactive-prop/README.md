@@ -2,7 +2,7 @@
 
 Vite + Three.js demo of a **photoreal-looking PBR crate** with hover, grab/throw, and a multi-state open activity. Companion to the WebXR VR Studio playbook — specifically [asset-to-interaction-workflow](../../studio/asset-to-interaction-workflow.md), [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md), and [interactive-objects](../../docs/design/interactive-objects.md).
 
-Meshes here are **procedural stand-ins** (512² albedo + ORM for wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.9.0, `targetDevice: quest3`). Drop a KTX2/meshopt GLB at [`public/packaged/crate-toolbox.glb`](public/packaged/) (or `?packaged=`) and the loader prefers it; 404 keeps canvases. Recipe: [ktx2-quest3-packaging](../../docs/performance/ktx2-quest3-packaging.md). LOD0/1/2 are additive visual sets (only one draws). L5 adds tool-drive + re-latch cancel. Visual mesh ≠ collider ≠ behavior. v0.8 scrubs per-frame allocations on the XR animation path (overlay off). v0.9 adds bare-hand hover before pinch.
+Meshes here are **procedural stand-ins** (512² albedo + ORM for wood / brass / steel + IBL) for catalog object [`crate-toolbox`](../../assets/objects/crate-toolbox/) (v0.10.0, `targetDevice: quest3`). Drop a KTX2/meshopt GLB at [`public/packaged/crate-toolbox.glb`](public/packaged/) (or `?packaged=`) and the loader prefers it; 404 keeps canvases. Recipe: [ktx2-quest3-packaging](../../docs/performance/ktx2-quest3-packaging.md). LOD0/1/2 are additive visual sets (only one draws). L5 adds tool-drive + re-latch cancel. Visual mesh ≠ collider ≠ behavior. v0.8 scrubs per-frame allocations on the XR animation path (overlay off). v0.9 adds bare-hand hover before pinch. v0.10 releases a held crate or tool via `endGrab` when the grip/ray/wrist pose is null or the holding input source is removed.
 
 ## Run
 
@@ -41,13 +41,13 @@ Use the `build` and `preview` scripts in package.json.
 | Behavior metadata | [`src/behavior.json`](src/behavior.json) matches ADR 0004; cloned onto `userData.studio` |
 | Hover | Local emissive on the *part*, not an unlit hero tint |
 | Use | WebXR `select` (Three `selectstart` on the target-ray controller) |
-| Grab / throw | WebXR `squeeze` attaches to `getControllerGrip` (`gripSpace`); release samples recent poses and applies a clamped kinematic velocity — **not** to the camera |
+| Grab / throw | WebXR `squeeze` attaches to `getControllerGrip` (`gripSpace`); release samples recent poses and applies a clamped kinematic velocity — **not** to the camera. v0.10: null `getPose` / removed source uses the same `endGrab` |
 | Multi-state activity | `closed` --latch--> `unlatched` --lid--> `open`; **unlatched --latch--> closed** (cancel). Illegal use nacks |
 | L5 tool use | Grab tool when `open`; use `collider_fastener` while tool is held/out (4 turns). Snap-return on release near slot |
 | Contents gating | Tool collider is unpickable until `open` |
-| Hands (optional) | `requestSession` `optionalFeatures: ["hand-tracking"]`; pinch measured on `XRHand` joints `thumb-tip` / `index-finger-tip`. v0.9: index-tip near-collider (then hand ray) hovers like a controller when no controller ray hit. Pinch still use/grab/drive. Core loop does not require hands. |
+| Hands (optional) | `requestSession` `optionalFeatures: ["hand-tracking"]`; pinch measured on `XRHand` joints `thumb-tip` / `index-finger-tip`. v0.9: index-tip near-collider (then hand ray) hovers like a controller when no controller ray hit. Pinch still use/grab/drive. v0.10: missing wrist / invisible hand mid-hold calls `endGrab`. Core loop does not require hands. |
 | Feedback | Short Web Audio ticks + `gamepad.hapticActuators.pulse` when the source exposes it |
-| Quest 3 session | On `sessionstart`: `updateTargetFrameRate(90)` if listed, else 72; `renderer.xr.setFoveation(0.75)`. No 120/207/240 requirement. **`P`** overlay shows captured rates / FFR / rAF Δ (off = no sample). v0.8: no per-frame `new` / pick-array alloc on the animation path when overlay is off. |
+| Quest 3 session | On `sessionstart`: `updateTargetFrameRate(90)` if listed, else 72; `renderer.xr.setFoveation(0.75)`. No 120/207/240 requirement. **`P`** overlay shows captured rates / FFR / rAF Δ (off = no sample). v0.8: no per-frame `new` / pick-array alloc on the animation path when overlay is off. v0.10: `inputsourceschange` + per-frame null-pose check before hover/hands. |
 | L3 LODs | LOD0 240 tris / 14 draws; LOD1 96 / 8; LOD2 24 / 2 (Three.js index counts). Auto switch 2.4 m / 4.5 m. Colliders are not LOD meshes. |
 
 ## Activity table

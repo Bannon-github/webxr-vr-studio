@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.10.0 — 2026-09-10
+
+- **Delta (additive, shipping/a11y UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **tracking-loss / null-pose safe release** in `examples/interactive-prop`: if a controller or hand loses tracking (null `getPose` / `getJointPose` on grip, targetRay, or wrist) while holding the crate or screwdriver, or the holding `XRInputSource` disappears mid-grab (`inputsourceschange` removed / Three `disconnected`), the prop is released via the existing `endGrab` path (same return-tool / throw / table logic as squeezeend). Does not leave a prop frozen on a dead grip or wrist. v0.9 hover-before-pinch and v0.8 allocation scrub kept.
+- **Layers:** still L0–L5. Quality / shipping-gate revisit (like v0.5 / v0.8 / v0.9), not a new layer.
+- **Quest 3:** Props detach when the holding pose goes null. Draws / tris / textures unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.10.0/`
+
 ## 0.9.0 — 2026-09-10
 
 - **Delta (additive, shipping/input-parity UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **hand-tracking hover** in `examples/interactive-prop`: when presenting, if no controller ray hit this frame, index-finger-tip near-collider (then a tip-origin ray) drives the same `setHover` / `hoverEnter` emissive path. Pinch still use/grab/drive only. Controllers win on a ray hit. v0.8 allocation scrub kept (shared pick list, no per-frame `new` when `P` is off).

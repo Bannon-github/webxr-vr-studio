@@ -8,6 +8,7 @@ import { applyActivityVisual, tryDriveFastener, tryReturnTool, tryUse, toolIsHel
  * Real APIs: XRSession select* / squeeze* (via Three controller objects),
  * XRInputSource.targetRaySpace / gripSpace / gamepad haptic actuators,
  * XRHand joint names from the Hand Input module (thumb-tip, index-finger-tip).
+ * Tracking-loss / null-pose release lives in hold-tracking.js (same endGrab).
  *
  * Quest 3 frame-loop allocation scrub: pick list, hit result, and pose ring
  * are reused. Do not add `new THREE.*` or fresh arrays on the rAF path.
