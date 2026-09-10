@@ -6,6 +6,7 @@ import {
   L2_TEXTURE_SIZE,
   brassHeight,
   heightToNormalRgb,
+  mappedStandard,
   steelHeight,
   woodHeight,
 } from "./pbr-maps.js";
@@ -40,6 +41,18 @@ test("higher height toward canvas y-1 (image top) raises G (> 128)", () => {
   assert.equal(r, 128);
   assert.ok(g > 128);
   assert.ok(b > 128);
+});
+
+test("mappedStandard binds normalMap unless opted out", () => {
+  const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
+  const withN = mappedStandard(0xffffff, maps);
+  const without = mappedStandard(0xffffff, maps, { normalMap: false });
+  assert.equal(withN.normalMap, maps.normal);
+  assert.equal(without.normalMap, null);
+  assert.equal(withN.map, maps.albedo);
+  assert.equal(without.map, maps.albedo);
+  assert.equal(withN.roughnessMap, maps.orm);
+  assert.equal(without.roughnessMap, maps.orm);
 });
 
 test("wood / brass / steel height fields are not flat", () => {
