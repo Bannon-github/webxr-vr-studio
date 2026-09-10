@@ -73,6 +73,89 @@ function texFromCanvas(c, srgb, repeatX, repeatY) {
   return t;
 }
 
+/**
+ * Height fields stay aligned with albedo grain / wear so lighting matches color.
+ * Values are roughly 0..1; only relative slopes matter for the normal bake.
+ */
+export function woodHeight(u, v) {
+  const grain = u * 14 + fbm(u * 3.2, v * 22, 4) * 3.2 + fbm(u * 18, v * 40, 2) * 0.45;
+  const stripe = 0.5 + 0.5 * Math.sin(grain * Math.PI);
+  const pore = fbm(u * 48, v * 64, 2);
+  const knot = Math.max(0, 0.55 - Math.hypot((u - 0.62) * 3.2, (v - 0.28) * 1.4) - fbm(u * 8, v * 8, 2) * 0.15);
+  return stripe * 0.55 + pore * 0.18 + knot * 0.35;
+}
+
+export function brassHeight(u, v) {
+  const n = fbm(u * 6, v * 6, 4);
+  const scratch = Math.abs(Math.sin((u * 40 + v * 3 + n) * Math.PI));
+  const tarnish = Math.max(0, fbm(u * 4.5, v * 5.5, 3) - 0.42);
+  return n * 0.35 - tarnish * 0.25 + scratch * 0.12;
+}
+
+export function steelHeight(u, v) {
+  const brush = 0.5 + 0.5 * Math.sin((v * 90 + fbm(u * 2, v * 40, 3) * 2.5) * Math.PI);
+  const n = fbm(u * 10, v * 10, 3);
+  return brush * 0.55 + n * 0.2;
+}
+
+/**
+ * OpenGL tangent-space normal (Three.js +Y) from four height samples.
+ * Neighbors are along canvas +X / +Y (y increases downward, same as +V).
+ * `hYMinus` is y-1 (toward the top of the image); `hYPlus` is y+1.
+ * Higher height toward y-1 encodes G > 128. RGB 0–255.
+ */
+export function heightToNormalRgb(hLeft, hRight, hYMinus, hYPlus, strength = 2.5) {
+  const dx = (hRight - hLeft) * strength;
+  const dy = (hYPlus - hYMinus) * strength;
+  let nx = -dx;
+  let ny = -dy;
+  let nz = 1;
+  const inv = 1 / Math.hypot(nx, ny, nz);
+  nx *= inv;
+  ny *= inv;
+  nz *= inv;
+  return [Math.round((nx * 0.5 + 0.5) * 255), Math.round((ny * 0.5 + 0.5) * 255), Math.round((nz * 0.5 + 0.5) * 255)];
+}
+
+function heightField(size, heightFn) {
+  const h = new Float32Array(size * size);
+  const inv = 1 / size;
+  for (let y = 0; y < size; y++) {
+    const v = (y + 0.5) * inv;
+    for (let x = 0; x < size; x++) {
+      h[y * size + x] = heightFn((x + 0.5) * inv, v);
+    }
+  }
+  return h;
+}
+
+function normalFromHeightField(size, heights, strength) {
+  return fillRgba(size, (_u, _v, d, i) => {
+    const p = i >> 2;
+    const x = p % size;
+    const y = (p - x) / size;
+    const xL = (x + size - 1) % size;
+    const xR = (x + 1) % size;
+    const yMinus = (y + size - 1) % size;
+    const yPlus = (y + 1) % size;
+    const [r, g, b] = heightToNormalRgb(
+      heights[y * size + xL],
+      heights[y * size + xR],
+      heights[yMinus * size + x],
+      heights[yPlus * size + x],
+      strength
+    );
+    d[i] = r;
+    d[i + 1] = g;
+    d[i + 2] = b;
+    d[i + 3] = 255;
+  });
+}
+
+function normalCanvas(size, heightFn, strength) {
+  return normalFromHeightField(size, heightField(size, heightFn), strength);
+}
+
 function woodAlbedo(size) {
   return fillRgba(size, (u, v, d, i) => {
     const grain = u * 14 + fbm(u * 3.2, v * 22, 4) * 3.2 + fbm(u * 18, v * 40, 2) * 0.45;
@@ -155,27 +238,39 @@ function steelOrm(size) {
 
 let cached = null;
 
+/** Wood grain, brass wear, steel brush — OpenGL +Y, modest slope. */
+export const L2_NORMAL_STRENGTH = { wood: 4.2, brass: 2.8, steel: 3.4 };
+export const L2_NORMAL_SCALE = { wood: [0.62, 0.62], brass: [0.3, 0.3], steel: [0.38, 0.38] };
+
+function materialMaps(albedo, orm, normal, normalScale) {
+  return { albedo, orm, normal, normalScale };
+}
+
 /** Build once; reuse across toolbox instances. */
 export function getCrateL2Maps() {
   if (cached) return cached;
   const s = L2_TEXTURE_SIZE;
   const woodAlb = texFromCanvas(woodAlbedo(s), true, 2, 2);
   const woodOrmTex = texFromCanvas(woodOrm(s), false, 2, 2);
+  const woodNrm = texFromCanvas(normalCanvas(s, woodHeight, L2_NORMAL_STRENGTH.wood), false, 2, 2);
   const brassAlb = texFromCanvas(brassAlbedo(s), true, 1, 1);
   const brassOrmTex = texFromCanvas(brassOrm(s), false, 1, 1);
+  const brassNrm = texFromCanvas(normalCanvas(s, brassHeight, L2_NORMAL_STRENGTH.brass), false, 1, 1);
   const steelAlb = texFromCanvas(steelAlbedo(s), true, 2, 4);
   const steelOrmTex = texFromCanvas(steelOrm(s), false, 2, 4);
+  const steelNrm = texFromCanvas(normalCanvas(s, steelHeight, L2_NORMAL_STRENGTH.steel), false, 2, 4);
   cached = {
     size: s,
-    uniqueTextures: 6,
-    wood: { albedo: woodAlb, orm: woodOrmTex },
-    brass: { albedo: brassAlb, orm: brassOrmTex },
-    steel: { albedo: steelAlb, orm: steelOrmTex },
+    uniqueTextures: 9,
+    wood: materialMaps(woodAlb, woodOrmTex, woodNrm, L2_NORMAL_SCALE.wood),
+    brass: materialMaps(brassAlb, brassOrmTex, brassNrm, L2_NORMAL_SCALE.brass),
+    steel: materialMaps(steelAlb, steelOrmTex, steelNrm, L2_NORMAL_SCALE.steel),
   };
   return cached;
 }
 
 export function mappedStandard(colorHex, maps) {
+  const [nx, ny] = maps.normalScale ?? [0.5, 0.5];
   return new THREE.MeshStandardMaterial({
     color: colorHex,
     map: maps.albedo,
@@ -183,5 +278,7 @@ export function mappedStandard(colorHex, maps) {
     metalness: 1,
     roughnessMap: maps.orm,
     metalnessMap: maps.orm,
+    normalMap: maps.normal,
+    normalScale: new THREE.Vector2(nx, ny),
   });
 }

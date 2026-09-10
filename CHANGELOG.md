@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.14.0] — 2026-09-10
+
+### Changed
+
+- `crate-toolbox` **v0.12.0** L2 quality UPGRADE: shared procedural 512² normal maps (wood / brass / steel) on `MeshStandardMaterial.normalMap`. Same draws / tris as v0.11. 9 unique canvases (albedo + ORM + normal). Headset ms / FFR still unmeasured.
+
 ## [0.13.0] — 2026-09-10
 
 ### Changed
