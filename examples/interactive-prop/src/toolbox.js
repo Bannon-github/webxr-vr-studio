@@ -60,6 +60,7 @@ function makeCollider(name, w, h, d, x, y, z) {
   mesh.position.set(x, y, z);
   mesh.visible = false;
   mesh.userData.collider = true;
+  mesh.userData.size = { x: w, y: h, z: d };
   return mesh;
 }
 
@@ -188,6 +189,7 @@ export function createToolbox() {
   root.userData.parts = { body, lidPivot, latchPivot, tool, fastener };
   root.userData.highlightables = highlightables;
   root.userData.colliders = [colliderGrab, colliderLatch, colliderLid, colliderTool, colliderFastener];
+  root.userData.toolCollider = colliderTool;
   root.userData.fastener = { mesh: fastener, turns: 0, needed: 4, seated: false };
   root.userData.l2 = {
     textureSize: l2.size,
@@ -369,7 +371,7 @@ export function applyActivityVisual(entity, alpha = 0.2) {
   lidPivot.rotation.x = THREE.MathUtils.lerp(lidPivot.rotation.x, lidTarget, alpha);
   latchPivot.rotation.x = THREE.MathUtils.lerp(latchPivot.rotation.x, latchTarget, alpha);
 
-  const toolCollider = entity.userData.colliders?.find((c) => c.name === "collider_tool");
+  const toolCollider = entity.userData.toolCollider;
   if (toolCollider) {
     // Hidden contents must not receive rays (interactive-objects.md).
     // Once the tool is taken out, it stays pickable even if the crate is closed.

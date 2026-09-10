@@ -116,25 +116,32 @@ const movable = [toolbox, toolbox.userData.parts.tool];
 
 let colliderDebug = false;
 let lastState = activityState(toolbox);
-let lastFastenerKey = "";
+let lastPlaqueState = "";
+let lastPlaqueTurns = -1;
+let lastPlaqueSeated = null;
 function refreshPlaque() {
   const f = toolbox.userData.fastener;
-  const key = `${activityState(toolbox)}:${f?.turns}:${f?.seated}`;
-  if (key === lastFastenerKey) return;
-  lastFastenerKey = key;
-  lastState = activityState(toolbox);
+  const state = activityState(toolbox);
+  const turns = f?.turns ?? 0;
+  const seated = Boolean(f?.seated);
+  if (state === lastPlaqueState && turns === lastPlaqueTurns && seated === lastPlaqueSeated) return;
+  lastPlaqueState = state;
+  lastPlaqueTurns = turns;
+  lastPlaqueSeated = seated;
+  lastState = state;
   updateStatePlaque(plaque, lastState, f);
 }
 refreshPlaque();
 const lodStatus = document.getElementById("lod-status");
-let lastLodKey = "";
+let lastLodMode = "";
+let lastLodCurrent = -1;
 
 function refreshLodStatus() {
   const lod = toolbox.userData.lod;
   if (!lod || !lodStatus) return;
-  const key = `${lod.mode}:${lod.current}`;
-  if (key === lastLodKey) return;
-  lastLodKey = key;
+  if (lod.mode === lastLodMode && lod.current === lastLodCurrent) return;
+  lastLodMode = lod.mode;
+  lastLodCurrent = lod.current;
   const stats = lod.stats[lod.current];
   lodStatus.textContent = `${lod.mode} / ${lod.current} · ${stats.tris} tris · ${stats.draws} draws`;
 }
@@ -173,12 +180,17 @@ function setupController(index) {
   controller.addEventListener("squeezeend", () => onGrabEnd(controller));
   controller.addEventListener("connected", (event) => {
     controller.userData.inputSource = event.data;
-    if (!controller.getObjectByName("ray")) controller.add(buildRayLine());
+    let ray = controller.userData.ray;
+    if (!ray) {
+      ray = buildRayLine();
+      controller.userData.ray = ray;
+    }
+    if (!ray.parent) controller.add(ray);
   });
   controller.addEventListener("disconnected", () => {
     controller.userData.inputSource = null;
-    const ray = controller.getObjectByName("ray");
-    if (ray) controller.remove(ray);
+    const ray = controller.userData.ray;
+    if (ray?.parent) controller.remove(ray);
   });
   scene.add(controller);
 
@@ -197,8 +209,14 @@ function setupController(index) {
 
 const pairs = [setupController(0), setupController(1)];
 
+const _pickList = [];
+const _gripWorld = new THREE.Vector3();
+const _nearOrigin = new THREE.Vector3();
+const _nearPos = new THREE.Vector3();
+const _nearHit = { object: null, point: _nearOrigin, distance: 0 };
+
 function pickables() {
-  return collectPickables(entities);
+  return collectPickables(entities, _pickList);
 }
 
 function hoverFromRay(raycaster) {
@@ -239,7 +257,7 @@ function grabTargetFromHit(hit, grip) {
     return entity.userData.parts.tool;
   }
   if (hit.object.name === "collider_grab") {
-    const near = grip?.getWorldPosition(new THREE.Vector3()) ?? null;
+    const near = grip?.getWorldPosition(_gripWorld) ?? null;
     const cfg = entity.userData.studio?.components?.grabbable;
     if (near && cfg?.nearMeters) {
       const dist = near.distanceTo(hit.point);
@@ -275,7 +293,9 @@ function onGrabEnd(controller) {
 
 function resetAll() {
   resetToolbox(toolbox, table.position.y + 0.04);
-  lastFastenerKey = "";
+  lastPlaqueState = "";
+  lastPlaqueTurns = -1;
+  lastPlaqueSeated = null;
   refreshPlaque();
   setAction("reset");
 }
@@ -462,7 +482,8 @@ renderer.xr.addEventListener("sessionend", () => {
 
 const clock = new THREE.Clock();
 
-function updateHands() {
+function updateHands(list) {
+  const pickList = list || pickables();
   for (const { hand } of pairs) {
     if (!hand.visible && hand.children.length === 0) continue;
     const pinching = isPinching(hand);
@@ -471,7 +492,7 @@ function updateHands() {
       const tip = hand.joints?.["index-finger-tip"];
       if (!tip) continue;
       const ray = rayFromController(hand);
-      const hit = firstHit(ray, pickables()) || nearestColliderTo(tip);
+      const hit = firstHit(ray, pickList) || nearestColliderTo(tip, pickList);
       if (!hit) continue;
       if (hit.object.name === "collider_fastener") {
         const tool = toolbox.userData.parts.tool;
@@ -498,15 +519,18 @@ function updateHands() {
   }
 }
 
-function nearestColliderTo(obj3d) {
-  const origin = obj3d.getWorldPosition(new THREE.Vector3());
+function nearestColliderTo(obj3d, list) {
+  obj3d.getWorldPosition(_nearOrigin);
   let best = null;
   let bestD = 0.06;
-  for (const c of pickables()) {
-    const d = c.getWorldPosition(new THREE.Vector3()).distanceTo(origin);
+  const colliders = list || pickables();
+  for (const c of colliders) {
+    const d = c.getWorldPosition(_nearPos).distanceTo(_nearOrigin);
     if (d < bestD) {
       bestD = d;
-      best = { object: c, point: origin, distance: d };
+      _nearHit.object = c;
+      _nearHit.distance = d;
+      best = _nearHit;
     }
   }
   return best;
@@ -522,11 +546,13 @@ renderer.setAnimationLoop(() => {
   refreshLodStatus();
   refreshPlaque();
 
+  // Quest 3 gate: no per-frame `new` / array alloc on this path when overlay is off.
+  const list = pickables();
   if (renderer.xr.isPresenting) {
     let hovered = false;
     for (const { controller } of pairs) {
-      const hit = firstHit(rayFromController(controller), pickables());
-      const ray = controller.getObjectByName("ray");
+      const hit = firstHit(rayFromController(controller), list);
+      const ray = controller.userData.ray;
       if (ray) ray.scale.z = hit ? hit.distance : 1.6;
       if (hit && !hovered) {
         clearAllHovers(entities);
@@ -538,7 +564,7 @@ renderer.setAnimationLoop(() => {
       }
     }
     if (!hovered) clearAllHovers(entities);
-    updateHands();
+    updateHands(list);
   }
 
   for (const obj of movable) {
