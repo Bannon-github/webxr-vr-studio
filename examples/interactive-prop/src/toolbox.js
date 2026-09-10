@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import behaviorTemplate from "./behavior.json";
+import behaviorTemplate from "./behavior.json" with { type: "json" };
 import { getCrateL2Maps, mappedStandard } from "./pbr-maps.js";
 
 /**
