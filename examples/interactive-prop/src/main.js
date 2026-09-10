@@ -221,12 +221,38 @@ function pickables() {
 
 function hoverFromRay(raycaster) {
   const hit = firstHit(raycaster, pickables());
-  clearAllHovers(entities);
-  if (!hit) return null;
-  const entity = hit.object.userData.entity;
-  const changed = setHover(entity, hit.object.name);
-  if (changed) playFeedback(entity, "hoverEnter", null);
+  if (!hit) {
+    clearAllHovers(entities);
+    return null;
+  }
+  applyHoverHit(hit, null);
   return hit;
+}
+
+/** Same emissive path as controllers. Does not use/grab. Avoids hoverEnter spam. */
+function applyHoverHit(hit, inputSource) {
+  const entity = hit.object.userData.entity;
+  const name = hit.object.name;
+  for (let i = 0; i < entities.length; i++) {
+    if (entities[i] !== entity) setHover(entities[i], null);
+  }
+  if (setHover(entity, name)) playFeedback(entity, "hoverEnter", inputSource);
+  return true;
+}
+
+/**
+ * Bare-hand hover when no controller ray hit this frame.
+ * Prefer index-tip proximity, then a tip-origin ray. Reuses the frame pick list.
+ */
+function hoverFromHands(list) {
+  for (const { hand } of pairs) {
+    if (!hand.visible && hand.children.length === 0) continue;
+    const tip = hand.joints?.["index-finger-tip"];
+    if (!tip) continue;
+    const hit = nearestColliderTo(tip, list) || firstHit(rayFromController(hand), list);
+    if (hit) return applyHoverHit(hit, null);
+  }
+  return false;
 }
 
 function onUse(controller) {
@@ -555,14 +581,12 @@ renderer.setAnimationLoop(() => {
       const ray = controller.userData.ray;
       if (ray) ray.scale.z = hit ? hit.distance : 1.6;
       if (hit && !hovered) {
-        clearAllHovers(entities);
-        const entity = hit.object.userData.entity;
-        if (setHover(entity, hit.object.name)) {
-          playFeedback(entity, "hoverEnter", controller.userData.inputSource);
-        }
+        applyHoverHit(hit, controller.userData.inputSource);
         hovered = true;
       }
     }
+    // Controllers win on a ray hit; otherwise index-tip / hand ray (Quest 3 bare hands).
+    if (!hovered) hovered = hoverFromHands(list);
     if (!hovered) clearAllHovers(entities);
     updateHands(list);
   }
