@@ -9,7 +9,7 @@ An immersive feature or release is **done** only when all applicable boxes pass.
 - [ ] Secure context verified on headset URL
 - [ ] isSessionSupported gates the Enter VR CTA
 - [ ] requestSession only on user gesture
-- [ ] Tracking loss handled (null poses)
+- [ ] Tracking loss handled (null poses) (`crate-toolbox` v0.10: held crate/tool `endGrab` on null grip/ray/joint pose or removed input source)
 - [ ] Session end restores 2D UI; re-entry works
 - [ ] Controllers: rays, select, squeeze as designed
 - [ ] Reference space fallback chain works
