@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.12.0 — 2026-09-10
+
+- **Delta (additive, L2 quality UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Shared procedural **512² normal maps** (wood / brass / steel) wired through `MeshStandardMaterial.normalMap` + modest `normalScale`. Height fields follow the v0.6 albedo grain / wear so lighting matches color. Still 5 shared materials; unique canvases 6 → 9 (albedo + ORM + normal). LOD0–2 geometry, hull names, and L4/L5 activity unchanged. Draw estimates unchanged (14 / 8 / 2 + fastener 1). v0.11 visibility-loss, v0.10 tracking-loss, v0.9 hand hover, and v0.8 allocation scrub kept.
+- **Layers:** still L0–L5. This revisits already-claimed L2 (same pattern as v0.6 maps instead of plastic colors).
+- **Quest 3:** `texturePref` 512, `textureMax` 1024. No 4K. Draws / tris must not worsen. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.12.0/`
+
 ## 0.11.0 — 2026-09-10
 
 - **Delta (additive, shipping/a11y UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **visibility-loss safe release** in `examples/interactive-prop`: if the XR session or page loses visibility (`XRSession.visibilityState` `hidden` / `visible-blurred` via `visibilitychange`, or `document.hidden` while presenting) while holding the crate or screwdriver, the prop is released via the existing `endGrab` path (same return-tool / throw / table logic as squeezeend / tracking loss). Returning to `visible` does **not** auto-regrab. v0.10 tracking-loss, v0.9 hover-before-pinch, and v0.8 allocation scrub kept.

@@ -74,7 +74,7 @@ export function createToolbox() {
   root.userData.kind = "entity";
 
   const l2 = getCrateL2Maps();
-  // Same five materials as v0.5 (shared across parts). Maps are 512² albedo+ORM.
+  // Same five materials as v0.5 (shared across parts). Maps are 512² albedo+ORM+normal.
   const wood = mappedStandard(0xffffff, l2.wood);
   const woodDark = mappedStandard(0x7a5840, l2.wood);
   const brass = mappedStandard(0xffffff, l2.brass);
@@ -194,7 +194,7 @@ export function createToolbox() {
   root.userData.l2 = {
     textureSize: l2.size,
     uniqueTextures: l2.uniqueTextures,
-    maps: "albedo+ORM",
+    maps: "albedo+ORM+normal",
     note: "procedural canvas stand-in",
   };
   root.userData.packaging = {
