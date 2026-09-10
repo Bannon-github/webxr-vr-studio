@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.16.0] — 2026-09-10
+
+### Changed
+
+- `crate-toolbox` **v0.14.0** L3 packaging/perf UPGRADE: LOD1 visual materials keep `normalMap` at half LOD0 `normalScale` (`L3_LOD1_NORMAL_SCALE_MUL` = 0.5). LOD0 stays full v0.12 scale; LOD2 still omits `normalMap`. Same draws / tris / 9 canvases as v0.13. Headset ms / FFR still unmeasured.
+
 ## [0.15.0] — 2026-09-10
 
 ### Changed
