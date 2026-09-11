@@ -57,6 +57,14 @@ import {
   sampleQuest3Diagnostics,
   toggleQuest3Diagnostics,
 } from "./quest3-diagnostics.js";
+import {
+  applyPresentPixelRatioClamp,
+  resolveDesktopPixelRatio,
+} from "./present-pixel-ratio.js";
+import {
+  applyPresentAntialias,
+  resolveQuest3PresentAntialias,
+} from "./present-antialias.js";
 import behaviorTemplate from "./behavior.json";
 import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 
@@ -76,8 +84,13 @@ const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerH
 camera.position.set(0, 1.5, 0.85);
 camera.lookAt(0, 1.0, -0.55);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Present-path constructor: Three r170 copies this into XRWebGLLayer.
+// Cannot flip on a live context — see present-antialias.js.
+const renderer = new THREE.WebGLRenderer({
+  antialias: resolveQuest3PresentAntialias(),
+  alpha: false,
+});
+renderer.setPixelRatio(resolveDesktopPixelRatio(window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -583,6 +596,9 @@ window.addEventListener("resize", () => {
  * Quest 3 Browser defaults: 90 Hz if the UA lists it (else 72), FFR medium-high.
  * Real APIs only — XRSession.supportedFrameRates / updateTargetFrameRate (MDN),
  * XRWebGLLayer.fixedFoveation via Three WebXRManager.setFoveation.
+ * Pixel-ratio clamp (1 while presenting) then present-path antialias/MSAA off
+ * are applied after this on sessionstart. Antialias is constructor-time
+ * (Three copies getContextAttributes into XRWebGLLayer); helpers verify only.
  * Do not require 120 / 207 / 240 Hz.
  */
 function applyQuest3SessionDefaults(session) {
@@ -611,11 +627,27 @@ function applyQuest3SessionDefaults(session) {
 }
 
 let xrSession = null;
+let savedDesktopPixelRatio = null;
+let savedDesktopAntialias = null;
 renderer.xr.addEventListener("sessionstart", () => {
   resumeAudio();
   const session = renderer.xr.getSession();
   xrSession = session;
   applyQuest3SessionDefaults(session);
+  // Present-path clamp only (not per-frame). Save desktop/2D ratio first.
+  const clamp = applyPresentPixelRatioClamp(renderer, { presenting: true });
+  savedDesktopPixelRatio = clamp.savedRatio;
+  // After pixel-ratio: verify MSAA-off policy (context is immutable).
+  const aa = applyPresentAntialias(renderer, { presenting: true });
+  savedDesktopAntialias = aa.savedAntialias;
+  console.info(
+    "[interactive-prop] present antialias",
+    aa.antialias,
+    "applied",
+    aa.applied,
+    "contextImmutable",
+    aa.contextImmutable
+  );
   session?.addEventListener("inputsourceschange", onInputSourcesChange);
   session?.addEventListener("visibilitychange", onSessionVisibilityChange);
 });
@@ -626,6 +658,17 @@ renderer.xr.addEventListener("sessionend", () => {
     xrSession = null;
   }
   releaseAllHolds();
+  applyPresentPixelRatioClamp(renderer, {
+    presenting: false,
+    savedRatio: savedDesktopPixelRatio,
+    windowSize: { width: window.innerWidth, height: window.innerHeight },
+  });
+  savedDesktopPixelRatio = null;
+  applyPresentAntialias(renderer, {
+    presenting: false,
+    savedAntialias: savedDesktopAntialias,
+  });
+  savedDesktopAntialias = null;
   recordQuest3SessionEnd();
 });
 document.addEventListener("visibilitychange", onDocumentVisibilityChange);

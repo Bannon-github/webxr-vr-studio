@@ -1,0 +1,44 @@
+{
+  "id": "crate-toolbox",
+  "version": "0.15.0",
+  "displayName": "Crate toolbox",
+  "targetDevice": "quest3",
+  "layersComplete": ["L0", "L1", "L2", "L3", "L4", "L5"],
+  "layerTarget": "L5",
+  "interactions": [
+    "hover",
+    "hover-hand",
+    "grab",
+    "use-latch",
+    "use-lid",
+    "relatch-cancel",
+    "grab-tool",
+    "drive-fastener",
+    "return-tool"
+  ],
+  "deps": ["examples/interactive-prop"],
+  "perf": {
+    "frameHz": 90,
+    "frameHzFallback": 72,
+    "lod0Tris": 240,
+    "lod1Tris": 96,
+    "lod2Tris": 24,
+    "lod0Draws": 14,
+    "lod1Draws": 8,
+    "lod2Draws": 2,
+    "fastenerTris": 12,
+    "fastenerDraws": 1,
+    "drawCallsEstimate": 15,
+    "lodSwitchMeters": { "lod1": 2.4, "lod2": 4.5 },
+    "textureMax": 1024,
+    "texturePref": 512,
+    "collider": "box hulls (grab/latch/lid/tool/fastener), not hero LOD meshes",
+    "notes": "v0.15 shipping/perf UPGRADE: examples/interactive-prop clamps WebGL pixel ratio to QUEST3_XR_PIXEL_RATIO (1) on sessionstart after 90/72 + FFR 0.75; sessionend restores the saved desktop/2D ratio (min(dpr, 2)) and renderer.setSize(window). Not per-frame. Draws/tris/texture caps unchanged vs v0.14 (LOD1 half normalScale; LOD2 no normalMap). v0.14 LOD1 normalScale, v0.13 LOD2 no-normals, v0.12 normals, v0.11 visibility-loss release, v0.10 tracking-loss / null-pose release, v0.9 hand hover-before-pinch, and v0.8 allocation scrub kept (no per-frame new THREE.* when P overlay is off). L3 packaging recipe still docs/performance/ktx2-quest3-packaging.md; runtime probes /packaged/crate-toolbox.glb and falls back to procedural 512² canvases. No GLB in this revision. LOD draws unchanged (14/8/2 + fastener 1). Quest 3 frame time / FFR still unmeasured."
+  },
+  "source": {
+    "kind": "procedural",
+    "runtime": "examples/interactive-prop",
+    "behavior": "behavior.json"
+  },
+  "variants": []
+}
