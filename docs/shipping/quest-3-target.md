@@ -42,6 +42,7 @@ These are **studio defaults** for WebXR on Quest 3 — conservative versus Meta�
 | FFR | **Medium–high** when available | `XRWebGLLayer.fixedFoveation` in (0, 1]; studio start **0.5–1.0** ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/XRWebGLLayer/fixedFoveation), [Meta FFR](https://developers.meta.com/horizon/documentation/web/webxr-ffr/)). Three.js: `renderer.xr.setFoveation`. |
 | CPU / GC | **No allocations in the XR frame loop** | **Frame-loop allocation scrub:** hoist scratch vectors; no `new THREE.*`, per-frame pick arrays, or `intersectObjects` garbage on the present path. Overlay off must stay one boolean. See `crate-toolbox` v0.8. |
 | Present pixel ratio | **1** while XR presenting | Desktop lookdev may use `min(devicePixelRatio, 2)`. Clamp on `sessionstart`; restore + `setSize` on `sessionend`. Not per-frame. See `crate-toolbox` v0.15. |
+| Present antialias / MSAA | **Off** while XR presenting | Meta treats MSAA as expensive fill. Three r170 copies constructor `antialias` into `XRWebGLLayer` (immutable context attribute). Start the present-path renderer with `antialias: false`. See `crate-toolbox` v0.16. |
 | Collision | **Simple hulls, not the hero mesh** | [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md) |
 
 **TODO:** confirm draw-call and triangle ceilings on-device for *this* product’s hero scene (Browser version + scene). The 100 / 750k figures are the gate we author to until a measured override is written on the release matrix.
@@ -60,6 +61,8 @@ if (hz && session.updateTargetFrameRate) {
 }
 if (renderer.xr.setFoveation) renderer.xr.setFoveation(0.75);
 renderer.setPixelRatio(1); // v0.15 present-path clamp; restore on sessionend
+// v0.16: construct WebGLRenderer({ antialias: false }) so XRWebGLLayer inherits MSAA off.
+// Cannot flip antialias on a live context (no setAntialias).
 ```
 
 `supportedFrameRates` / `updateTargetFrameRate` may be missing on desktop emulators — skip, do not shim fake rates.

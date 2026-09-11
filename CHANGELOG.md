@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.18.0] — 2026-09-11
+
+### Changed
+
+- `crate-toolbox` **v0.16.0** Quest 3 shipping/perf gate: present-path WebGL antialias / MSAA off in `examples/interactive-prop` (constructor `antialias: false` so Three r170 `XRWebGLLayer` inherits MSAA off; session helpers verify after 90/72 + FFR + v0.15 pixel-ratio clamp). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.17.0] — 2026-09-11
 
 ### Changed
