@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.18.0 — 2026-09-11
+
+- **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **present-path IBL / scene.environment off** in `examples/interactive-prop`, complementary to v0.15’s pixel-ratio clamp, v0.16’s antialias/MSAA off, and v0.17’s NoToneMapping. Desktop lookdev still assigns a PMREM from `RoomEnvironment` to `scene.environment` (`environmentIntensity` default 1). Three r170 `environmentIntensity` is a post-sample multiply after `textureCubeUV` — intensity 0 does **not** drop `USE_ENVMAP`. On `sessionstart` (after 90/72 + FFR 0.75 + v0.15 `setPixelRatio(1)` + v0.16 MSAA-off verify + v0.17 NoToneMapping) save the texture reference + intensity, null `scene.environment`, and write intensity 0 when the property exists. On `sessionend` restore the saved PMREM (do not dispose) + lookdev intensity. Session events only — not per-frame (v0.8 allocation scrub kept). L4/L5 activity and LOD draws/tris unchanged.
+- **Layers:** still L0–L5. Quality / shipping-gate revisit (like v0.8 / v0.10 / v0.11 / v0.15 / v0.16 / v0.17), not a new layer.
+- **Quest 3:** Cheaper present-path IBL / fragment cost while presenting. Draws / tris / texture caps unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.18.0/`
+
 ## 0.17.0 — 2026-09-11
 
 - **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **present-path NoToneMapping** in `examples/interactive-prop`, complementary to v0.15’s pixel-ratio clamp and v0.16’s antialias/MSAA off. Desktop lookdev still uses `ACESFilmicToneMapping` + `toneMappingExposure` 1.05 at startup. On `sessionstart` (after 90/72 + FFR 0.75 + v0.15 `setPixelRatio(1)` + v0.16 MSAA-off verify) save the current operator + exposure and set `THREE.NoToneMapping` with identity exposure (1). Three r170 applies `renderer.toneMapping` on the output fragment; ACESFilmic is extra ALU on Quest 3 TBDR. On `sessionend` restore saved ACESFilmic + the prior exposure. Session events only — not per-frame (v0.8 allocation scrub kept). L4/L5 activity and LOD draws/tris unchanged.

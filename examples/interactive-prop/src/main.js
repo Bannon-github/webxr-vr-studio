@@ -66,6 +66,7 @@ import {
   resolveQuest3PresentAntialias,
 } from "./present-antialias.js";
 import { applyPresentToneMapping } from "./present-tone-mapping.js";
+import { applyPresentEnvironment } from "./present-environment.js";
 import behaviorTemplate from "./behavior.json";
 import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 
@@ -598,11 +599,14 @@ window.addEventListener("resize", () => {
  * Real APIs only — XRSession.supportedFrameRates / updateTargetFrameRate (MDN),
  * XRWebGLLayer.fixedFoveation via Three WebXRManager.setFoveation.
  * Pixel-ratio clamp (1 while presenting), present-path antialias/MSAA off,
- * then present-path NoToneMapping are applied after this on sessionstart.
+ * present-path NoToneMapping, then present-path IBL/environment off are
+ * applied after this on sessionstart.
  * Antialias is constructor-time (Three copies getContextAttributes into
  * XRWebGLLayer); helpers verify only. Tone mapping is a live renderer
- * property (save ACES + exposure, set NoToneMapping); restore on sessionend.
- * Do not require 120 / 207 / 240 Hz.
+ * property (save ACES + exposure, set NoToneMapping). IBL: r170
+ * environmentIntensity is a post-sample multiply, so sessionstart nulls
+ * scene.environment (do not dispose the PMREM) and writes intensity 0;
+ * restore both on sessionend. Do not require 120 / 207 / 240 Hz.
  */
 function applyQuest3SessionDefaults(session) {
   if (!session) return;
@@ -634,6 +638,8 @@ let savedDesktopPixelRatio = null;
 let savedDesktopAntialias = null;
 let savedDesktopToneMapping = null;
 let savedDesktopToneMappingExposure = null;
+let savedDesktopEnvironment = null;
+let savedDesktopEnvironmentIntensity = null;
 renderer.xr.addEventListener("sessionstart", () => {
   resumeAudio();
   const session = renderer.xr.getSession();
@@ -663,6 +669,18 @@ renderer.xr.addEventListener("sessionstart", () => {
     "exposure",
     tm.exposure
   );
+  // After tone mapping: drop present-path IBL sampling (not per-frame).
+  const env = applyPresentEnvironment(scene, { presenting: true });
+  savedDesktopEnvironment = env.savedEnvironment;
+  savedDesktopEnvironmentIntensity = env.savedIntensity;
+  console.info(
+    "[interactive-prop] present environment",
+    env.environment,
+    "intensity",
+    env.intensity,
+    "envMapCleared",
+    env.envMapCleared
+  );
   session?.addEventListener("inputsourceschange", onInputSourcesChange);
   session?.addEventListener("visibilitychange", onSessionVisibilityChange);
 });
@@ -691,6 +709,13 @@ renderer.xr.addEventListener("sessionend", () => {
   });
   savedDesktopToneMapping = null;
   savedDesktopToneMappingExposure = null;
+  applyPresentEnvironment(scene, {
+    presenting: false,
+    savedEnvironment: savedDesktopEnvironment,
+    savedIntensity: savedDesktopEnvironmentIntensity,
+  });
+  savedDesktopEnvironment = null;
+  savedDesktopEnvironmentIntensity = null;
   recordQuest3SessionEnd();
 });
 document.addEventListener("visibilitychange", onDocumentVisibilityChange);
