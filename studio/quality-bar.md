@@ -30,6 +30,7 @@ An immersive feature or release is **done** only when all applicable boxes pass.
 - [ ] FFR medium/high (`fixedFoveation` ≈0.5–1) when the UA exposes it
 - [ ] No allocations / `new` in the XR frame loop (**frame-loop allocation scrub**: hoist scratch vectors; no per-frame arrays or `new THREE.*` on the present path when diagnostics are off — `crate-toolbox` v0.8)
 - [ ] Present-path pixel ratio clamped to 1 while XR presenting; restore desktop ratio + `setSize` on session end (`crate-toolbox` v0.15)
+- [ ] Present-path antialias / MSAA off while XR presenting (`crate-toolbox` v0.16: constructor `antialias: false` so Three’s `XRWebGLLayer` inherits it; WebGL attribute is immutable — do not invent a live flip)
 - [ ] Texture/draw/tri budgets written on the object manifest `perf` block
 - [ ] On-device matrix filled per [quest-3-on-device-qa](../docs/shipping/quest-3-on-device-qa.md) (Browser, firmware, SHA, requested Hz, FFR, method). Leave cells blank until a headset run — do not invent ms.
 

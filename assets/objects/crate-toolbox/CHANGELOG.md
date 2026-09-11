@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.16.0 — 2026-09-11
+
+- **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **present-path WebGL antialias / MSAA off** in `examples/interactive-prop`, complementary to v0.15’s pixel-ratio clamp. Three.js r170 snapshots `getContextAttributes().antialias` into `XRWebGLLayer` (or projection-layer `samples`); the attribute cannot be flipped on a live context, and recreating the renderer would drop PMREM / GPU uploads / XR bindings. The example therefore **starts** the one renderer with `antialias: QUEST3_XR_ANTIALIAS` (**false**) so the XR layer inherits MSAA off. On `sessionstart` (after 90/72 + FFR 0.75 + v0.15 `setPixelRatio(1)`) helpers in `present-antialias.js` verify the policy; on `sessionend` they restore the *desired* lookdev policy value (true) without inventing a setter. Desktop 2D lookdev shares that context (also MSAA off) — documented trade-off. Not per-frame (v0.8 allocation scrub kept). L4/L5 activity and LOD draws/tris unchanged.
+- **Layers:** still L0–L5. Quality / shipping-gate revisit (like v0.8 / v0.10 / v0.11 / v0.15), not a new layer.
+- **Quest 3:** Lower present-path MSAA / fill cost while presenting. Draws / tris / texture caps unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.16.0/`
+
 ## 0.15.0 — 2026-09-11
 
 - **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **present-path WebGL pixel-ratio clamp** in `examples/interactive-prop`: on `sessionstart` (after 90/72 + FFR 0.75) save the current ratio and `setPixelRatio(QUEST3_XR_PIXEL_RATIO)` (**1**); on `sessionend` restore the saved desktop/2D ratio (`min(devicePixelRatio, 2)`) and `setSize` to the current window so lookdev is unchanged. Helpers in `present-pixel-ratio.js` are unit-tested without WebXR. Not per-frame (v0.8 allocation scrub kept). L4/L5 activity and LOD draws/tris unchanged.
