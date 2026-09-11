@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.19.0 — 2026-09-11
+
+- **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **present-path directional / punctual light off** (hemisphere-only) in `examples/interactive-prop`, complementary to v0.15’s pixel-ratio clamp, v0.16’s antialias/MSAA off, v0.17’s NoToneMapping, and v0.18’s IBL/`scene.environment` off. Desktop lookdev still uses `HemisphereLight` + `DirectionalLight` `sun` (intensity 0.9). Three r170 still counts a visible DirectionalLight with intensity 0 toward `NUM_DIR_LIGHTS` — intensity 0 does **not** drop the punctual loop. On `sessionstart` (after 90/72 + FFR 0.75 + v0.15 `setPixelRatio(1)` + v0.16 MSAA-off verify + v0.17 NoToneMapping + v0.18 IBL off) save visible + intensity, set `visible = false` and intensity 0. On `sessionend` restore lookdev visible + intensity. HemisphereLight stays on. Session events only — not per-frame (v0.8 allocation scrub kept). L4/L5 activity and LOD draws/tris unchanged.
+- **Layers:** still L0–L5. Quality / shipping-gate revisit (like v0.8 / v0.10 / v0.11 / v0.15 / v0.16 / v0.17 / v0.18), not a new layer.
+- **Quest 3:** Cheaper present-path punctual / fragment cost while presenting. Draws / tris / texture caps unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.19.0/`
+
 ## 0.18.0 — 2026-09-11
 
 - **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **present-path IBL / scene.environment off** in `examples/interactive-prop`, complementary to v0.15’s pixel-ratio clamp, v0.16’s antialias/MSAA off, and v0.17’s NoToneMapping. Desktop lookdev still assigns a PMREM from `RoomEnvironment` to `scene.environment` (`environmentIntensity` default 1). Three r170 `environmentIntensity` is a post-sample multiply after `textureCubeUV` — intensity 0 does **not** drop `USE_ENVMAP`. On `sessionstart` (after 90/72 + FFR 0.75 + v0.15 `setPixelRatio(1)` + v0.16 MSAA-off verify + v0.17 NoToneMapping) save the texture reference + intensity, null `scene.environment`, and write intensity 0 when the property exists. On `sessionend` restore the saved PMREM (do not dispose) + lookdev intensity. Session events only — not per-frame (v0.8 allocation scrub kept). L4/L5 activity and LOD draws/tris unchanged.

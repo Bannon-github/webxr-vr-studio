@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.21.0] — 2026-09-11
+
+### Changed
+
+- `crate-toolbox` **v0.19.0** Quest 3 shipping/perf gate: present-path directional / punctual light off (hemisphere-only) in `examples/interactive-prop` (`sessionstart` after 90/72 + FFR + v0.15 pixel-ratio clamp + v0.16 MSAA-off verify + v0.17 NoToneMapping + v0.18 IBL off; `sun.visible = false` + intensity 0; restore lookdev visible + intensity on `sessionend`). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.20.0] — 2026-09-11
 
 ### Changed
