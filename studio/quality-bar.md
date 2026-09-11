@@ -32,6 +32,7 @@ An immersive feature or release is **done** only when all applicable boxes pass.
 - [ ] Present-path pixel ratio clamped to 1 while XR presenting; restore desktop ratio + `setSize` on session end (`crate-toolbox` v0.15)
 - [ ] Present-path antialias / MSAA off while XR presenting (`crate-toolbox` v0.16: constructor `antialias: false` so Three’s `XRWebGLLayer` inherits it; WebGL attribute is immutable — do not invent a live flip)
 - [ ] Present-path `NoToneMapping` while XR presenting; restore lookdev `ACESFilmicToneMapping` + prior `toneMappingExposure` on session end (`crate-toolbox` v0.17)
+- [ ] Present-path IBL / `scene.environment` off while XR presenting; restore the saved PMREM + lookdev `environmentIntensity` on session end without disposing (`crate-toolbox` v0.18)
 - [ ] Texture/draw/tri budgets written on the object manifest `perf` block
 - [ ] On-device matrix filled per [quest-3-on-device-qa](../docs/shipping/quest-3-on-device-qa.md) (Browser, firmware, SHA, requested Hz, FFR, method). Leave cells blank until a headset run — do not invent ms.
 
