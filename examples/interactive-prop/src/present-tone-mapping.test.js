@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as THREE from "three";
 import {
   DESKTOP_LOOKDEV_TONE_MAPPING,
   DESKTOP_LOOKDEV_TONE_MAPPING_EXPOSURE,
@@ -21,10 +22,12 @@ function fakeRenderer(toneMapping = DESKTOP_LOOKDEV_TONE_MAPPING, toneMappingExp
 
 test("QUEST3_XR_TONE_MAPPING is Three r170 NoToneMapping (0)", () => {
   assert.equal(QUEST3_XR_TONE_MAPPING, 0);
+  assert.equal(QUEST3_XR_TONE_MAPPING, THREE.NoToneMapping);
 });
 
 test("DESKTOP_LOOKDEV_TONE_MAPPING is Three r170 ACESFilmicToneMapping (4)", () => {
   assert.equal(DESKTOP_LOOKDEV_TONE_MAPPING, 4);
+  assert.equal(DESKTOP_LOOKDEV_TONE_MAPPING, THREE.ACESFilmicToneMapping);
 });
 
 test("lookdev exposure is 1.05; present-path exposure is identity 1", () => {
