@@ -2,7 +2,7 @@
   "version": 1,
   "entity": "toolbox",
   "objectId": "crate-toolbox",
-  "objectVersion": "0.15.0",
+  "objectVersion": "0.17.0",
   "source": {
     "kind": "procedural",
     "preferPackaged": true,

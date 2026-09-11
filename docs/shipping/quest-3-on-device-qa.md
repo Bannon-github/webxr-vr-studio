@@ -16,6 +16,7 @@ Runnable slice: [`examples/interactive-prop`](../../examples/interactive-prop/).
 6. **Frame-loop allocation scrub** (pre-headset authoring gate): with the `P` overlay **off**, the XR rAF path must not `new` vectors/arrays or call `intersectObjects`. `crate-toolbox` v0.8 is the reference scrub. This does **not** count as a 90 Hz measurement.
 7. **Present-path pixel-ratio clamp** (pre-headset authoring gate): immersive session uses `setPixelRatio(1)`; `sessionend` restores the desktop cap. `crate-toolbox` v0.15. Not a measured ms.
 8. **Present-path antialias / MSAA off** (pre-headset authoring gate): renderer is constructed with `antialias: false` so Three’s `XRWebGLLayer` inherits MSAA off. Context attribute is immutable; do not expect a live flip. `crate-toolbox` v0.16. Not a measured ms.
+9. **Present-path NoToneMapping** (pre-headset authoring gate): immersive session uses `renderer.toneMapping = NoToneMapping` (identity exposure); `sessionend` restores lookdev ACES + the prior `toneMappingExposure`. `crate-toolbox` v0.17. Not a measured ms.
 
 ## Frame rate (`supportedFrameRates` / `updateTargetFrameRate`)
 

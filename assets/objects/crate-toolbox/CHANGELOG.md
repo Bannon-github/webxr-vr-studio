@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.17.0 — 2026-09-11
+
+- **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **present-path NoToneMapping** in `examples/interactive-prop`, complementary to v0.15’s pixel-ratio clamp and v0.16’s antialias/MSAA off. Desktop lookdev still uses `ACESFilmicToneMapping` + `toneMappingExposure` 1.05 at startup. On `sessionstart` (after 90/72 + FFR 0.75 + v0.15 `setPixelRatio(1)` + v0.16 MSAA-off verify) save the current operator + exposure and set `THREE.NoToneMapping` with identity exposure (1). Three r170 applies `renderer.toneMapping` on the output fragment; ACESFilmic is extra ALU on Quest 3 TBDR. On `sessionend` restore saved ACESFilmic + the prior exposure. Session events only — not per-frame (v0.8 allocation scrub kept). L4/L5 activity and LOD draws/tris unchanged.
+- **Layers:** still L0–L5. Quality / shipping-gate revisit (like v0.8 / v0.10 / v0.11 / v0.15 / v0.16), not a new layer.
+- **Quest 3:** Cheaper present-path tone mapping / fragment cost while presenting. Draws / tris / texture caps unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.17.0/`
+
 ## 0.16.0 — 2026-09-11
 
 - **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **present-path WebGL antialias / MSAA off** in `examples/interactive-prop`, complementary to v0.15’s pixel-ratio clamp. Three.js r170 snapshots `getContextAttributes().antialias` into `XRWebGLLayer` (or projection-layer `samples`); the attribute cannot be flipped on a live context, and recreating the renderer would drop PMREM / GPU uploads / XR bindings. The example therefore **starts** the one renderer with `antialias: QUEST3_XR_ANTIALIAS` (**false**) so the XR layer inherits MSAA off. On `sessionstart` (after 90/72 + FFR 0.75 + v0.15 `setPixelRatio(1)`) helpers in `present-antialias.js` verify the policy; on `sessionend` they restore the *desired* lookdev policy value (true) without inventing a setter. Desktop 2D lookdev shares that context (also MSAA off) — documented trade-off. Not per-frame (v0.8 allocation scrub kept). L4/L5 activity and LOD draws/tris unchanged.

@@ -65,6 +65,7 @@ import {
   applyPresentAntialias,
   resolveQuest3PresentAntialias,
 } from "./present-antialias.js";
+import { applyPresentToneMapping } from "./present-tone-mapping.js";
 import behaviorTemplate from "./behavior.json";
 import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 
@@ -596,9 +597,11 @@ window.addEventListener("resize", () => {
  * Quest 3 Browser defaults: 90 Hz if the UA lists it (else 72), FFR medium-high.
  * Real APIs only — XRSession.supportedFrameRates / updateTargetFrameRate (MDN),
  * XRWebGLLayer.fixedFoveation via Three WebXRManager.setFoveation.
- * Pixel-ratio clamp (1 while presenting) then present-path antialias/MSAA off
- * are applied after this on sessionstart. Antialias is constructor-time
- * (Three copies getContextAttributes into XRWebGLLayer); helpers verify only.
+ * Pixel-ratio clamp (1 while presenting), present-path antialias/MSAA off,
+ * then present-path NoToneMapping are applied after this on sessionstart.
+ * Antialias is constructor-time (Three copies getContextAttributes into
+ * XRWebGLLayer); helpers verify only. Tone mapping is a live renderer
+ * property (save ACES + exposure, set NoToneMapping); restore on sessionend.
  * Do not require 120 / 207 / 240 Hz.
  */
 function applyQuest3SessionDefaults(session) {
@@ -629,6 +632,8 @@ function applyQuest3SessionDefaults(session) {
 let xrSession = null;
 let savedDesktopPixelRatio = null;
 let savedDesktopAntialias = null;
+let savedDesktopToneMapping = null;
+let savedDesktopToneMappingExposure = null;
 renderer.xr.addEventListener("sessionstart", () => {
   resumeAudio();
   const session = renderer.xr.getSession();
@@ -647,6 +652,16 @@ renderer.xr.addEventListener("sessionstart", () => {
     aa.applied,
     "contextImmutable",
     aa.contextImmutable
+  );
+  // After antialias: cheaper present-path NoToneMapping (not per-frame).
+  const tm = applyPresentToneMapping(renderer, { presenting: true });
+  savedDesktopToneMapping = tm.savedToneMapping;
+  savedDesktopToneMappingExposure = tm.savedExposure;
+  console.info(
+    "[interactive-prop] present toneMapping",
+    tm.toneMapping,
+    "exposure",
+    tm.exposure
   );
   session?.addEventListener("inputsourceschange", onInputSourcesChange);
   session?.addEventListener("visibilitychange", onSessionVisibilityChange);
@@ -669,6 +684,13 @@ renderer.xr.addEventListener("sessionend", () => {
     savedAntialias: savedDesktopAntialias,
   });
   savedDesktopAntialias = null;
+  applyPresentToneMapping(renderer, {
+    presenting: false,
+    savedToneMapping: savedDesktopToneMapping,
+    savedExposure: savedDesktopToneMappingExposure,
+  });
+  savedDesktopToneMapping = null;
+  savedDesktopToneMappingExposure = null;
   recordQuest3SessionEnd();
 });
 document.addEventListener("visibilitychange", onDocumentVisibilityChange);

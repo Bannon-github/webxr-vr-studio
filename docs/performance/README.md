@@ -33,6 +33,7 @@ Leave headroom for browser + compositor. Target ~70–80% of budget on device, n
 - Use XRWebGLLayer.fixedFoveation when supported (see fundamentals/layers-and-ffr.md)
 - Prefer runtime framebufferScaleFactor / renderScale knobs over unchecked supersampling. `crate-toolbox` v0.15 clamps `renderer.setPixelRatio(1)` on `sessionstart` and restores the desktop cap on `sessionend` (not per-frame).
 - Present-path MSAA off: construct `WebGLRenderer({ antialias: false })` so Three r170 copies that into `XRWebGLLayer`. There is no live `setAntialias`. `crate-toolbox` v0.16.
+- Present-path tone mapping: `NoToneMapping` while XR presenting (skip ACESFilmic output ALU). Restore lookdev `ACESFilmicToneMapping` + prior `toneMappingExposure` on `sessionend`. `crate-toolbox` v0.17. Not per-frame.
 - Do not render to an intermediate full-res buffer then blit if you want FFR benefits (FFR applies to the eye buffer path)
 
 ## Profiling checklist
