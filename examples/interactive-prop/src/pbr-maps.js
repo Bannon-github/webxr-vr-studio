@@ -242,6 +242,13 @@ let cached = null;
 export const L2_NORMAL_STRENGTH = { wood: 4.2, brass: 2.8, steel: 3.4 };
 export const L2_NORMAL_SCALE = { wood: [0.62, 0.62], brass: [0.3, 0.3], steel: [0.38, 0.38] };
 
+/**
+ * LOD1 (~2.4–4.5 m) `MeshStandardMaterial.normalScale` vs LOD0.
+ * Same 512² albedo + ORM + normalMap (no extra canvases). Half keeps
+ * mid-distance tangent detail without LOD0-strength slopes.
+ */
+export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
+
 function materialMaps(albedo, orm, normal, normalScale) {
   return { albedo, orm, normal, normalScale };
 }
@@ -270,7 +277,8 @@ export function getCrateL2Maps() {
 }
 
 /**
- * Shared MeshStandardMaterial. LOD0 / LOD1 bind v0.12 normalMap.
+ * Shared MeshStandardMaterial. LOD0 binds v0.12 normalMap at full scale.
+ * Pass `{ normalScaleMul }` for mid LODs (same maps, reduced slope).
  * Pass `{ normalMap: false }` for far LODs so the fragment shader skips
  * tangent-space sampling (same albedo + ORM, no extra texture bind).
  */
@@ -286,8 +294,9 @@ export function mappedStandard(colorHex, maps, opts = {}) {
   };
   if (useNormal) {
     const [nx, ny] = maps.normalScale ?? [0.5, 0.5];
+    const mul = opts.normalScaleMul ?? 1;
     spec.normalMap = maps.normal;
-    spec.normalScale = new THREE.Vector2(nx, ny);
+    spec.normalScale = new THREE.Vector2(nx * mul, ny * mul);
   }
   return new THREE.MeshStandardMaterial(spec);
 }

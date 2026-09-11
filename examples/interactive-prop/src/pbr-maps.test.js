@@ -4,6 +4,7 @@ import {
   L2_NORMAL_SCALE,
   L2_NORMAL_STRENGTH,
   L2_TEXTURE_SIZE,
+  L3_LOD1_NORMAL_SCALE_MUL,
   brassHeight,
   heightToNormalRgb,
   mappedStandard,
@@ -47,12 +48,18 @@ test("mappedStandard binds normalMap unless opted out", () => {
   const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
   const withN = mappedStandard(0xffffff, maps);
   const without = mappedStandard(0xffffff, maps, { normalMap: false });
+  const mid = mappedStandard(0xffffff, maps, { normalScaleMul: L3_LOD1_NORMAL_SCALE_MUL });
   assert.equal(withN.normalMap, maps.normal);
   assert.equal(without.normalMap, null);
+  assert.equal(mid.normalMap, maps.normal);
   assert.equal(withN.map, maps.albedo);
   assert.equal(without.map, maps.albedo);
   assert.equal(withN.roughnessMap, maps.orm);
   assert.equal(without.roughnessMap, maps.orm);
+  assert.equal(withN.normalScale.x, 0.5);
+  assert.equal(mid.normalScale.x, 0.5 * L3_LOD1_NORMAL_SCALE_MUL);
+  assert.equal(mid.normalScale.y, 0.5 * L3_LOD1_NORMAL_SCALE_MUL);
+  assert.equal(L3_LOD1_NORMAL_SCALE_MUL, 0.5);
 });
 
 test("wood / brass / steel height fields are not flat", () => {

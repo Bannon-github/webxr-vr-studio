@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import behaviorTemplate from "./behavior.json" with { type: "json" };
-import { getCrateL2Maps, mappedStandard } from "./pbr-maps.js";
+import { getCrateL2Maps, L3_LOD1_NORMAL_SCALE_MUL, mappedStandard } from "./pbr-maps.js";
 
 /**
  * Procedural crate that follows ADR 0004: visual meshes, collider_* hulls,
@@ -74,12 +74,18 @@ export function createToolbox() {
   root.userData.kind = "entity";
 
   const l2 = getCrateL2Maps();
-  // LOD0 + LOD1 share the five v0.12 materials (512² albedo+ORM+normal).
+  // LOD0 keeps the five v0.12 materials (512² albedo+ORM+normal, full scale).
   const wood = mappedStandard(0xffffff, l2.wood);
   const woodDark = mappedStandard(0x7a5840, l2.wood);
   const brass = mappedStandard(0xffffff, l2.brass);
   const steel = mappedStandard(0xffffff, l2.steel);
   const handleMat = mappedStandard(0xe8b42a, l2.wood);
+  // LOD1 mid crate: same canvases, half normalScale (no extra draws/textures).
+  const mid = { normalScaleMul: L3_LOD1_NORMAL_SCALE_MUL };
+  const woodMid = mappedStandard(0xffffff, l2.wood, mid);
+  const woodDarkMid = mappedStandard(0x7a5840, l2.wood, mid);
+  const brassMid = mappedStandard(0xffffff, l2.brass, mid);
+  const handleMatMid = mappedStandard(0xe8b42a, l2.wood, mid);
   // LOD2 far crate + lid: same albedo/ORM, no normalMap (L3 fragment-cost gate).
   const woodFar = mappedStandard(0xffffff, l2.wood, { normalMap: false });
 
@@ -99,11 +105,11 @@ export function createToolbox() {
   bodyL0.add(boxMesh(0.355, 0.012, 0.03, woodDark, 0, 0.155, -0.04));
   bodyL0.add(boxMesh(0.355, 0.012, 0.03, woodDark, 0, 0.155, 0.05));
   const bodyL1 = lodGroup(1);
-  bodyL1.add(boxMesh(0.36, 0.02, 0.24, woodDark, 0, 0.01, 0));
-  bodyL1.add(boxMesh(0.36, 0.14, wall, wood, 0, 0.09, -0.12 + wall / 2));
-  bodyL1.add(boxMesh(0.36, 0.14, wall, wood, 0, 0.09, 0.12 - wall / 2));
-  bodyL1.add(boxMesh(wall, 0.14, innerD, wood, -0.18 + wall / 2, 0.09, 0));
-  bodyL1.add(boxMesh(wall, 0.14, innerD, wood, 0.18 - wall / 2, 0.09, 0));
+  bodyL1.add(boxMesh(0.36, 0.02, 0.24, woodDarkMid, 0, 0.01, 0));
+  bodyL1.add(boxMesh(0.36, 0.14, wall, woodMid, 0, 0.09, -0.12 + wall / 2));
+  bodyL1.add(boxMesh(0.36, 0.14, wall, woodMid, 0, 0.09, 0.12 - wall / 2));
+  bodyL1.add(boxMesh(wall, 0.14, innerD, woodMid, -0.18 + wall / 2, 0.09, 0));
+  bodyL1.add(boxMesh(wall, 0.14, innerD, woodMid, 0.18 - wall / 2, 0.09, 0));
   const bodyL2 = lodGroup(2);
   bodyL2.add(boxMesh(0.36, 0.16, 0.24, woodFar, 0, 0.08, 0));
   body.add(bodyL0, bodyL1, bodyL2);
@@ -118,7 +124,7 @@ export function createToolbox() {
   lidL0.add(lid);
   lidL0.add(boxMesh(0.12, 0.02, 0.04, brass, 0, 0.028, 0.22));
   const lidL1 = lodGroup(1);
-  lidL1.add(boxMesh(0.36, 0.025, 0.24, wood, 0, 0.012, 0.12));
+  lidL1.add(boxMesh(0.36, 0.025, 0.24, woodMid, 0, 0.012, 0.12));
   const lidL2 = lodGroup(2);
   lidL2.add(boxMesh(0.36, 0.02, 0.24, woodFar, 0, 0.01, 0.12));
   lidPivot.add(lidL0, lidL1, lidL2);
@@ -132,7 +138,7 @@ export function createToolbox() {
   latch.name = "latchMesh";
   latchL0.add(latch);
   const latchL1 = lodGroup(1);
-  latchL1.add(boxMesh(0.04, 0.07, 0.012, brass, 0, 0, 0));
+  latchL1.add(boxMesh(0.04, 0.07, 0.012, brassMid, 0, 0, 0));
   const latchL2 = lodGroup(2);
   latchPivot.add(latchL0, latchL1, latchL2);
   root.add(latchPivot);
@@ -150,7 +156,7 @@ export function createToolbox() {
   tip.position.set(0.125, 0, 0);
   toolL0.add(shaft, grip, tip);
   const toolL1 = lodGroup(1);
-  const stub = boxMesh(0.2, 0.02, 0.02, handleMat, 0, 0, 0);
+  const stub = boxMesh(0.2, 0.02, 0.02, handleMatMid, 0, 0, 0);
   toolL1.add(stub);
   const toolL2 = lodGroup(2);
   tool.add(toolL0, toolL1, toolL2);
@@ -198,10 +204,12 @@ export function createToolbox() {
     uniqueTextures: l2.uniqueTextures,
     maps: "albedo+ORM+normal",
     lodNormalMaps: { 0: true, 1: true, 2: false },
-    note: "procedural canvas stand-in; LOD2 omits normalMap",
+    lodNormalScaleMul: { 0: 1, 1: L3_LOD1_NORMAL_SCALE_MUL, 2: 0 },
+    note: "procedural canvas stand-in; LOD1 half normalScale; LOD2 omits normalMap",
   };
   root.userData.materials = {
-    lod01: { wood, woodDark, brass, steel, handleMat },
+    lod0: { wood, woodDark, brass, steel, handleMat },
+    lod1: { wood: woodMid, woodDark: woodDarkMid, brass: brassMid, handleMat: handleMatMid },
     lod2: { wood: woodFar },
   };
   root.userData.packaging = {

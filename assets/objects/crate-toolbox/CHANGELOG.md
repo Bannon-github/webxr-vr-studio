@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.14.0 — 2026-09-10
+
+- **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After v0.13 dropped LOD2 normals, **LOD1 no longer uses full-strength tangent-space `normalScale`**. LOD0 keeps the five shared v0.12 materials (`normalMap` + modest full `normalScale`: wood 0.62, brass 0.30, steel 0.38). LOD1 body / lid / latch / tool stub use **separate** materials with the same 512² albedo + ORM + normal canvases and `normalScale × L3_LOD1_NORMAL_SCALE_MUL` (**0.5**). LOD2 stays v0.13 (`normalMap = null` on its separate wood). Fastener is not an LOD mesh and stays on shared LOD0 brass (no extra draw). `setToolboxLod` is still visibility-only (no per-switch material swap). Unique canvases still 9. Draw / tri counts unchanged (14 / 8 / 2 + fastener 1). v0.13 LOD2 no-normals, v0.12 normals, v0.11 visibility-loss, v0.10 tracking-loss, v0.9 hand hover, and v0.8 allocation scrub kept.
+- **Layers:** still L0–L5. This revisits already-claimed L3 (mid-LOD fragment / lighting-slope cost), not a new layer.
+- **Quest 3:** Softer mid-distance normals at 2.4–4.5 m (half LOD0 `normalScale`). Draws / tris / texture caps unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.14.0/`
+
 ## 0.13.0 — 2026-09-10
 
 - **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After the v0.12 normal pass, **LOD2 no longer samples normal maps**. The five shared LOD0/LOD1 materials keep v0.12 `normalMap` + modest `normalScale`. LOD2 body + lid use a separate wood material with the same 512² albedo + ORM and `normalMap = null` (visibility-only `setToolboxLod`; no extra draws). LOD1 keeps the shared normals (simpler Quest-safe choice vs a second material split). Fastener is not an LOD mesh and stays on shared brass. Draw / tri counts unchanged (14 / 8 / 2 + fastener 1). v0.12 normals, v0.11 visibility-loss, v0.10 tracking-loss, v0.9 hand hover, and v0.8 allocation scrub kept.
