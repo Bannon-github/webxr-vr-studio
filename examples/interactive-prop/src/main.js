@@ -68,6 +68,11 @@ import {
 import { applyPresentToneMapping } from "./present-tone-mapping.js";
 import { applyPresentEnvironment } from "./present-environment.js";
 import { applyPresentDirectionalLight } from "./present-directional-light.js";
+import {
+  applyPresentAmbientFill,
+  QUEST3_XR_AMBIENT_COLOR,
+  QUEST3_XR_AMBIENT_INTENSITY,
+} from "./present-ambient-fill.js";
 import behaviorTemplate from "./behavior.json";
 import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 
@@ -108,7 +113,8 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 pmrem.dispose();
 
-scene.add(new THREE.HemisphereLight(0xf0e6d4, 0x2a1c12, 0.55));
+const hemi = new THREE.HemisphereLight(0xf0e6d4, 0x2a1c12, 0.55);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff4e0, 0.9);
 sun.position.set(2.2, 4.4, 1.4);
 scene.add(sun);
@@ -600,9 +606,10 @@ window.addEventListener("resize", () => {
  * Real APIs only — XRSession.supportedFrameRates / updateTargetFrameRate (MDN),
  * XRWebGLLayer.fixedFoveation via Three WebXRManager.setFoveation.
  * Pixel-ratio clamp (1 while presenting), present-path antialias/MSAA off,
- * present-path NoToneMapping, present-path IBL/environment off, then
- * present-path directional/punctual off (hemisphere-only) are applied
- * after this on sessionstart.
+ * present-path NoToneMapping, present-path IBL/environment off,
+ * present-path directional/punctual off, then present-path ambient-only
+ * fill (hemisphere off + one AmbientLight) are applied after this on
+ * sessionstart.
  * Antialias is constructor-time (Three copies getContextAttributes into
  * XRWebGLLayer); helpers verify only. Tone mapping is a live renderer
  * property (save ACES + exposure, set NoToneMapping). IBL: r170
@@ -610,8 +617,11 @@ window.addEventListener("resize", () => {
  * scene.environment (do not dispose the PMREM) and writes intensity 0;
  * restore both on sessionend. Directional: r170 still counts a visible
  * sun with intensity 0 toward NUM_DIR_LIGHTS, so sessionstart hides it
- * (visible=false + intensity 0) and keeps HemisphereLight; restore both
- * on sessionend. Do not require 120 / 207 / 240 Hz.
+ * (visible=false + intensity 0). Ambient fill: r170 still counts a
+ * visible HemisphereLight with intensity 0 toward NUM_HEMI_LIGHTS, so
+ * sessionstart hides it (visible=false + intensity 0) and enables one
+ * reused AmbientLight at intensity 0.4; restore hemi and disable/detach
+ * ambient on sessionend. Do not require 120 / 207 / 240 Hz.
  */
 function applyQuest3SessionDefaults(session) {
   if (!session) return;
@@ -647,6 +657,9 @@ let savedDesktopEnvironment = null;
 let savedDesktopEnvironmentIntensity = null;
 let savedDesktopDirectionalVisible = null;
 let savedDesktopDirectionalIntensity = null;
+let presentAmbient = null;
+let savedDesktopHemisphereVisible = null;
+let savedDesktopHemisphereIntensity = null;
 renderer.xr.addEventListener("sessionstart", () => {
   resumeAudio();
   const session = renderer.xr.getSession();
@@ -698,6 +711,25 @@ renderer.xr.addEventListener("sessionstart", () => {
     "intensity",
     dir.intensity
   );
+  // After directional: cheaper present-path ambient-only fill (not per-frame).
+  const fill = applyPresentAmbientFill(hemi, presentAmbient, {
+    presenting: true,
+    scene,
+    createAmbient: () => new THREE.AmbientLight(QUEST3_XR_AMBIENT_COLOR, QUEST3_XR_AMBIENT_INTENSITY),
+  });
+  presentAmbient = fill.ambient;
+  savedDesktopHemisphereVisible = fill.savedVisible;
+  savedDesktopHemisphereIntensity = fill.savedIntensity;
+  console.info(
+    "[interactive-prop] present ambient fill hemi visible",
+    fill.hemiVisible,
+    "hemi intensity",
+    fill.hemiIntensity,
+    "ambient visible",
+    fill.ambientVisible,
+    "ambient intensity",
+    fill.ambientIntensity
+  );
   session?.addEventListener("inputsourceschange", onInputSourcesChange);
   session?.addEventListener("visibilitychange", onSessionVisibilityChange);
 });
@@ -740,6 +772,14 @@ renderer.xr.addEventListener("sessionend", () => {
   });
   savedDesktopDirectionalVisible = null;
   savedDesktopDirectionalIntensity = null;
+  applyPresentAmbientFill(hemi, presentAmbient, {
+    presenting: false,
+    savedVisible: savedDesktopHemisphereVisible,
+    savedIntensity: savedDesktopHemisphereIntensity,
+    scene,
+  });
+  savedDesktopHemisphereVisible = null;
+  savedDesktopHemisphereIntensity = null;
   recordQuest3SessionEnd();
 });
 document.addEventListener("visibilitychange", onDocumentVisibilityChange);

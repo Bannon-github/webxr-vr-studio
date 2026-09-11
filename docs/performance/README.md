@@ -35,7 +35,8 @@ Leave headroom for browser + compositor. Target ~70–80% of budget on device, n
 - Present-path MSAA off: construct `WebGLRenderer({ antialias: false })` so Three r170 copies that into `XRWebGLLayer`. There is no live `setAntialias`. `crate-toolbox` v0.16.
 - Present-path tone mapping: `NoToneMapping` while XR presenting (skip ACESFilmic output ALU). Restore lookdev `ACESFilmicToneMapping` + prior `toneMappingExposure` on `sessionend`. `crate-toolbox` v0.17. Not per-frame.
 - Present-path IBL: null `scene.environment` while XR presenting (skip MeshStandardMaterial `USE_ENVMAP` / `textureCubeUV`). r170 `environmentIntensity` is a post-sample multiply and does not skip sampling. Restore the saved PMREM + lookdev intensity on `sessionend` (do not dispose). `crate-toolbox` v0.18. Not per-frame.
-- Present-path directional / punctual: hide the lookdev `DirectionalLight` while XR presenting (`visible = false` + intensity 0; hemisphere-only). r170 intensity 0 on a visible sun still increments `NUM_DIR_LIGHTS`. Restore lookdev visible + intensity on `sessionend`. `crate-toolbox` v0.19. Not per-frame.
+- Present-path directional / punctual: hide the lookdev `DirectionalLight` while XR presenting (`visible = false` + intensity 0). r170 intensity 0 on a visible sun still increments `NUM_DIR_LIGHTS`. Restore lookdev visible + intensity on `sessionend`. `crate-toolbox` v0.19. Not per-frame.
+- Present-path ambient-only fill: hide the lookdev `HemisphereLight` while XR presenting (`visible = false` + intensity 0) and enable one reused `AmbientLight` (intensity 0.4). r170 intensity 0 on a visible hemi still increments `NUM_HEMI_LIGHTS`. Restore lookdev hemi and disable/detach ambient on `sessionend`. `crate-toolbox` v0.20. Not per-frame.
 - Do not render to an intermediate full-res buffer then blit if you want FFR benefits (FFR applies to the eye buffer path)
 
 ## Profiling checklist
