@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.15.0 — 2026-09-11
+
+- **Delta (additive, shipping/perf gate UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. Quest 3 **present-path WebGL pixel-ratio clamp** in `examples/interactive-prop`: on `sessionstart` (after 90/72 + FFR 0.75) save the current ratio and `setPixelRatio(QUEST3_XR_PIXEL_RATIO)` (**1**); on `sessionend` restore the saved desktop/2D ratio (`min(devicePixelRatio, 2)`) and `setSize` to the current window so lookdev is unchanged. Helpers in `present-pixel-ratio.js` are unit-tested without WebXR. Not per-frame (v0.8 allocation scrub kept). L4/L5 activity and LOD draws/tris unchanged.
+- **Layers:** still L0–L5. Quality / shipping-gate revisit (like v0.8 / v0.10 / v0.11), not a new layer.
+- **Quest 3:** Lower XR fragment fill / backbuffer cost while presenting. Draws / tris / texture caps unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.15.0/`
+
 ## 0.14.0 — 2026-09-10
 
 - **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After v0.13 dropped LOD2 normals, **LOD1 no longer uses full-strength tangent-space `normalScale`**. LOD0 keeps the five shared v0.12 materials (`normalMap` + modest full `normalScale`: wood 0.62, brass 0.30, steel 0.38). LOD1 body / lid / latch / tool stub use **separate** materials with the same 512² albedo + ORM + normal canvases and `normalScale × L3_LOD1_NORMAL_SCALE_MUL` (**0.5**). LOD2 stays v0.13 (`normalMap = null` on its separate wood). Fastener is not an LOD mesh and stays on shared LOD0 brass (no extra draw). `setToolboxLod` is still visibility-only (no per-switch material swap). Unique canvases still 9. Draw / tri counts unchanged (14 / 8 / 2 + fastener 1). v0.13 LOD2 no-normals, v0.12 normals, v0.11 visibility-loss, v0.10 tracking-loss, v0.9 hand hover, and v0.8 allocation scrub kept.

@@ -52,4 +52,4 @@ Copy [`_template/`](_template/) to `assets/objects/<objectId>/` and replace plac
 
 | objectId | Version | Layers | Notes |
 | --- | --- | --- | --- |
-| [crate-toolbox](crate-toolbox/) | 0.14.0 | L0–L5 | Seed; Quest 3; L2 canvases (albedo+ORM+normal) + L3 LOD1 half `normalScale` / LOD2 drops `normalMap` + KTX2 probe (no GLB); v0.8 allocation scrub; v0.9 hand hover-before-pinch; v0.10 tracking-loss `endGrab`; v0.11 visibility-loss `endGrab`; L5 activity; headset ms still unmeasured; [examples/interactive-prop](../../examples/interactive-prop/) |
+| [crate-toolbox](crate-toolbox/) | 0.15.0 | L0–L5 | Seed; Quest 3; L2 canvases (albedo+ORM+normal) + L3 LOD1 half `normalScale` / LOD2 drops `normalMap` + KTX2 probe (no GLB); v0.8 allocation scrub; v0.9 hand hover-before-pinch; v0.10 tracking-loss `endGrab`; v0.11 visibility-loss `endGrab`; v0.15 present-path pixel-ratio clamp; L5 activity; headset ms still unmeasured; [examples/interactive-prop](../../examples/interactive-prop/) |

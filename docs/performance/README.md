@@ -31,7 +31,7 @@ Leave headroom for browser + compositor. Target ~70–80% of budget on device, n
 ## Foveation and resolution
 
 - Use XRWebGLLayer.fixedFoveation when supported (see fundamentals/layers-and-ffr.md)
-- Prefer runtime framebufferScaleFactor / renderScale knobs over unchecked supersampling
+- Prefer runtime framebufferScaleFactor / renderScale knobs over unchecked supersampling. `crate-toolbox` v0.15 clamps `renderer.setPixelRatio(1)` on `sessionstart` and restores the desktop cap on `sessionend` (not per-frame).
 - Do not render to an intermediate full-res buffer then blit if you want FFR benefits (FFR applies to the eye buffer path)
 
 ## Profiling checklist

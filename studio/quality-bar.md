@@ -29,6 +29,7 @@ An immersive feature or release is **done** only when all applicable boxes pass.
 - [ ] Hero view: draw calls ≲100; triangles ≲750k/eye soft ceiling; props prefer ≤1024² (max 2048²); KTX2 + mipmaps ([ktx2-quest3-packaging](../docs/performance/ktx2-quest3-packaging.md))
 - [ ] FFR medium/high (`fixedFoveation` ≈0.5–1) when the UA exposes it
 - [ ] No allocations / `new` in the XR frame loop (**frame-loop allocation scrub**: hoist scratch vectors; no per-frame arrays or `new THREE.*` on the present path when diagnostics are off — `crate-toolbox` v0.8)
+- [ ] Present-path pixel ratio clamped to 1 while XR presenting; restore desktop ratio + `setSize` on session end (`crate-toolbox` v0.15)
 - [ ] Texture/draw/tri budgets written on the object manifest `perf` block
 - [ ] On-device matrix filled per [quest-3-on-device-qa](../docs/shipping/quest-3-on-device-qa.md) (Browser, firmware, SHA, requested Hz, FFR, method). Leave cells blank until a headset run — do not invent ms.
 

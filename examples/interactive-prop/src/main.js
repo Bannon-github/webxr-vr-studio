@@ -57,6 +57,10 @@ import {
   sampleQuest3Diagnostics,
   toggleQuest3Diagnostics,
 } from "./quest3-diagnostics.js";
+import {
+  applyPresentPixelRatioClamp,
+  resolveDesktopPixelRatio,
+} from "./present-pixel-ratio.js";
 import behaviorTemplate from "./behavior.json";
 import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 
@@ -77,7 +81,7 @@ camera.position.set(0, 1.5, 0.85);
 camera.lookAt(0, 1.0, -0.55);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(resolveDesktopPixelRatio(window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -583,6 +587,7 @@ window.addEventListener("resize", () => {
  * Quest 3 Browser defaults: 90 Hz if the UA lists it (else 72), FFR medium-high.
  * Real APIs only — XRSession.supportedFrameRates / updateTargetFrameRate (MDN),
  * XRWebGLLayer.fixedFoveation via Three WebXRManager.setFoveation.
+ * Pixel-ratio clamp (1 while presenting) is applied after this on sessionstart.
  * Do not require 120 / 207 / 240 Hz.
  */
 function applyQuest3SessionDefaults(session) {
@@ -611,11 +616,15 @@ function applyQuest3SessionDefaults(session) {
 }
 
 let xrSession = null;
+let savedDesktopPixelRatio = null;
 renderer.xr.addEventListener("sessionstart", () => {
   resumeAudio();
   const session = renderer.xr.getSession();
   xrSession = session;
   applyQuest3SessionDefaults(session);
+  // Present-path clamp only (not per-frame). Save desktop/2D ratio first.
+  const clamp = applyPresentPixelRatioClamp(renderer, { presenting: true });
+  savedDesktopPixelRatio = clamp.savedRatio;
   session?.addEventListener("inputsourceschange", onInputSourcesChange);
   session?.addEventListener("visibilitychange", onSessionVisibilityChange);
 });
@@ -626,6 +635,12 @@ renderer.xr.addEventListener("sessionend", () => {
     xrSession = null;
   }
   releaseAllHolds();
+  applyPresentPixelRatioClamp(renderer, {
+    presenting: false,
+    savedRatio: savedDesktopPixelRatio,
+    windowSize: { width: window.innerWidth, height: window.innerHeight },
+  });
+  savedDesktopPixelRatio = null;
   recordQuest3SessionEnd();
 });
 document.addEventListener("visibilitychange", onDocumentVisibilityChange);
