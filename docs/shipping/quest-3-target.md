@@ -47,6 +47,7 @@ These are **studio defaults** for WebXR on Quest 3 — conservative versus Meta�
 | Present IBL / environment | **Off** while XR presenting | MeshStandardMaterials sample `scene.environment` every fragment (`USE_ENVMAP`). r170 `environmentIntensity` is a post-sample multiply — intensity 0 does not skip `textureCubeUV`. Null `scene.environment` on `sessionstart`; restore the saved PMREM (do not dispose) on `sessionend`. Not per-frame. See `crate-toolbox` v0.18. |
 | Present directional / punctual | **Off** while XR presenting | After IBL is nulled, MeshStandardMaterials still evaluate punctual lights (`NUM_DIR_LIGHTS`). r170 intensity 0 on a visible DirectionalLight does not drop that loop. Hide the lookdev sun (`visible = false` + intensity 0) on `sessionstart`; restore both on `sessionend`. Not per-frame. See `crate-toolbox` v0.19. |
 | Present ambient-only fill | **AmbientLight** while XR presenting (hemisphere off) | After directional is hidden, MeshStandardMaterials still evaluate hemisphere (`NUM_HEMI_LIGHTS`). r170 intensity 0 on a visible HemisphereLight does not drop that loop. Hide lookdev hemi (`visible = false` + intensity 0) and enable one reused `AmbientLight` (intensity **0.4**, color `0xf0e6d4`) on `sessionstart`; restore hemi and disable/detach ambient on `sessionend`. Not per-frame. See `crate-toolbox` v0.20. |
+| Present texture anisotropy | **1** while XR presenting | Lookdev / packaged GLB may use GPU max (often 16). Quest 3 TBDR AF is extra bandwidth at present-path pixel ratio 1 + FFR. Clamp bound maps to 1 on `sessionstart`; restore saved lookdev `.anisotropy` on `sessionend`. Not per-frame. See `crate-toolbox` v0.21. |
 | Collision | **Simple hulls, not the hero mesh** | [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md) |
 
 **TODO:** confirm draw-call and triangle ceilings on-device for *this* product’s hero scene (Browser version + scene). The 100 / 750k figures are the gate we author to until a measured override is written on the release matrix.
@@ -74,6 +75,7 @@ sun.intensity = 0;
 hemi.visible = false; // v0.20 ambient-only fill; r170 intensity 0 does not drop NUM_HEMI_LIGHTS
 hemi.intensity = 0;
 // one reused AmbientLight at 0.4 (0xf0e6d4); disable/detach on sessionend
+texture.anisotropy = 1; // v0.21 present-path AF clamp; restore lookdev anisotropy on sessionend
 ```
 
 `supportedFrameRates` / `updateTargetFrameRate` may be missing on desktop emulators — skip, do not shim fake rates.
