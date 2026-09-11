@@ -1,0 +1,496 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Bannon-github/webxr-vr-studio/studio/briefs/_template/app-brief.schema.json",
+  "title": "WebXR VR Studio app brief",
+  "description": "Filled from studio/app-interrogation.md. Validates the lock that ADR 0006 requires before any app scaffold. Meta policy fields are declarations of intent; re-fetch official Horizon docs before submission.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "appId",
+    "identity",
+    "platform",
+    "distribution",
+    "hardware",
+    "tracking",
+    "input",
+    "locomotion",
+    "comfort",
+    "social",
+    "commerce",
+    "age",
+    "privacy",
+    "permissions",
+    "network",
+    "listing",
+    "ambiguities",
+    "interrogation",
+    "storeGate"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "appId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,62}$",
+      "description": "Stable kebab-case id. Catalog path studio/briefs/<appId>/."
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "oneLiner", "genre", "owner"],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Exact Store / window title. Avoid redundant “VR” per Meta asset-guidelines."
+        },
+        "oneLiner": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 280,
+          "description": "What the player does in the first five minutes (Q4)."
+        },
+        "genre": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human accountable for the brief."
+        }
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "appType", "passthroughLaunch"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "enum": [
+            "webxr-hosted",
+            "webxr-pwa-store",
+            "native-unity",
+            "native-unreal",
+            "native-other"
+          ]
+        },
+        "appType": {
+          "type": "string",
+          "enum": ["immersive-vr", "panel-2d", "mixed-reality-passthrough"]
+        },
+        "passthroughLaunch": {
+          "type": "string",
+          "enum": ["vr-only", "passthrough-capable"]
+        },
+        "engineNotes": {
+          "type": "string"
+        }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["horizonStore", "laterPwa"],
+      "properties": {
+        "horizonStore": {
+          "type": "boolean",
+          "description": "True if a Store PDP is in scope now or as a committed later PWA wrap."
+        },
+        "laterPwa": {
+          "type": "boolean"
+        }
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate", "also"],
+      "properties": {
+        "gate": {
+          "type": "string",
+          "const": "quest3"
+        },
+        "also": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["quest3s", "quest2-soak"]
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "tracking": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["playModes", "defaultPlayMode"],
+      "properties": {
+        "playModes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["sitting", "standing", "roomscale"]
+          }
+        },
+        "defaultPlayMode": {
+          "type": "string",
+          "enum": ["sitting", "standing", "roomscale"]
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modes", "handsOptional"],
+      "properties": {
+        "modes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["controllers", "hands", "gamepad"]
+          }
+        },
+        "handsOptional": {
+          "type": "boolean"
+        }
+      }
+    },
+    "locomotion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default"],
+      "properties": {
+        "default": {
+          "type": "string",
+          "enum": [
+            "teleport-snap",
+            "dash-slow-smooth-turn",
+            "continuous-smooth",
+            "station-none",
+            "vehicle-cockpit"
+          ]
+        }
+      }
+    },
+    "comfort": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["studioTier", "storeRating", "settings"],
+      "properties": {
+        "studioTier": {
+          "type": "string",
+          "enum": ["A", "B", "C"]
+        },
+        "storeRating": {
+          "type": "string",
+          "enum": ["comfortable", "moderate", "intense"]
+        },
+        "settings": {
+          "type": "string",
+          "enum": ["yes-full", "yes-turn-only", "no"]
+        }
+      }
+    },
+    "social": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "ugc", "reportFromMetaButton"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "local-shared-guardian",
+            "online-sync",
+            "async-ugc",
+            "online-sync+ugc"
+          ]
+        },
+        "ugc": {
+          "type": "boolean"
+        },
+        "reportFromMetaButton": {
+          "type": "boolean",
+          "description": "Must be true when mode is not none and horizonStore is true."
+        }
+      }
+    },
+    "commerce": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["price", "iap", "ads"],
+      "properties": {
+        "price": {
+          "type": "string",
+          "enum": ["free", "paid", "undecided-price"]
+        },
+        "iap": {
+          "type": "string",
+          "enum": ["none", "consumable", "durable", "subscription", "mixed"]
+        },
+        "ads": {
+          "type": "string",
+          "enum": ["no", "yes-agreed-with-meta", "yes-windows-into-service"]
+        }
+      }
+    },
+    "age": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["group", "iarcPlanned", "matureNotes"],
+      "properties": {
+        "group": {
+          "type": "string",
+          "enum": ["teens-adults-13plus", "mixed-ages", "children-under-13"]
+        },
+        "iarcPlanned": {
+          "type": "boolean"
+        },
+        "matureNotes": {
+          "type": "string"
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collects", "policyUrl", "deletionPath"],
+      "properties": {
+        "collects": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "policyUrl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deletionPath": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requested", "denyBehavior"],
+      "properties": {
+        "requested": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "denyBehavior": {
+          "type": "string",
+          "enum": ["degrade", "explain-and-block-feature"]
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["core"],
+      "properties": {
+        "core": {
+          "type": "string",
+          "enum": ["offline-ok", "online-required", "online-optional-features"]
+        }
+      }
+    },
+    "listing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["horizonStoreAssets", "shortDescription", "assetOwner"],
+      "properties": {
+        "horizonStoreAssets": {
+          "type": "string",
+          "enum": ["planned", "n/a"]
+        },
+        "shortDescription": {
+          "type": "string"
+        },
+        "assetOwner": {
+          "type": "string"
+        }
+      }
+    },
+    "ambiguities": {
+      "type": "array",
+      "description": "Must be empty to pass ADR 0006.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "interrogation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["completedThrough", "log"],
+      "properties": {
+        "completedThrough": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "log": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["q", "answer"],
+            "properties": {
+              "q": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20
+              },
+              "answer": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "storeGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ranOn", "vrcPageFetched", "result", "openTodos", "blockerNotes"],
+      "properties": {
+        "ranOn": {
+          "type": "string",
+          "description": "ISO date the checklists were applied."
+        },
+        "vrcPageFetched": {
+          "type": "string",
+          "description": "ISO date official VRC/policy pages were re-fetched, or empty if not yet."
+        },
+        "result": {
+          "type": "string",
+          "enum": ["pass", "fail", "n/a-browser-only", "not-run"]
+        },
+        "openTodos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "blockerNotes": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "description": "Passed gates cannot carry open ambiguities.",
+      "if": {
+        "required": ["storeGate"],
+        "properties": {
+          "storeGate": {
+            "properties": {
+              "result": { "enum": ["pass", "n/a-browser-only"] }
+            },
+            "required": ["result"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "ambiguities": { "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "description": "Mixed Ages needs Platform Get Age Category API — not hosted WebXR.",
+      "if": {
+        "required": ["age"],
+        "properties": {
+          "age": {
+            "properties": { "group": { "const": "mixed-ages" } },
+            "required": ["group"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "platform": {
+            "properties": {
+              "path": {
+                "not": { "const": "webxr-hosted" }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "Store IAP is not available on hosted WebXR without a committed later PWA.",
+      "if": {
+        "required": ["platform", "distribution", "commerce"],
+        "properties": {
+          "platform": {
+            "properties": { "path": { "const": "webxr-hosted" } },
+            "required": ["path"]
+          },
+          "distribution": {
+            "properties": { "laterPwa": { "const": false } },
+            "required": ["laterPwa"]
+          },
+          "commerce": {
+            "properties": { "iap": { "not": { "const": "none" } } },
+            "required": ["iap"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "commerce": {
+            "properties": { "iap": { "const": "none" } }
+          }
+        }
+      }
+    },
+    {
+      "description": "Store-bound social/UGC requires Meta-button reporting.",
+      "if": {
+        "required": ["distribution", "social"],
+        "properties": {
+          "distribution": {
+            "properties": { "horizonStore": { "const": true } },
+            "required": ["horizonStore"]
+          },
+          "social": {
+            "properties": { "mode": { "not": { "const": "none" } } },
+            "required": ["mode"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "social": {
+            "properties": { "reportFromMetaButton": { "const": true } },
+            "required": ["reportFromMetaButton"]
+          }
+        }
+      }
+    }
+  ]
+}
