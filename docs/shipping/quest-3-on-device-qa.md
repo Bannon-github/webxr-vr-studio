@@ -18,6 +18,7 @@ Runnable slice: [`examples/interactive-prop`](../../examples/interactive-prop/).
 8. **Present-path antialias / MSAA off** (pre-headset authoring gate): renderer is constructed with `antialias: false` so Three’s `XRWebGLLayer` inherits MSAA off. Context attribute is immutable; do not expect a live flip. `crate-toolbox` v0.16. Not a measured ms.
 9. **Present-path NoToneMapping** (pre-headset authoring gate): immersive session uses `renderer.toneMapping = NoToneMapping` (identity exposure); `sessionend` restores lookdev ACES + the prior `toneMappingExposure`. `crate-toolbox` v0.17. Not a measured ms.
 10. **Present-path IBL / environment off** (pre-headset authoring gate): immersive session nulls `scene.environment` (r170 `environmentIntensity` is a post-sample multiply and does not skip sampling); `sessionend` restores the saved PMREM + lookdev intensity without disposing the texture. `crate-toolbox` v0.18. Not a measured ms.
+11. **Present-path directional / punctual off** (pre-headset authoring gate): immersive session hides the lookdev `DirectionalLight` (`visible = false` + intensity 0; r170 intensity 0 does not drop `NUM_DIR_LIGHTS`) and keeps `HemisphereLight`; `sessionend` restores lookdev visible + intensity. `crate-toolbox` v0.19. Not a measured ms.
 
 ## Frame rate (`supportedFrameRates` / `updateTargetFrameRate`)
 
