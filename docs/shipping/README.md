@@ -2,6 +2,8 @@
 
 **Gate device:** [Quest 3](quest-3-target.md) — Meta Quest Browser, immersive-vr, **90 Hz**. Other rows in the matrix are coverage, not the performance bar.
 
+**New titles / Store:** [horizon-store/](horizon-store/) — interrogation + brief + VRC-oriented checklists before scaffold ([ADR 0006](../../studio/adr/0006-store-gate-before-build.md)). Does not replace this matrix.
+
 ## Device / browser matrix (maintain per release)
 
 Fill this table for every release; do not ship with empty cells.
@@ -32,15 +34,20 @@ WebXR is not Baseline; capabilities differ. Always call isSessionSupported at ru
 
 ## Distribution
 
-1. **Progressive Web App** — installable shell, HTTPS, offline cache for shell assets (careful with large GLBs).
-2. **Headset browser bookmark / home shortcut** — document first-run.
-3. **Store wrappers** — only when product requires; keep web build as source of truth when possible.
+Hosted WebXR, WebXR **Store PWA**, and native Unity/Unreal are different products. Lock the path in an [app brief](../../studio/briefs/_template/) before scaffolding ([ADR 0006](../../studio/adr/0006-store-gate-before-build.md), [webxr-vs-native](horizon-store/webxr-vs-native.md)).
+
+1. **Hosted WebXR (this repo’s default for examples)** — HTTPS URL in Meta Quest Browser; bookmark / Web Launch. Not a Horizon Store listing.
+2. **WebXR PWA** — optional Bubblewrap / TWA wrapper of that origin for the [Meta Horizon Store](https://developers.meta.com/horizon/documentation/web/pwa-overview/). Same VRC review as other APKs.
+3. **Native Store APK** — Unity / Unreal / Spatial SDK. Out of this repo’s examples; still requires interrogation + store-gate if an agent is asked to start that title.
 4. **Versioned CDN assets** — immutable URLs for GLB/KTX2; cache-bust on content pipeline revisions.
+
+Store-bound titles: run [horizon-store/](horizon-store/) (requirements pass + DQ avoidance). Re-fetch Meta’s [VRC table](https://developers.meta.com/horizon/resources/publish-quest-req/). Do not claim approval from a green studio checklist.
 
 ## Release checklist
 
+- [ ] New title: interrogation complete, brief schema-valid, store-gate `pass` or `n/a-browser-only` ([horizon-store](horizon-store/), [ADR 0006](../../studio/adr/0006-store-gate-before-build.md))
 - [ ] Matrix filled and signed by QA
-- [ ] Comfort tier defaults verified
+- [ ] Comfort tier defaults verified (studio A/B/C **and** Store Comfortable/Moderate/Intense if listing)
 - [ ] Quest 3 90 Hz soak (10+ min); 72 Hz fallback documented if used — fill [quest-3-on-device-qa](quest-3-on-device-qa.md) (no invented ms)
 - [ ] Privacy policy covers camera/mic/hand if used
 - [ ] Crash/analytics pipeline does not log secrets

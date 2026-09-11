@@ -55,6 +55,7 @@ Applies when the user hovers, grabs, or drives a multi-step activity. Full path:
 
 ## Shipping
 
+- [ ] **New title:** [brief](briefs/_template/) complete and store-gate `pass` or `n/a-browser-only` ([ADR 0006](adr/0006-store-gate-before-build.md), [horizon-store](../docs/shipping/horizon-store/)) — skip for work on existing examples/objects
 - [ ] Device/browser matrix updated
 - [ ] CHANGELOG entry
 - [ ] Known issues listed in release notes

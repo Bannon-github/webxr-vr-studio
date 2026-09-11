@@ -40,6 +40,15 @@ A pragmatic path from “can I enter VR?” to “can we ship a comfortable prod
 3. [`docs/testing/`](docs/testing/) headset + emulator pass.
 4. Meet [`studio/quality-bar.md`](studio/quality-bar.md).
 
+## 7. New title / Horizon Store (agents)
+
+Do this **before** generating an app ([ADR 0006](studio/adr/0006-store-gate-before-build.md)):
+
+1. [WebXR vs native](docs/shipping/horizon-store/webxr-vs-native.md) — hosted Browser URL, WebXR Store PWA, or native Unity/Unreal. This repo’s examples are WebXR.
+2. Ordered stream: [`studio/app-interrogation.md`](studio/app-interrogation.md). Close every ambiguity.
+3. Copy [`studio/briefs/_template/`](studio/briefs/_template/) → `studio/briefs/<appId>/`. Schema: [`app-brief.schema.json`](studio/briefs/_template/app-brief.schema.json).
+4. Run [`docs/shipping/horizon-store/`](docs/shipping/horizon-store/) — [requirements-pass](docs/shipping/horizon-store/requirements-pass.md) + [disqualification-avoid](docs/shipping/horizon-store/disqualification-avoid.md). Re-fetch [Meta VRCs](https://developers.meta.com/horizon/resources/publish-quest-req/). Do not claim the title will be approved.
+
 ## Canonical external references
 
 | Topic | Source |
@@ -52,3 +61,7 @@ A pragmatic path from “can I enter VR?” to “can we ship a comfortable prod
 | FFR | [XRWebGLLayer.fixedFoveation](https://developer.mozilla.org/en-US/docs/Web/API/XRWebGLLayer/fixedFoveation) |
 | Layers | [WebXR Layers API Level 1](https://www.w3.org/TR/webxrlayers-1/) |
 | Samples | [immersive-web/webxr-samples](https://github.com/immersive-web/webxr-samples) |
+| Horizon Store VRCs | [Meta Quest VRC guidelines](https://developers.meta.com/horizon/resources/publish-quest-req/) |
+| Store assets | [Asset design guidelines](https://developers.meta.com/horizon/resources/asset-guidelines/) |
+| App / age / comfort policy | [App policies](https://developers.meta.com/horizon/policy/app-policies/), [age-groups](https://developers.meta.com/horizon/resources/age-groups/) |
+| WebXR PWA | [PWA overview](https://developers.meta.com/horizon/documentation/web/pwa-overview/) |

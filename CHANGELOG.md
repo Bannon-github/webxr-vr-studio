@@ -2,6 +2,14 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.17.0] — 2026-09-11
+
+### Added
+
+- [Horizon Store gate](docs/shipping/horizon-store/) — agent-pluggable requirements checklist, disqualification patterns, and WebXR vs native path split (Quest 3; Meta VRC/policy cites; verify-on-fetch TODOs; not an approval guarantee)
+- [App interrogation](studio/app-interrogation.md) + [brief template/schema](studio/briefs/_template/) — ordered question stream → filled brief
+- [ADR 0006](studio/adr/0006-store-gate-before-build.md) — no app scaffold until brief + store-gate pass
+
 ## [0.16.0] — 2026-09-10
 
 ### Changed
