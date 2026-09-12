@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.24.0 — 2026-09-12
+
+- **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After v0.13 dropped LOD2 `normalMap`, v0.14 halved LOD1 `normalScale`, and v0.23 dropped LOD2 ORM, **LOD1 no longer samples tangent-space normals**. LOD0 keeps the five shared v0.12 materials (512² albedo + ORM + `normalMap`, full modest `normalScale`). LOD1 body / lid / latch / tool stub use **separate** materials with the same 512² albedo + packed ORM and `{ normalMap: false }` — `normalMap = null`. LOD2 stays v0.23 albedo-only (`woodFar`: no `normalMap`, no ORM; constant roughness **220/255** and metalness **8/255**). Fastener is not an LOD mesh and stays on shared LOD0 brass. `setToolboxLod` is still visibility-only. Unique canvases still 9. Draw / tri counts unchanged (14 / 8 / 2 + fastener 1). Session present-path chain (v0.15–v0.22) and v0.8 allocation scrub kept.
+- **Layers:** still L0–L5. This revisits already-claimed L3 (mid-LOD fragment / texture-sample cost), not a new layer.
+- **Quest 3:** Cheaper LOD1 fragments at 2.4–4.5 m (no tangent-space normal sample). Draws / tris / texture caps unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.24.0/`
+
 ## 0.23.0 — 2026-09-12
 
 - **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After v0.13 dropped LOD2 `normalMap` and v0.14 halved LOD1 `normalScale`, **LOD2 no longer samples packed ORM**. LOD0 keeps the five shared v0.12 materials (512² albedo + ORM + `normalMap`, full modest `normalScale`). LOD1 keeps albedo + ORM + `normalMap` at half scale. LOD2 body + lid still share one far wood material (`woodFar`) with the same 512² albedo, `normalMap = null`, and now `{ ormMap: false }` — no `roughnessMap` / `metalnessMap`. Constant roughness **220/255** and metalness **8/255** match wood ORM midtones (`woodOrm` G = 200 + stripe×40 at stripe 0.5; B is authored 8) so `MeshStandardMaterial` stays lit under the present-path ambient fill. Fastener is not an LOD mesh and stays on shared LOD0 brass. `setToolboxLod` is still visibility-only. Unique canvases still 9. Draw / tri counts unchanged (14 / 8 / 2 + fastener 1). Session present-path chain (v0.15–v0.22) and v0.8 allocation scrub kept.

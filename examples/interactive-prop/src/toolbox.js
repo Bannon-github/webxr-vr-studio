@@ -2,7 +2,6 @@ import * as THREE from "three";
 import behaviorTemplate from "./behavior.json" with { type: "json" };
 import {
   getCrateL2Maps,
-  L3_LOD1_NORMAL_SCALE_MUL,
   L3_LOD2_WOOD_METALNESS,
   L3_LOD2_WOOD_ROUGHNESS,
   mappedStandard,
@@ -86,8 +85,8 @@ export function createToolbox() {
   const brass = mappedStandard(0xffffff, l2.brass);
   const steel = mappedStandard(0xffffff, l2.steel);
   const handleMat = mappedStandard(0xe8b42a, l2.wood);
-  // LOD1 mid crate: same canvases, half normalScale (no extra draws/textures).
-  const mid = { normalScaleMul: L3_LOD1_NORMAL_SCALE_MUL };
+  // LOD1 mid crate: albedo + packed ORM, no normalMap (v0.24). Same canvases.
+  const mid = { normalMap: false };
   const woodMid = mappedStandard(0xffffff, l2.wood, mid);
   const woodDarkMid = mappedStandard(0x7a5840, l2.wood, mid);
   const brassMid = mappedStandard(0xffffff, l2.brass, mid);
@@ -211,11 +210,11 @@ export function createToolbox() {
     textureSize: l2.size,
     uniqueTextures: l2.uniqueTextures,
     maps: "albedo+ORM+normal",
-    lodNormalMaps: { 0: true, 1: true, 2: false },
+    lodNormalMaps: { 0: true, 1: false, 2: false },
     lodOrmMaps: { 0: true, 1: true, 2: false },
-    lodNormalScaleMul: { 0: 1, 1: L3_LOD1_NORMAL_SCALE_MUL, 2: 0 },
+    lodNormalScaleMul: { 0: 1, 1: 0, 2: 0 },
     lod2Constants: { roughness: L3_LOD2_WOOD_ROUGHNESS, metalness: L3_LOD2_WOOD_METALNESS },
-    note: "procedural canvas stand-in; LOD1 half normalScale; LOD2 albedo-only (no normalMap, no ORM)",
+    note: "procedural canvas stand-in; LOD1 albedo+ORM (no normalMap); LOD2 albedo-only (no normalMap, no ORM)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
