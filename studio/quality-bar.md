@@ -50,8 +50,8 @@ Applies when the user hovers, grabs, or drives a multi-step activity. Full path:
 - [ ] Controllers: `select` = use, `squeeze` = grab; core loop works without hands
 - [ ] Hand path (if advertised) is optional; pinch maps to the same intents; hover-before-pinch matches controller emissive (`crate-toolbox` v0.9)
 - [ ] Texture / LOD / triangle class meets [photoreal-realtime](../docs/performance/photoreal-realtime.md) **on Quest 3** (L2/L3 inside [quest-3-target](../docs/shipping/quest-3-target.md); baked maps + LODs, not scan density)
-- [ ] LOD2 far materials are albedo-only — no `normalMap`, no ORM `roughnessMap`/`metalnessMap`; modest constant roughness/metalness so `MeshStandardMaterial` stays lit under present-path ambient fill (`crate-toolbox` v0.23)
-- [ ] LOD1 mid materials are albedo-only — no `normalMap`, no ORM `roughnessMap`/`metalnessMap`; modest constant roughness/metalness per class so `MeshStandardMaterial` stays lit under present-path ambient fill (`crate-toolbox` v0.25 procedural canvases; a packaged GLB must author the same — omit LOD1 `normalTexture` and ORM; the loader does not strip)
+- [ ] LOD2 far materials are albedo-only — no `normalMap`, no ORM `roughnessMap`/`metalnessMap`; modest constant roughness/metalness so `MeshStandardMaterial` stays lit under present-path ambient fill (`crate-toolbox` v0.23); albedo authored at ≤256² (`crate-toolbox` v0.26)
+- [ ] LOD1 mid materials are albedo-only — no `normalMap`, no ORM `roughnessMap`/`metalnessMap`; modest constant roughness/metalness per class so `MeshStandardMaterial` stays lit under present-path ambient fill (`crate-toolbox` v0.25 procedural canvases; a packaged GLB must author the same — omit LOD1 `normalTexture` and ORM; the loader does not strip); albedo authored at ≤256² (`crate-toolbox` v0.26; loader does not downsample)
 - [ ] Scale 1 unit = 1 m; seated reach or ray-use for every required step
 - [ ] Throw / physics never applies impulse to the camera rig
 - [ ] State change is visual + audio and/or haptic; not audio-only

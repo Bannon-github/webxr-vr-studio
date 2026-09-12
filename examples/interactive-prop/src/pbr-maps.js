@@ -3,6 +3,13 @@ import * as THREE from "three";
 /** Shared L2 stand-in maps. 512², mipmapped. Not photoreal desktop 4K. */
 export const L2_TEXTURE_SIZE = 512;
 
+/**
+ * LOD1 / LOD2 albedo authoring size (half of `L2_TEXTURE_SIZE`).
+ * Mid/far bind these maps instead of the shared 512² L2 albedos.
+ * LOD0 keeps 512² albedo + ORM + normal. Not a headset-measured ms claim.
+ */
+export const L3_LOD_ALBEDO_SIZE = 256;
+
 function hash2(ix, iy) {
   const n = Math.sin(ix * 127.1 + iy * 311.7) * 43758.5453123;
   return n - Math.floor(n);
@@ -245,8 +252,8 @@ export const L2_NORMAL_SCALE = { wood: [0.62, 0.62], brass: [0.3, 0.3], steel: [
 /**
  * v0.14 LOD1 (~2.4–4.5 m) `normalScale` vs LOD0. Kept as the documented
  * half-scale constant. v0.24 LOD1 drops `normalMap` entirely (`{ normalMap:
- * false }`); v0.25 also drops packed ORM (`{ ormMap: false }`), so mid
- * materials no longer apply this multiplier.
+ * false }`); v0.25 also drops packed ORM (`{ ormMap: false }`); v0.26 binds
+ * 256² albedo on LOD1/LOD2, so mid materials no longer apply this multiplier.
  */
 export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
 
@@ -282,6 +289,7 @@ function materialMaps(albedo, orm, normal, normalScale) {
 export function getCrateL2Maps() {
   if (cached) return cached;
   const s = L2_TEXTURE_SIZE;
+  const lodAlb = L3_LOD_ALBEDO_SIZE;
   const woodAlb = texFromCanvas(woodAlbedo(s), true, 2, 2);
   const woodOrmTex = texFromCanvas(woodOrm(s), false, 2, 2);
   const woodNrm = texFromCanvas(normalCanvas(s, woodHeight, L2_NORMAL_STRENGTH.wood), false, 2, 2);
@@ -291,12 +299,19 @@ export function getCrateL2Maps() {
   const steelAlb = texFromCanvas(steelAlbedo(s), true, 2, 4);
   const steelOrmTex = texFromCanvas(steelOrm(s), false, 2, 4);
   const steelNrm = texFromCanvas(normalCanvas(s, steelHeight, L2_NORMAL_STRENGTH.steel), false, 2, 4);
+  // v0.26: dedicated half-res albedos for LOD1/LOD2 (wood + brass). Steel
+  // has no mid/far mesh (LOD1 tool stub is wood-tinted handleMatMid).
+  const woodAlbLod = texFromCanvas(woodAlbedo(lodAlb), true, 2, 2);
+  const brassAlbLod = texFromCanvas(brassAlbedo(lodAlb), true, 1, 1);
   cached = {
     size: s,
-    uniqueTextures: 9,
+    lodAlbedoSize: lodAlb,
+    uniqueTextures: 11,
     wood: materialMaps(woodAlb, woodOrmTex, woodNrm, L2_NORMAL_SCALE.wood),
     brass: materialMaps(brassAlb, brassOrmTex, brassNrm, L2_NORMAL_SCALE.brass),
     steel: materialMaps(steelAlb, steelOrmTex, steelNrm, L2_NORMAL_SCALE.steel),
+    woodLod: materialMaps(woodAlbLod, null, null, L2_NORMAL_SCALE.wood),
+    brassLod: materialMaps(brassAlbLod, null, null, L2_NORMAL_SCALE.brass),
   };
   return cached;
 }
@@ -311,7 +326,8 @@ export function getCrateL2Maps() {
  * stays lit under the present-path ambient fill. Defaults to wood-ORM
  * midtones (`L3_LOD2_WOOD_*` / `L3_LOD1_WOOD_*`); pass `roughness` /
  * `metalness` for another class (LOD1 brass uses `L3_LOD1_BRASS_*`).
- * LOD1 and LOD2 use `{ normalMap: false, ormMap: false }` (albedo-only).
+ * LOD1 and LOD2 use `{ normalMap: false, ormMap: false }` (albedo-only)
+ * and bind `maps.albedo` at `L3_LOD_ALBEDO_SIZE` (256²), not the 512² L2 maps.
  */
 export function mappedStandard(colorHex, maps, opts = {}) {
   const useNormal = opts.normalMap !== false && Boolean(maps.normal);

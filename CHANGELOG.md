@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.28.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.26.0** L3 packaging/perf UPGRADE: LOD1 and LOD2 procedural materials bind half-resolution (256²) albedo maps instead of the shared 512² L2 albedos. LOD0 stays 512² albedo+ORM+normal at full modest `normalScale`; mid/far stay albedo-only (v0.25 constants). Unique canvases 9 → 11 (extra 256² wood/brass albedos). Same draws / tris as v0.25. Headset ms / FFR still unmeasured.
+
 ## [0.27.0] — 2026-09-12
 
 ### Changed

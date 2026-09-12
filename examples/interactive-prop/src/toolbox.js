@@ -89,7 +89,7 @@ export function createToolbox() {
   const brass = mappedStandard(0xffffff, l2.brass);
   const steel = mappedStandard(0xffffff, l2.steel);
   const handleMat = mappedStandard(0xe8b42a, l2.wood);
-  // LOD1 mid crate: albedo-only (v0.25). Same 512² albedo canvases.
+  // LOD1 mid crate: albedo-only (v0.25) at half-res 256² albedo (v0.26).
   // Wood mid uses wood-ORM-midtone constants (same as LOD2). Brass latch
   // uses brass-ORM-midtone constants so MeshStandardMaterial stays lit.
   const midWood = { normalMap: false, ormMap: false };
@@ -99,14 +99,15 @@ export function createToolbox() {
     roughness: L3_LOD1_BRASS_ROUGHNESS,
     metalness: L3_LOD1_BRASS_METALNESS,
   };
-  const woodMid = mappedStandard(0xffffff, l2.wood, midWood);
-  const woodDarkMid = mappedStandard(0x7a5840, l2.wood, midWood);
-  const brassMid = mappedStandard(0xffffff, l2.brass, midBrass);
-  const handleMatMid = mappedStandard(0xe8b42a, l2.wood, midWood);
-  // LOD2 far crate + lid: albedo-only (no normalMap, no ORM). Constant
-  // wood-ORM-midtone roughness/metalness keeps MeshStandardMaterial lit.
+  const woodMid = mappedStandard(0xffffff, l2.woodLod, midWood);
+  const woodDarkMid = mappedStandard(0x7a5840, l2.woodLod, midWood);
+  const brassMid = mappedStandard(0xffffff, l2.brassLod, midBrass);
+  const handleMatMid = mappedStandard(0xe8b42a, l2.woodLod, midWood);
+  // LOD2 far crate + lid: albedo-only (no normalMap, no ORM) at the same
+  // 256² wood albedo. Constant wood-ORM-midtone roughness/metalness keeps
+  // MeshStandardMaterial lit.
   const far = { normalMap: false, ormMap: false };
-  const woodFar = mappedStandard(0xffffff, l2.wood, far);
+  const woodFar = mappedStandard(0xffffff, l2.woodLod, far);
 
   const body = new THREE.Group();
   body.name = "body";
@@ -220,8 +221,10 @@ export function createToolbox() {
   root.userData.fastener = { mesh: fastener, turns: 0, needed: 4, seated: false };
   root.userData.l2 = {
     textureSize: l2.size,
+    lodAlbedoSize: l2.lodAlbedoSize,
     uniqueTextures: l2.uniqueTextures,
     maps: "albedo+ORM+normal",
+    lodAlbedoMaps: { 0: l2.size, 1: l2.lodAlbedoSize, 2: l2.lodAlbedoSize },
     lodNormalMaps: { 0: true, 1: false, 2: false },
     lodOrmMaps: { 0: true, 1: false, 2: false },
     lodNormalScaleMul: { 0: 1, 1: 0, 2: 0 },
@@ -230,7 +233,7 @@ export function createToolbox() {
       brass: { roughness: L3_LOD1_BRASS_ROUGHNESS, metalness: L3_LOD1_BRASS_METALNESS },
     },
     lod2Constants: { roughness: L3_LOD2_WOOD_ROUGHNESS, metalness: L3_LOD2_WOOD_METALNESS },
-    note: "procedural canvas stand-in; LOD1 albedo-only (no normalMap, no ORM); LOD2 albedo-only (no normalMap, no ORM)",
+    note: "procedural canvas stand-in; LOD0 512² albedo+ORM+normal; LOD1/LOD2 albedo-only at 256² (no normalMap, no ORM)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },

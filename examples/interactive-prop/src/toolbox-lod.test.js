@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   L2_NORMAL_SCALE,
+  L2_TEXTURE_SIZE,
+  L3_LOD_ALBEDO_SIZE,
   L3_LOD1_BRASS_METALNESS,
   L3_LOD1_BRASS_ROUGHNESS,
   L3_LOD1_WOOD_METALNESS,
@@ -44,12 +46,22 @@ function scaleXY(mat) {
   return [mat.normalScale?.x, mat.normalScale?.y];
 }
 
-test("LOD0 full normalScale + normalMap + ORM; LOD1 and LOD2 albedo-only", () => {
+function mapWH(tex) {
+  const img = tex?.image;
+  return [img?.width, img?.height];
+}
+
+test("LOD0 512² albedo+ORM+normal; LOD1/LOD2 256² albedo-only", () => {
   const crate = createToolbox();
+  assert.equal(L3_LOD_ALBEDO_SIZE, 256);
+  assert.equal(L3_LOD_ALBEDO_SIZE * 2, L2_TEXTURE_SIZE);
   assert.equal(crate.userData.l2.lodNormalScaleMul[0], 1);
   assert.equal(crate.userData.l2.lodNormalScaleMul[1], 0);
   assert.equal(crate.userData.l2.lodNormalScaleMul[2], 0);
-  assert.equal(crate.userData.l2.uniqueTextures, 9);
+  assert.equal(crate.userData.l2.textureSize, L2_TEXTURE_SIZE);
+  assert.equal(crate.userData.l2.lodAlbedoSize, L3_LOD_ALBEDO_SIZE);
+  assert.equal(crate.userData.l2.uniqueTextures, 11);
+  assert.deepEqual(crate.userData.l2.lodAlbedoMaps, { 0: 512, 1: 256, 2: 256 });
 
   setToolboxLod(crate, 0);
   assert.equal(crate.userData.lod.current, 0);
@@ -57,6 +69,11 @@ test("LOD0 full normalScale + normalMap + ORM; LOD1 and LOD2 albedo-only", () =>
   assert.ok(lod0.length > 0);
   for (const mat of lod0) {
     assert.ok(mat.normalMap, "LOD0 must keep v0.12 normalMap");
+    assert.ok(mat.roughnessMap, "LOD0 must keep ORM");
+    assert.ok(mat.metalnessMap, "LOD0 must keep ORM");
+    assert.deepEqual(mapWH(mat.map), [512, 512], "LOD0 albedo stays 512²");
+    assert.deepEqual(mapWH(mat.roughnessMap), [512, 512], "LOD0 ORM stays 512²");
+    assert.deepEqual(mapWH(mat.normalMap), [512, 512], "LOD0 normal stays 512²");
     const [nx, ny] = scaleXY(mat);
     assert.ok(nx > 0 && ny > 0);
     const expected = Object.values(L2_NORMAL_SCALE).find(([sx]) => sx === nx);
@@ -73,16 +90,17 @@ test("LOD0 full normalScale + normalMap + ORM; LOD1 and LOD2 albedo-only", () =>
   assert.equal(lod1Named.handleMat.roughness, L3_LOD1_WOOD_ROUGHNESS);
   assert.equal(lod1Named.brass.roughness, L3_LOD1_BRASS_ROUGHNESS);
   assert.equal(lod1Named.brass.metalness, L3_LOD1_BRASS_METALNESS);
+  assert.equal(lod1Named.wood.map, lod1Named.woodDark.map, "LOD1 wood variants share 256² albedo");
+  assert.equal(lod1Named.handleMat.map, lod1Named.wood.map);
+  assert.notEqual(lod1Named.brass.map, lod1Named.wood.map, "LOD1 brass uses its own 256² albedo");
   for (const mat of lod1) {
     assert.equal(mat.normalMap, null, "LOD1 drops normalMap");
     assert.ok(mat.map, "LOD1 keeps albedo");
     assert.equal(mat.roughnessMap, null, "LOD1 drops ORM roughnessMap");
     assert.equal(mat.metalnessMap, null, "LOD1 drops ORM metalnessMap");
-    const peer = lod0.find((m) => m.map === mat.map);
-    assert.ok(peer, "LOD1 must reuse a LOD0 albedo canvas (no extra unique maps)");
-    assert.notEqual(mat, peer, "LOD1 uses a separate material instance");
-    assert.ok(peer.normalMap, "LOD0 peer still has normalMap");
-    assert.ok(peer.roughnessMap, "LOD0 peer still has ORM");
+    assert.deepEqual(mapWH(mat.map), [256, 256], "LOD1 albedo is 256²");
+    const reused = lod0.find((m) => m.map === mat.map);
+    assert.equal(reused, undefined, "LOD1 must not bind the shared 512² L2 albedo");
   }
 
   setToolboxLod(crate, 2);
@@ -96,10 +114,15 @@ test("LOD0 full normalScale + normalMap + ORM; LOD1 and LOD2 albedo-only", () =>
     assert.equal(mat.metalnessMap, null, "LOD2 drops ORM metalnessMap");
     assert.equal(mat.roughness, L3_LOD2_WOOD_ROUGHNESS);
     assert.equal(mat.metalness, L3_LOD2_WOOD_METALNESS);
+    assert.deepEqual(mapWH(mat.map), [256, 256], "LOD2 albedo is 256²");
+    const reused = lod0.find((m) => m.map === mat.map);
+    assert.equal(reused, undefined, "LOD2 must not bind the shared 512² L2 albedo");
+    assert.equal(mat.map, lod1Named.wood.map, "LOD2 shares the 256² wood albedo with LOD1");
   }
   for (const mat of lod0) {
     assert.ok(mat.normalMap, "LOD0 keeps normalMap after LOD2 collect");
     assert.ok(mat.roughnessMap, "LOD0 keeps ORM");
+    assert.deepEqual(mapWH(mat.map), [512, 512], "LOD0 albedo stays 512² after LOD2 collect");
   }
   assert.equal(crate.userData.l2.lodNormalMaps[0], true);
   assert.equal(crate.userData.l2.lodNormalMaps[1], false);

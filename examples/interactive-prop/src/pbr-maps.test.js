@@ -4,6 +4,7 @@ import {
   L2_NORMAL_SCALE,
   L2_NORMAL_STRENGTH,
   L2_TEXTURE_SIZE,
+  L3_LOD_ALBEDO_SIZE,
   L3_LOD1_BRASS_METALNESS,
   L3_LOD1_BRASS_ROUGHNESS,
   L3_LOD1_NORMAL_SCALE_MUL,
@@ -20,6 +21,8 @@ import {
 
 test("L2 authoring caps stay 512² with three normal slots", () => {
   assert.equal(L2_TEXTURE_SIZE, 512);
+  assert.equal(L3_LOD_ALBEDO_SIZE, 256);
+  assert.equal(L3_LOD_ALBEDO_SIZE * 2, L2_TEXTURE_SIZE);
   assert.equal(Object.keys(L2_NORMAL_STRENGTH).join(","), "wood,brass,steel");
   assert.equal(Object.keys(L2_NORMAL_SCALE).join(","), "wood,brass,steel");
   for (const pair of Object.values(L2_NORMAL_SCALE)) {
