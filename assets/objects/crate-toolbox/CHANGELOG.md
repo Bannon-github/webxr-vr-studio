@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.28.0 — 2026-09-12
+
+- **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After v0.27 made LOD2 far wood unlit `MeshBasicMaterial`, **procedural LOD1 body / lid / latch / tool stub are unlit `MeshBasicMaterial`** (card-like) with the same 256² wood / brass albedos as v0.26. LOD0 keeps the five shared v0.12 materials (512² albedo + ORM + `normalMap`, full modest `normalScale`). LOD2 stays v0.27 `MeshBasicMaterial` at 256² wood. LOD1 materials are `map` only; no roughness/metalness (those uniforms do not apply). Fastener is not an LOD mesh and stays on shared LOD0 brass MeshStandard. `setToolboxLod` is still visibility-only. Unique canvases still **11**. Draw / tri counts unchanged (14 / 8 / 2 + fastener 1). Session present-path chain (v0.15–v0.22) and v0.8 allocation scrub kept. Runtime prefers a packaged GLB when present and does not rewrite materials; author LOD1 as unlit/basic (or `KHR_materials_unlit`) with ≤256² albedo and no `normalTexture` + ORM per the KTX2 recipe.
+- **Layers:** still L0–L5. This revisits already-claimed L3 (mid-LOD fragment / lighting cost), not a new layer.
+- **Quest 3:** Cheaper LOD1 fragments at 2.4–4.5 m (unlit / no PBR lighting math after v0.20 ambient-only fill). Draws / tris / texture caps unchanged. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.28.0/`
+
 ## 0.27.0 — 2026-09-12
 
 - **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After v0.26 bound 256² albedo on LOD1/LOD2, **procedural LOD2 far wood is unlit `MeshBasicMaterial`** (card-like) with that same 256² wood albedo. LOD0 keeps the five shared v0.12 materials (512² albedo + ORM + `normalMap`, full modest `normalScale`). LOD1 stays v0.26 albedo-only `MeshStandardMaterial` at 256² with wood/brass ORM-midtone constants. LOD2 body + lid share one `woodFar` `MeshBasicMaterial` — `map` only; no roughness/metalness (those uniforms do not apply). Fastener is not an LOD mesh and stays on shared LOD0 brass MeshStandard. `setToolboxLod` is still visibility-only. Unique canvases still **11**. Draw / tri counts unchanged (14 / 8 / 2 + fastener 1). Session present-path chain (v0.15–v0.22) and v0.8 allocation scrub kept. Runtime prefers a packaged GLB when present and does not rewrite materials; author LOD2 as unlit/basic (or `KHR_materials_unlit`) with ≤256² albedo and no `normalTexture` + ORM per the KTX2 recipe.

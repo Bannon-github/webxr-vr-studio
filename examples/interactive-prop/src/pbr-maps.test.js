@@ -121,6 +121,7 @@ test("mappedStandard omits ORM maps when opted out and uses wood midtone constan
 test("mappedBasic is unlit MeshBasic with albedo and no lighting uniforms", () => {
   const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
   const far = mappedBasic(0xffffff, maps);
+  const midTint = mappedBasic(0x7a5840, maps);
   assert.equal(far.isMeshBasicMaterial, true);
   assert.ok(!far.isMeshStandardMaterial);
   assert.equal(far.map, maps.albedo);
@@ -129,6 +130,14 @@ test("mappedBasic is unlit MeshBasic with albedo and no lighting uniforms", () =
   assert.ok(!far.metalnessMap);
   assert.equal(far.roughness, undefined);
   assert.equal(far.metalness, undefined);
+  assert.equal(midTint.isMeshBasicMaterial, true, "LOD1-style tinted wood is also MeshBasic");
+  assert.ok(!midTint.isMeshStandardMaterial);
+  assert.equal(midTint.map, maps.albedo);
+  assert.ok(!midTint.normalMap);
+  assert.ok(!midTint.roughnessMap);
+  assert.ok(!midTint.metalnessMap);
+  assert.equal(midTint.roughness, undefined);
+  assert.equal(midTint.metalness, undefined);
 });
 
 test("wood / brass / steel height fields are not flat", () => {
