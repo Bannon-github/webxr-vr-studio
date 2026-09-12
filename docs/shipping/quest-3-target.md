@@ -48,6 +48,7 @@ These are **studio defaults** for WebXR on Quest 3 — conservative versus Meta�
 | Present directional / punctual | **Off** while XR presenting | After IBL is nulled, MeshStandardMaterials still evaluate punctual lights (`NUM_DIR_LIGHTS`). r170 intensity 0 on a visible DirectionalLight does not drop that loop. Hide the lookdev sun (`visible = false` + intensity 0) on `sessionstart`; restore both on `sessionend`. Not per-frame. See `crate-toolbox` v0.19. |
 | Present ambient-only fill | **AmbientLight** while XR presenting (hemisphere off) | After directional is hidden, MeshStandardMaterials still evaluate hemisphere (`NUM_HEMI_LIGHTS`). r170 intensity 0 on a visible HemisphereLight does not drop that loop. Hide lookdev hemi (`visible = false` + intensity 0) and enable one reused `AmbientLight` (intensity **0.4**, color `0xf0e6d4`) on `sessionstart`; restore hemi and disable/detach ambient on `sessionend`. Not per-frame. See `crate-toolbox` v0.20. |
 | Present texture anisotropy | **1** while XR presenting | Lookdev / packaged GLB may use GPU max (often 16). Quest 3 TBDR AF is extra bandwidth at present-path pixel ratio 1 + FFR. Clamp bound maps to 1 on `sessionstart`; restore saved lookdev `.anisotropy` on `sessionend`. Not per-frame. See `crate-toolbox` v0.21. |
+| Present XR framebuffer scale | **1** while XR presenting | Distinct from v0.15 `setPixelRatio(1)`. Three r170 `renderer.xr.setFramebufferScaleFactor` scales the XR eye buffer vs the runtime recommended size. Default is often 1; raising it (HUD sharpness) is stretch-only and must be measured on-device. r170 has no getter and cannot rebuild the current layer while presenting — also set 1 before `setSession`. Restore lookdev scale on `sessionend`. Not per-frame. See `crate-toolbox` v0.22. |
 | Collision | **Simple hulls, not the hero mesh** | [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md) |
 
 **TODO:** confirm draw-call and triangle ceilings on-device for *this* product’s hero scene (Browser version + scene). The 100 / 750k figures are the gate we author to until a measured override is written on the release matrix.
@@ -76,6 +77,7 @@ hemi.visible = false; // v0.20 ambient-only fill; r170 intensity 0 does not drop
 hemi.intensity = 0;
 // one reused AmbientLight at 0.4 (0xf0e6d4); disable/detach on sessionend
 texture.anisotropy = 1; // v0.21 present-path AF clamp; restore lookdev anisotropy on sessionend
+if (renderer.xr.setFramebufferScaleFactor) renderer.xr.setFramebufferScaleFactor(1); // v0.22; set before setSession — r170 cannot rebuild the layer while presenting
 ```
 
 `supportedFrameRates` / `updateTargetFrameRate` may be missing on desktop emulators — skip, do not shim fake rates.

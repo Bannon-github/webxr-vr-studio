@@ -36,6 +36,7 @@ An immersive feature or release is **done** only when all applicable boxes pass.
 - [ ] Present-path directional / punctual off while XR presenting; restore lookdev `DirectionalLight` visible + intensity on session end (`crate-toolbox` v0.19)
 - [ ] Present-path ambient-only fill while XR presenting (HemisphereLight off + one `AmbientLight` at intensity 0.4); restore lookdev hemi and disable/detach the present-only ambient on session end (`crate-toolbox` v0.20)
 - [ ] Present-path texture anisotropy clamped to 1 while XR presenting; restore lookdev `.anisotropy` on session end (`crate-toolbox` v0.21)
+- [ ] Present-path XR framebuffer scale factor clamped to 1 while XR presenting; restore lookdev/desktop scale on session end (`crate-toolbox` v0.22; Three r170 `setFramebufferScaleFactor` only — no getter; set while presenting does not rebuild the current layer)
 - [ ] Texture/draw/tri budgets written on the object manifest `perf` block
 - [ ] On-device matrix filled per [quest-3-on-device-qa](../docs/shipping/quest-3-on-device-qa.md) (Browser, firmware, SHA, requested Hz, FFR, method). Leave cells blank until a headset run — do not invent ms.
 
@@ -49,6 +50,7 @@ Applies when the user hovers, grabs, or drives a multi-step activity. Full path:
 - [ ] Controllers: `select` = use, `squeeze` = grab; core loop works without hands
 - [ ] Hand path (if advertised) is optional; pinch maps to the same intents; hover-before-pinch matches controller emissive (`crate-toolbox` v0.9)
 - [ ] Texture / LOD / triangle class meets [photoreal-realtime](../docs/performance/photoreal-realtime.md) **on Quest 3** (L2/L3 inside [quest-3-target](../docs/shipping/quest-3-target.md); baked maps + LODs, not scan density)
+- [ ] LOD2 far materials are albedo-only — no `normalMap`, no ORM `roughnessMap`/`metalnessMap`; modest constant roughness/metalness so `MeshStandardMaterial` stays lit under present-path ambient fill (`crate-toolbox` v0.23)
 - [ ] Scale 1 unit = 1 m; seated reach or ray-use for every required step
 - [ ] Throw / physics never applies impulse to the camera rig
 - [ ] State change is visual + audio and/or haptic; not audio-only

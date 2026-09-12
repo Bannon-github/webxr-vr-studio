@@ -2,6 +2,18 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.25.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.23.0** L3 packaging/perf UPGRADE: LOD2 visual materials omit packed ORM (`roughnessMap`/`metalnessMap`) and use constant wood-ORM-midtone roughness 220/255 + metalness 8/255 (albedo-only far crate + lid). LOD0/1 keep albedo+ORM+normal (LOD1 half `normalScale`). Same draws / tris / 9 canvases as v0.22. Headset ms / FFR still unmeasured.
+
+## [0.24.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.22.0** Quest 3 shipping/perf gate: present-path XR framebuffer scale factor clamp to 1 in `examples/interactive-prop` (`sessionstart` after 90/72 + FFR + v0.15 pixel-ratio clamp + v0.16 MSAA-off verify + v0.17 NoToneMapping + v0.18 IBL off + v0.19 directional off + v0.20 ambient-only fill + v0.21 anisotropy clamp; save last-set / lookdev default, `setFramebufferScaleFactor(1)`; r170 has no getter and cannot rebuild the current layer while presenting — also set 1 at renderer setup; restore lookdev scale on `sessionend`). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.23.0] — 2026-09-11
 
 ### Changed
