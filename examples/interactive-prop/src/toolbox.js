@@ -1,6 +1,12 @@
 import * as THREE from "three";
 import behaviorTemplate from "./behavior.json" with { type: "json" };
-import { getCrateL2Maps, L3_LOD1_NORMAL_SCALE_MUL, mappedStandard } from "./pbr-maps.js";
+import {
+  getCrateL2Maps,
+  L3_LOD1_NORMAL_SCALE_MUL,
+  L3_LOD2_WOOD_METALNESS,
+  L3_LOD2_WOOD_ROUGHNESS,
+  mappedStandard,
+} from "./pbr-maps.js";
 
 /**
  * Procedural crate that follows ADR 0004: visual meshes, collider_* hulls,
@@ -86,8 +92,10 @@ export function createToolbox() {
   const woodDarkMid = mappedStandard(0x7a5840, l2.wood, mid);
   const brassMid = mappedStandard(0xffffff, l2.brass, mid);
   const handleMatMid = mappedStandard(0xe8b42a, l2.wood, mid);
-  // LOD2 far crate + lid: same albedo/ORM, no normalMap (L3 fragment-cost gate).
-  const woodFar = mappedStandard(0xffffff, l2.wood, { normalMap: false });
+  // LOD2 far crate + lid: albedo-only (no normalMap, no ORM). Constant
+  // wood-ORM-midtone roughness/metalness keeps MeshStandardMaterial lit.
+  const far = { normalMap: false, ormMap: false };
+  const woodFar = mappedStandard(0xffffff, l2.wood, far);
 
   const body = new THREE.Group();
   body.name = "body";
@@ -204,8 +212,10 @@ export function createToolbox() {
     uniqueTextures: l2.uniqueTextures,
     maps: "albedo+ORM+normal",
     lodNormalMaps: { 0: true, 1: true, 2: false },
+    lodOrmMaps: { 0: true, 1: true, 2: false },
     lodNormalScaleMul: { 0: 1, 1: L3_LOD1_NORMAL_SCALE_MUL, 2: 0 },
-    note: "procedural canvas stand-in; LOD1 half normalScale; LOD2 omits normalMap",
+    lod2Constants: { roughness: L3_LOD2_WOOD_ROUGHNESS, metalness: L3_LOD2_WOOD_METALNESS },
+    note: "procedural canvas stand-in; LOD1 half normalScale; LOD2 albedo-only (no normalMap, no ORM)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
