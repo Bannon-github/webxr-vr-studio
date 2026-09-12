@@ -9,7 +9,7 @@ This page is the missing “how.” Policy lives in [photoreal-realtime](photore
 ## Before you run a compressor
 
 1. Export **one GLB** (y-up, 1 unit = 1 m). Visual meshes and `collider_*` hulls are **different nodes**. Do not merge the grab hull into the hero batch.
-2. Keep **LOD0 / LOD1 / LOD2** groups if they already exist. Packaging must not flatten LODs into a single draw soup. LOD0 keeps `normalTexture` at full modest scale. Mid LOD primitives should omit `normalTexture` while keeping packed ORM (crate-toolbox v0.24 procedural path: `{ normalMap: false }`). Far LOD primitives should omit `normalTexture` and packed ORM (v0.13 / v0.23). The runtime prefers a packaged GLB when present and does **not** strip maps — author the GLB to this recipe.
+    2. Keep **LOD0 / LOD1 / LOD2** groups if they already exist. Packaging must not flatten LODs into a single draw soup. LOD0 keeps `normalTexture` at full modest scale. Mid LOD primitives should omit `normalTexture` and packed ORM (crate-toolbox v0.25 procedural path: `{ normalMap: false, ormMap: false }`, albedo only). Far LOD primitives should omit `normalTexture` and packed ORM (v0.13 / v0.23). The runtime prefers a packaged GLB when present and does **not** strip maps — author the GLB to this recipe.
 3. `gltf-transform inspect in.glb` — list texture slots and pixel sizes. If anything is >1024 on a handheld prop, resize **down**. Never upscale 512 → 1024 “for quality.”
 4. Albedo is sRGB and unlit (no baked scene shadows). ORM / metallicRoughness is linear.
 

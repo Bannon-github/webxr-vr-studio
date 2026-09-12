@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   L2_NORMAL_SCALE,
+  L3_LOD1_BRASS_METALNESS,
+  L3_LOD1_BRASS_ROUGHNESS,
+  L3_LOD1_WOOD_METALNESS,
+  L3_LOD1_WOOD_ROUGHNESS,
   L3_LOD2_WOOD_METALNESS,
   L3_LOD2_WOOD_ROUGHNESS,
 } from "./pbr-maps.js";
@@ -40,7 +44,7 @@ function scaleXY(mat) {
   return [mat.normalScale?.x, mat.normalScale?.y];
 }
 
-test("LOD0 full normalScale + normalMap; LOD1 no normalMap keeps ORM; LOD2 albedo-only", () => {
+test("LOD0 full normalScale + normalMap + ORM; LOD1 and LOD2 albedo-only", () => {
   const crate = createToolbox();
   assert.equal(crate.userData.l2.lodNormalScaleMul[0], 1);
   assert.equal(crate.userData.l2.lodNormalScaleMul[1], 0);
@@ -62,15 +66,23 @@ test("LOD0 full normalScale + normalMap; LOD1 no normalMap keeps ORM; LOD2 albed
 
   const lod1 = collectLodVisualMaterials(crate, 1);
   assert.ok(lod1.length > 0);
+  const lod1Named = crate.userData.materials.lod1;
+  assert.equal(lod1Named.wood.roughness, L3_LOD1_WOOD_ROUGHNESS);
+  assert.equal(lod1Named.wood.metalness, L3_LOD1_WOOD_METALNESS);
+  assert.equal(lod1Named.woodDark.roughness, L3_LOD1_WOOD_ROUGHNESS);
+  assert.equal(lod1Named.handleMat.roughness, L3_LOD1_WOOD_ROUGHNESS);
+  assert.equal(lod1Named.brass.roughness, L3_LOD1_BRASS_ROUGHNESS);
+  assert.equal(lod1Named.brass.metalness, L3_LOD1_BRASS_METALNESS);
   for (const mat of lod1) {
     assert.equal(mat.normalMap, null, "LOD1 drops normalMap");
     assert.ok(mat.map, "LOD1 keeps albedo");
-    assert.ok(mat.roughnessMap, "LOD1 keeps ORM");
-    assert.ok(mat.metalnessMap, "LOD1 keeps ORM");
-    const peer = lod0.find((m) => m.map === mat.map && m.roughnessMap === mat.roughnessMap);
-    assert.ok(peer, "LOD1 must reuse a LOD0 albedo+ORM canvas (no extra unique maps)");
+    assert.equal(mat.roughnessMap, null, "LOD1 drops ORM roughnessMap");
+    assert.equal(mat.metalnessMap, null, "LOD1 drops ORM metalnessMap");
+    const peer = lod0.find((m) => m.map === mat.map);
+    assert.ok(peer, "LOD1 must reuse a LOD0 albedo canvas (no extra unique maps)");
     assert.notEqual(mat, peer, "LOD1 uses a separate material instance");
     assert.ok(peer.normalMap, "LOD0 peer still has normalMap");
+    assert.ok(peer.roughnessMap, "LOD0 peer still has ORM");
   }
 
   setToolboxLod(crate, 2);
@@ -93,8 +105,12 @@ test("LOD0 full normalScale + normalMap; LOD1 no normalMap keeps ORM; LOD2 albed
   assert.equal(crate.userData.l2.lodNormalMaps[1], false);
   assert.equal(crate.userData.l2.lodNormalMaps[2], false);
   assert.equal(crate.userData.l2.lodOrmMaps[0], true);
-  assert.equal(crate.userData.l2.lodOrmMaps[1], true);
+  assert.equal(crate.userData.l2.lodOrmMaps[1], false);
   assert.equal(crate.userData.l2.lodOrmMaps[2], false);
+  assert.equal(crate.userData.l2.lod1Constants.wood.roughness, L3_LOD1_WOOD_ROUGHNESS);
+  assert.equal(crate.userData.l2.lod1Constants.wood.metalness, L3_LOD1_WOOD_METALNESS);
+  assert.equal(crate.userData.l2.lod1Constants.brass.roughness, L3_LOD1_BRASS_ROUGHNESS);
+  assert.equal(crate.userData.l2.lod1Constants.brass.metalness, L3_LOD1_BRASS_METALNESS);
   assert.equal(crate.userData.l2.lod2Constants.roughness, L3_LOD2_WOOD_ROUGHNESS);
   assert.equal(crate.userData.l2.lod2Constants.metalness, L3_LOD2_WOOD_METALNESS);
 
