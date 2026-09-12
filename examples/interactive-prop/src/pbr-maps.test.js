@@ -14,6 +14,7 @@ import {
   L3_LOD2_WOOD_ROUGHNESS,
   brassHeight,
   heightToNormalRgb,
+  mappedBasic,
   mappedStandard,
   steelHeight,
   woodHeight,
@@ -100,20 +101,34 @@ test("mappedStandard LOD1-style omits normalMap and ORM (albedo-only)", () => {
 test("mappedStandard omits ORM maps when opted out and uses wood midtone constants", () => {
   const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
   const noOrm = mappedStandard(0xffffff, maps, { ormMap: false });
-  const far = mappedStandard(0xffffff, maps, { normalMap: false, ormMap: false });
+  const mid = mappedStandard(0xffffff, maps, { normalMap: false, ormMap: false });
   assert.equal(noOrm.normalMap, maps.normal);
   assert.equal(noOrm.map, maps.albedo);
   assert.equal(noOrm.roughnessMap, null);
   assert.equal(noOrm.metalnessMap, null);
   assert.equal(noOrm.roughness, L3_LOD2_WOOD_ROUGHNESS);
   assert.equal(noOrm.metalness, L3_LOD2_WOOD_METALNESS);
-  assert.equal(far.normalMap, null);
-  assert.equal(far.roughnessMap, null);
-  assert.equal(far.metalnessMap, null);
-  assert.equal(far.roughness, L3_LOD2_WOOD_ROUGHNESS);
-  assert.equal(far.metalness, L3_LOD2_WOOD_METALNESS);
+  assert.equal(mid.isMeshStandardMaterial, true);
+  assert.equal(mid.normalMap, null);
+  assert.equal(mid.roughnessMap, null);
+  assert.equal(mid.metalnessMap, null);
+  assert.equal(mid.roughness, L3_LOD2_WOOD_ROUGHNESS);
+  assert.equal(mid.metalness, L3_LOD2_WOOD_METALNESS);
   assert.equal(L3_LOD2_WOOD_ROUGHNESS, 220 / 255);
   assert.equal(L3_LOD2_WOOD_METALNESS, 8 / 255);
+});
+
+test("mappedBasic is unlit MeshBasic with albedo and no lighting uniforms", () => {
+  const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
+  const far = mappedBasic(0xffffff, maps);
+  assert.equal(far.isMeshBasicMaterial, true);
+  assert.ok(!far.isMeshStandardMaterial);
+  assert.equal(far.map, maps.albedo);
+  assert.ok(!far.normalMap);
+  assert.ok(!far.roughnessMap);
+  assert.ok(!far.metalnessMap);
+  assert.equal(far.roughness, undefined);
+  assert.equal(far.metalness, undefined);
 });
 
 test("wood / brass / steel height fields are not flat", () => {

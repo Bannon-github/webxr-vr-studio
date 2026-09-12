@@ -148,7 +148,7 @@ function paintBudgetOnce() {
   const pack = getToolbox()?.userData?.packaging;
   const tex = l2
     ? l2.lodAlbedoSize
-      ? `${l2.textureSize}² LOD0 ${l2.maps} · ${l2.lodAlbedoSize}² LOD1/2 albedo ×${l2.uniqueTextures} (authoring est.)`
+      ? `${l2.textureSize}² LOD0 ${l2.maps} · ${l2.lodAlbedoSize}² LOD1 albedo / LOD2 ${l2.lodMaterialClass?.[2] ?? "albedo"} ×${l2.uniqueTextures} (authoring est.)`
       : `${l2.textureSize}² ${l2.maps} ×${l2.uniqueTextures} (authoring est.)`
     : "tex ≤1024²";
   const src = pack?.source ? ` · visual ${pack.source}` : "";
