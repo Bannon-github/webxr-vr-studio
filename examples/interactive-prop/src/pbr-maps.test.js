@@ -4,11 +4,17 @@ import {
   L2_NORMAL_SCALE,
   L2_NORMAL_STRENGTH,
   L2_TEXTURE_SIZE,
+  L3_LOD_ALBEDO_SIZE,
+  L3_LOD1_BRASS_METALNESS,
+  L3_LOD1_BRASS_ROUGHNESS,
   L3_LOD1_NORMAL_SCALE_MUL,
+  L3_LOD1_WOOD_METALNESS,
+  L3_LOD1_WOOD_ROUGHNESS,
   L3_LOD2_WOOD_METALNESS,
   L3_LOD2_WOOD_ROUGHNESS,
   brassHeight,
   heightToNormalRgb,
+  mappedBasic,
   mappedStandard,
   steelHeight,
   woodHeight,
@@ -16,6 +22,8 @@ import {
 
 test("L2 authoring caps stay 512² with three normal slots", () => {
   assert.equal(L2_TEXTURE_SIZE, 512);
+  assert.equal(L3_LOD_ALBEDO_SIZE, 256);
+  assert.equal(L3_LOD_ALBEDO_SIZE * 2, L2_TEXTURE_SIZE);
   assert.equal(Object.keys(L2_NORMAL_STRENGTH).join(","), "wood,brass,steel");
   assert.equal(Object.keys(L2_NORMAL_SCALE).join(","), "wood,brass,steel");
   for (const pair of Object.values(L2_NORMAL_SCALE)) {
@@ -50,37 +58,77 @@ test("mappedStandard binds normalMap unless opted out", () => {
   const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
   const withN = mappedStandard(0xffffff, maps);
   const without = mappedStandard(0xffffff, maps, { normalMap: false });
-  const mid = mappedStandard(0xffffff, maps, { normalScaleMul: L3_LOD1_NORMAL_SCALE_MUL });
+  const midScale = mappedStandard(0xffffff, maps, { normalScaleMul: L3_LOD1_NORMAL_SCALE_MUL });
   assert.equal(withN.normalMap, maps.normal);
   assert.equal(without.normalMap, null);
-  assert.equal(mid.normalMap, maps.normal);
+  assert.equal(midScale.normalMap, maps.normal);
   assert.equal(withN.map, maps.albedo);
   assert.equal(without.map, maps.albedo);
   assert.equal(withN.roughnessMap, maps.orm);
   assert.equal(without.roughnessMap, maps.orm);
   assert.equal(withN.normalScale.x, 0.5);
-  assert.equal(mid.normalScale.x, 0.5 * L3_LOD1_NORMAL_SCALE_MUL);
-  assert.equal(mid.normalScale.y, 0.5 * L3_LOD1_NORMAL_SCALE_MUL);
+  assert.equal(midScale.normalScale.x, 0.5 * L3_LOD1_NORMAL_SCALE_MUL);
+  assert.equal(midScale.normalScale.y, 0.5 * L3_LOD1_NORMAL_SCALE_MUL);
   assert.equal(L3_LOD1_NORMAL_SCALE_MUL, 0.5);
+});
+
+test("mappedStandard LOD1-style omits normalMap and ORM (albedo-only)", () => {
+  const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
+  const mid = mappedStandard(0xffffff, maps, { normalMap: false, ormMap: false });
+  const brassMid = mappedStandard(0xffffff, maps, {
+    normalMap: false,
+    ormMap: false,
+    roughness: L3_LOD1_BRASS_ROUGHNESS,
+    metalness: L3_LOD1_BRASS_METALNESS,
+  });
+  assert.equal(mid.normalMap, null);
+  assert.equal(mid.map, maps.albedo);
+  assert.equal(mid.roughnessMap, null);
+  assert.equal(mid.metalnessMap, null);
+  assert.equal(mid.roughness, L3_LOD1_WOOD_ROUGHNESS);
+  assert.equal(mid.metalness, L3_LOD1_WOOD_METALNESS);
+  assert.equal(brassMid.normalMap, null);
+  assert.equal(brassMid.roughnessMap, null);
+  assert.equal(brassMid.metalnessMap, null);
+  assert.equal(brassMid.roughness, L3_LOD1_BRASS_ROUGHNESS);
+  assert.equal(brassMid.metalness, L3_LOD1_BRASS_METALNESS);
+  assert.equal(L3_LOD1_WOOD_ROUGHNESS, L3_LOD2_WOOD_ROUGHNESS);
+  assert.equal(L3_LOD1_WOOD_METALNESS, L3_LOD2_WOOD_METALNESS);
+  assert.equal(L3_LOD1_BRASS_ROUGHNESS, 95 / 255);
+  assert.equal(L3_LOD1_BRASS_METALNESS, 230 / 255);
 });
 
 test("mappedStandard omits ORM maps when opted out and uses wood midtone constants", () => {
   const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
   const noOrm = mappedStandard(0xffffff, maps, { ormMap: false });
-  const far = mappedStandard(0xffffff, maps, { normalMap: false, ormMap: false });
+  const mid = mappedStandard(0xffffff, maps, { normalMap: false, ormMap: false });
   assert.equal(noOrm.normalMap, maps.normal);
   assert.equal(noOrm.map, maps.albedo);
   assert.equal(noOrm.roughnessMap, null);
   assert.equal(noOrm.metalnessMap, null);
   assert.equal(noOrm.roughness, L3_LOD2_WOOD_ROUGHNESS);
   assert.equal(noOrm.metalness, L3_LOD2_WOOD_METALNESS);
-  assert.equal(far.normalMap, null);
-  assert.equal(far.roughnessMap, null);
-  assert.equal(far.metalnessMap, null);
-  assert.equal(far.roughness, L3_LOD2_WOOD_ROUGHNESS);
-  assert.equal(far.metalness, L3_LOD2_WOOD_METALNESS);
+  assert.equal(mid.isMeshStandardMaterial, true);
+  assert.equal(mid.normalMap, null);
+  assert.equal(mid.roughnessMap, null);
+  assert.equal(mid.metalnessMap, null);
+  assert.equal(mid.roughness, L3_LOD2_WOOD_ROUGHNESS);
+  assert.equal(mid.metalness, L3_LOD2_WOOD_METALNESS);
   assert.equal(L3_LOD2_WOOD_ROUGHNESS, 220 / 255);
   assert.equal(L3_LOD2_WOOD_METALNESS, 8 / 255);
+});
+
+test("mappedBasic is unlit MeshBasic with albedo and no lighting uniforms", () => {
+  const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
+  const far = mappedBasic(0xffffff, maps);
+  assert.equal(far.isMeshBasicMaterial, true);
+  assert.ok(!far.isMeshStandardMaterial);
+  assert.equal(far.map, maps.albedo);
+  assert.ok(!far.normalMap);
+  assert.ok(!far.roughnessMap);
+  assert.ok(!far.metalnessMap);
+  assert.equal(far.roughness, undefined);
+  assert.equal(far.metalness, undefined);
 });
 
 test("wood / brass / steel height fields are not flat", () => {

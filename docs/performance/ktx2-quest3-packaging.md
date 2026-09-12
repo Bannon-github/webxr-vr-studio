@@ -1,16 +1,16 @@
 # Quest 3 KTX2 / Basis packaging
 
-Concrete recipe for turning a DCC **glTF 2.0 GLB** into a Quest 3–safe package. Gate: [quest-3-target](../shipping/quest-3-target.md) — **90 Hz** ship / **72 Hz** fallback; never require 207/240 Hz. Soft caps: ≲100 draws, ≲750k tris/eye. Props: textures **≤1024²** (prefer **512²** when the maps already are). **No 4K.**
+Concrete recipe for turning a DCC **glTF 2.0 GLB** into a Quest 3–safe package. Gate: [quest-3-target](../shipping/quest-3-target.md) — **90 Hz** ship / **72 Hz** fallback; never require 207/240 Hz. Soft caps: ≲100 draws, ≲750k tris/eye. Props: textures **≤1024²** (prefer **512²** on LOD0 when the maps already are; **≤256²** albedo on LOD1/LOD2). **No 4K.**
 
 This page is the missing “how.” Policy lives in [photoreal-realtime](photoreal-realtime.md) and [content-pipeline](../../studio/content-pipeline.md) step 5. Identity stays on the same `objectId` ([additive-object-iteration](../../studio/additive-object-iteration.md)).
 
-`crate-toolbox` today still **renders procedural 512² canvases**. Drop a packaged GLB at the URL the example probes (`/packaged/crate-toolbox.glb`) and the runtime prefers it. Do not invent headset ms after packaging — fill [quest-3-on-device-qa](../shipping/quest-3-on-device-qa.md) on a headset.
+`crate-toolbox` today still **renders procedural canvases** (512² LOD0 albedo+ORM+normal MeshStandard; 256² LOD1 albedo-only MeshStandard; 256² LOD2 unlit MeshBasic). Drop a packaged GLB at the URL the example probes (`/packaged/crate-toolbox.glb`) and the runtime prefers it. The loader does **not** strip, downsample, or rewrite materials at ingest — author mid albedo at ≤256² and far as unlit/basic (or `KHR_materials_unlit`) with ≤256² albedo and no normal/ORM. Do not invent headset ms after packaging — fill [quest-3-on-device-qa](../shipping/quest-3-on-device-qa.md) on a headset.
 
 ## Before you run a compressor
 
 1. Export **one GLB** (y-up, 1 unit = 1 m). Visual meshes and `collider_*` hulls are **different nodes**. Do not merge the grab hull into the hero batch.
-2. Keep **LOD0 / LOD1 / LOD2** groups if they already exist. Packaging must not flatten LODs into a single draw soup. Mid LOD primitives may keep `normalTexture` but should use a reduced `normalTexture.scale` (crate-toolbox v0.14 procedural path uses `L3_LOD1_NORMAL_SCALE_MUL` = 0.5 vs LOD0). Far LOD primitives should omit `normalTexture` (v0.13 already drops `normalMap` on LOD2).
-3. `gltf-transform inspect in.glb` — list texture slots and pixel sizes. If anything is >1024 on a handheld prop, resize **down**. Never upscale 512 → 1024 “for quality.”
+2. Keep **LOD0 / LOD1 / LOD2** groups if they already exist. Packaging must not flatten LODs into a single draw soup. LOD0 keeps `normalTexture` at full modest scale and 512² albedo+ORM+normal. Mid LOD primitives should omit `normalTexture` and packed ORM (crate-toolbox v0.25 procedural path: `{ normalMap: false, ormMap: false }`, albedo only) and author that albedo at **≤256²** (v0.26 half-res policy). Far LOD primitives should be **unlit** (`KHR_materials_unlit` / Three `MeshBasicMaterial`) with **≤256²** albedo and no `normalTexture` / packed ORM (crate-toolbox v0.27). The runtime prefers a packaged GLB when present and does **not** strip, downsample, or rewrite materials — author the GLB to this recipe.
+3. `gltf-transform inspect in.glb` — list texture slots and pixel sizes. If anything is >1024 on a handheld prop, resize **down**. Never upscale 512 → 1024 “for quality.” Do not smash LOD0 maps to 256 with a global resize; author LOD1/LOD2 albedo at ≤256² before this pass.
 4. Albedo is sRGB and unlit (no baked scene shadows). ORM / metallicRoughness is linear.
 
 ## Recipe (`gltf-transform` CLI)
@@ -21,8 +21,9 @@ Studio default: **npx** so the repo does not pin a global. Node LTS. Commands ma
 # 0. Inspect (slot names + dimensions). Fail if a prop map is 4K.
 npx --yes @gltf-transform/cli inspect authored.glb
 
-# 1. Cap prop maps. Prefer 512 if authored maps are already 512.
-#    Skip this pass when every color/ORM/normal is already ≤ the cap.
+# 1. Cap prop maps. Prefer 512 if authored LOD0 maps are already 512.
+#    LOD1/LOD2 albedo should already be ≤256 (do not use this pass to
+#    smash LOD0 to 256). Skip when every color/ORM/normal is already ≤ the cap.
 npx --yes @gltf-transform/cli resize authored.glb resized.glb --width 1024 --height 1024
 
 # 2. UASTC + zstd on normals and packed ORM (uncorrelated RGB — ETC1S blocks badly).

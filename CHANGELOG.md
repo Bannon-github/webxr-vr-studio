@@ -2,6 +2,30 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.29.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.27.0** L3 packaging/perf UPGRADE: LOD2 far body + lid switch from albedo-only `MeshStandardMaterial` to unlit `MeshBasicMaterial` with the same 256² wood albedo (no roughness/metalness uniforms). LOD0 stays 512² albedo+ORM+normal MeshStandard; LOD1 stays 256² albedo-only MeshStandard (v0.26). Unique canvases stay 11. Same draws / tris as v0.26. Headset ms / FFR still unmeasured.
+
+## [0.28.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.26.0** L3 packaging/perf UPGRADE: LOD1 and LOD2 procedural materials bind half-resolution (256²) albedo maps instead of the shared 512² L2 albedos. LOD0 stays 512² albedo+ORM+normal at full modest `normalScale`; mid/far stay albedo-only (v0.25 constants). Unique canvases 9 → 11 (extra 256² wood/brass albedos). Same draws / tris as v0.25. Headset ms / FFR still unmeasured.
+
+## [0.27.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.25.0** L3 packaging/perf UPGRADE: LOD1 visual materials omit packed ORM (`roughnessMap`/`metalnessMap`) and use constant wood-ORM-midtone roughness 220/255 + metalness 8/255 (wood/handle) and brass-ORM-midtone roughness 95/255 + metalness 230/255 (latch). LOD0 stays albedo+ORM+normal at full modest `normalScale`; LOD2 stays albedo-only (v0.23). Same draws / tris / 9 canvases as v0.24. Headset ms / FFR still unmeasured.
+
+## [0.26.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.24.0** L3 packaging/perf UPGRADE: LOD1 visual materials omit `normalMap` (keep albedo + packed ORM). LOD0 stays albedo+ORM+normal at full modest `normalScale`; LOD2 stays albedo-only (v0.23). Same draws / tris / 9 canvases as v0.23. Headset ms / FFR still unmeasured.
+
 ## [0.25.0] — 2026-09-12
 
 ### Changed

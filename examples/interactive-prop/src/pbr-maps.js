@@ -3,6 +3,13 @@ import * as THREE from "three";
 /** Shared L2 stand-in maps. 512², mipmapped. Not photoreal desktop 4K. */
 export const L2_TEXTURE_SIZE = 512;
 
+/**
+ * LOD1 / LOD2 albedo authoring size (half of `L2_TEXTURE_SIZE`).
+ * Mid/far bind these maps instead of the shared 512² L2 albedos.
+ * LOD0 keeps 512² albedo + ORM + normal. Not a headset-measured ms claim.
+ */
+export const L3_LOD_ALBEDO_SIZE = 256;
+
 function hash2(ix, iy) {
   const n = Math.sin(ix * 127.1 + iy * 311.7) * 43758.5453123;
   return n - Math.floor(n);
@@ -243,21 +250,39 @@ export const L2_NORMAL_STRENGTH = { wood: 4.2, brass: 2.8, steel: 3.4 };
 export const L2_NORMAL_SCALE = { wood: [0.62, 0.62], brass: [0.3, 0.3], steel: [0.38, 0.38] };
 
 /**
- * LOD1 (~2.4–4.5 m) `MeshStandardMaterial.normalScale` vs LOD0.
- * Same 512² albedo + ORM + normalMap (no extra canvases). Half keeps
- * mid-distance tangent detail without LOD0-strength slopes.
+ * v0.14 LOD1 (~2.4–4.5 m) `normalScale` vs LOD0. Kept as the documented
+ * half-scale constant. v0.24 LOD1 drops `normalMap` entirely (`{ normalMap:
+ * false }`); v0.25 also drops packed ORM (`{ ormMap: false }`); v0.26 binds
+ * 256² albedo on LOD1/LOD2, so mid materials no longer apply this multiplier.
+ * v0.27 switches LOD2 to MeshBasicMaterial (unlit); these mid constants
+ * stay on LOD1 MeshStandard only.
  */
 export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
 
 /**
- * LOD2 far-wood constants matching wood ORM midtones (not headset-measured).
+ * Wood-ORM-midtone constants (not headset-measured).
  * `woodOrm` G (roughness) = 200 + stripe×40; stripe mid 0.5 → 220.
  * `woodOrm` B (metalness) is authored as constant 8.
- * Keeps MeshStandardMaterial lit under the present-path ambient fill
- * without sampling packed ORM at LOD2 distances.
+ * LOD1 wood MeshStandard uses these so the material stays lit under the
+ * present-path ambient fill without sampling packed ORM. LOD2 (v0.27)
+ * is MeshBasicMaterial — roughness/metalness do not apply.
  */
 export const L3_LOD2_WOOD_ROUGHNESS = 220 / 255;
 export const L3_LOD2_WOOD_METALNESS = 8 / 255;
+
+/** LOD1 wood mid uses the wood-ORM-midtone constants (historical LOD2 names). */
+export const L3_LOD1_WOOD_ROUGHNESS = L3_LOD2_WOOD_ROUGHNESS;
+export const L3_LOD1_WOOD_METALNESS = L3_LOD2_WOOD_METALNESS;
+
+/**
+ * LOD1 brass-latch constants matching brass ORM midtones (not headset-measured).
+ * `brassOrm` G (roughness) = 70 + n×50 + tarnish×90; n mid 0.5, tarnish 0
+ * (wear overlay off — same primary-term-mid convention as wood stripe 0.5)
+ * → 95. `brassOrm` B (metalness) = 230 − tarnish×80; tarnish 0 → 230.
+ * LOD1 has no steel mesh (tool stub uses wood-tinted handleMatMid).
+ */
+export const L3_LOD1_BRASS_ROUGHNESS = 95 / 255;
+export const L3_LOD1_BRASS_METALNESS = 230 / 255;
 
 function materialMaps(albedo, orm, normal, normalScale) {
   return { albedo, orm, normal, normalScale };
@@ -267,6 +292,7 @@ function materialMaps(albedo, orm, normal, normalScale) {
 export function getCrateL2Maps() {
   if (cached) return cached;
   const s = L2_TEXTURE_SIZE;
+  const lodAlb = L3_LOD_ALBEDO_SIZE;
   const woodAlb = texFromCanvas(woodAlbedo(s), true, 2, 2);
   const woodOrmTex = texFromCanvas(woodOrm(s), false, 2, 2);
   const woodNrm = texFromCanvas(normalCanvas(s, woodHeight, L2_NORMAL_STRENGTH.wood), false, 2, 2);
@@ -276,24 +302,36 @@ export function getCrateL2Maps() {
   const steelAlb = texFromCanvas(steelAlbedo(s), true, 2, 4);
   const steelOrmTex = texFromCanvas(steelOrm(s), false, 2, 4);
   const steelNrm = texFromCanvas(normalCanvas(s, steelHeight, L2_NORMAL_STRENGTH.steel), false, 2, 4);
+  // v0.26: dedicated half-res albedos for LOD1/LOD2 (wood + brass). Steel
+  // has no mid/far mesh (LOD1 tool stub is wood-tinted handleMatMid).
+  const woodAlbLod = texFromCanvas(woodAlbedo(lodAlb), true, 2, 2);
+  const brassAlbLod = texFromCanvas(brassAlbedo(lodAlb), true, 1, 1);
   cached = {
     size: s,
-    uniqueTextures: 9,
+    lodAlbedoSize: lodAlb,
+    uniqueTextures: 11,
     wood: materialMaps(woodAlb, woodOrmTex, woodNrm, L2_NORMAL_SCALE.wood),
     brass: materialMaps(brassAlb, brassOrmTex, brassNrm, L2_NORMAL_SCALE.brass),
     steel: materialMaps(steelAlb, steelOrmTex, steelNrm, L2_NORMAL_SCALE.steel),
+    woodLod: materialMaps(woodAlbLod, null, null, L2_NORMAL_SCALE.wood),
+    brassLod: materialMaps(brassAlbLod, null, null, L2_NORMAL_SCALE.brass),
   };
   return cached;
 }
 
 /**
  * Shared MeshStandardMaterial. LOD0 binds v0.12 normalMap at full scale.
- * Pass `{ normalScaleMul }` for mid LODs (same maps, reduced slope).
- * Pass `{ normalMap: false }` for far LODs so the fragment shader skips
- * tangent-space sampling (same albedo + ORM, no extra texture bind).
+ * Pass `{ normalScaleMul }` to keep the map at reduced slope (v0.14 mid-LOD).
+ * Pass `{ normalMap: false }` so the fragment shader skips tangent-space
+ * sampling (same albedo + ORM unless `{ ormMap: false }`).
  * Pass `{ ormMap: false }` to skip packed ORM (`roughnessMap` /
- * `metalnessMap`) and use constant wood-ORM-midtone roughness/metalness
- * (`L3_LOD2_WOOD_*`). LOD2 uses both flags (albedo-only).
+ * `metalnessMap`) and use constant roughness/metalness so the material
+ * stays lit under the present-path ambient fill. Defaults to wood-ORM
+ * midtones (`L3_LOD2_WOOD_*` / `L3_LOD1_WOOD_*`); pass `roughness` /
+ * `metalness` for another class (LOD1 brass uses `L3_LOD1_BRASS_*`).
+ * LOD1 uses `{ normalMap: false, ormMap: false }` (albedo-only) and binds
+ * `maps.albedo` at `L3_LOD_ALBEDO_SIZE` (256²), not the 512² L2 maps.
+ * LOD2 far wood is `mappedBasic` (unlit), not this helper.
  */
 export function mappedStandard(colorHex, maps, opts = {}) {
   const useNormal = opts.normalMap !== false && Boolean(maps.normal);
@@ -301,8 +339,8 @@ export function mappedStandard(colorHex, maps, opts = {}) {
   const spec = {
     color: colorHex,
     map: maps.albedo,
-    roughness: useOrm ? 1 : L3_LOD2_WOOD_ROUGHNESS,
-    metalness: useOrm ? 1 : L3_LOD2_WOOD_METALNESS,
+    roughness: useOrm ? 1 : (opts.roughness ?? L3_LOD2_WOOD_ROUGHNESS),
+    metalness: useOrm ? 1 : (opts.metalness ?? L3_LOD2_WOOD_METALNESS),
   };
   if (useOrm) {
     spec.roughnessMap = maps.orm;
@@ -315,4 +353,16 @@ export function mappedStandard(colorHex, maps, opts = {}) {
     spec.normalScale = new THREE.Vector2(nx * mul, ny * mul);
   }
   return new THREE.MeshStandardMaterial(spec);
+}
+
+/**
+ * Unlit far / card-like material. LOD2 body + lid bind the same 256²
+ * wood albedo as LOD1 wood (`maps.albedo`) with no lighting uniforms.
+ * Roughness / metalness / normalMap / ORM do not apply to MeshBasic.
+ */
+export function mappedBasic(colorHex, maps) {
+  return new THREE.MeshBasicMaterial({
+    color: colorHex,
+    map: maps.albedo,
+  });
 }
