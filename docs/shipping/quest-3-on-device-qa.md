@@ -20,6 +20,7 @@ Runnable slice: [`examples/interactive-prop`](../../examples/interactive-prop/).
 10. **Present-path IBL / environment off** (pre-headset authoring gate): immersive session nulls `scene.environment` (r170 `environmentIntensity` is a post-sample multiply and does not skip sampling); `sessionend` restores the saved PMREM + lookdev intensity without disposing the texture. `crate-toolbox` v0.18. Not a measured ms.
 11. **Present-path directional / punctual off** (pre-headset authoring gate): immersive session hides the lookdev `DirectionalLight` (`visible = false` + intensity 0; r170 intensity 0 does not drop `NUM_DIR_LIGHTS`); `sessionend` restores lookdev visible + intensity. `crate-toolbox` v0.19. Not a measured ms.
 12. **Present-path ambient-only fill** (pre-headset authoring gate): immersive session hides the lookdev `HemisphereLight` (`visible = false` + intensity 0; r170 intensity 0 does not drop `NUM_HEMI_LIGHTS`) and enables one reused `AmbientLight` (intensity 0.4); `sessionend` restores lookdev hemi and disables/detaches the present-only ambient. `crate-toolbox` v0.20. Not a measured ms.
+13. **Present-path texture anisotropy clamp** (pre-headset authoring gate): immersive session sets bound material-map `.anisotropy` to **1** (lookdev / packaged GLB may use GPU max); `sessionend` restores saved lookdev values. `crate-toolbox` v0.21. Not a measured ms.
 
 ## Frame rate (`supportedFrameRates` / `updateTargetFrameRate`)
 

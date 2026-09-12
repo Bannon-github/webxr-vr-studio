@@ -73,6 +73,7 @@ import {
   QUEST3_XR_AMBIENT_COLOR,
   QUEST3_XR_AMBIENT_INTENSITY,
 } from "./present-ambient-fill.js";
+import { applyPresentAnisotropy } from "./present-anisotropy.js";
 import behaviorTemplate from "./behavior.json";
 import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 
@@ -607,9 +608,9 @@ window.addEventListener("resize", () => {
  * XRWebGLLayer.fixedFoveation via Three WebXRManager.setFoveation.
  * Pixel-ratio clamp (1 while presenting), present-path antialias/MSAA off,
  * present-path NoToneMapping, present-path IBL/environment off,
- * present-path directional/punctual off, then present-path ambient-only
- * fill (hemisphere off + one AmbientLight) are applied after this on
- * sessionstart.
+ * present-path directional/punctual off, present-path ambient-only
+ * fill (hemisphere off + one AmbientLight), then present-path texture
+ * anisotropy clamp to 1 are applied after this on sessionstart.
  * Antialias is constructor-time (Three copies getContextAttributes into
  * XRWebGLLayer); helpers verify only. Tone mapping is a live renderer
  * property (save ACES + exposure, set NoToneMapping). IBL: r170
@@ -621,7 +622,10 @@ window.addEventListener("resize", () => {
  * visible HemisphereLight with intensity 0 toward NUM_HEMI_LIGHTS, so
  * sessionstart hides it (visible=false + intensity 0) and enables one
  * reused AmbientLight at intensity 0.4; restore hemi and disable/detach
- * ambient on sessionend. Do not require 120 / 207 / 240 Hz.
+ * ambient on sessionend. Anisotropy: lookdev / packaged GLB may use GPU
+ * max; sessionstart clamps bound maps to 1 and sessionend restores the
+ * saved values (not per-frame; do not re-upload). Do not require
+ * 120 / 207 / 240 Hz.
  */
 function applyQuest3SessionDefaults(session) {
   if (!session) return;
@@ -660,6 +664,7 @@ let savedDesktopDirectionalIntensity = null;
 let presentAmbient = null;
 let savedDesktopHemisphereVisible = null;
 let savedDesktopHemisphereIntensity = null;
+let presentAnisotropyHandle = null;
 renderer.xr.addEventListener("sessionstart", () => {
   resumeAudio();
   const session = renderer.xr.getSession();
@@ -730,6 +735,19 @@ renderer.xr.addEventListener("sessionstart", () => {
     "ambient intensity",
     fill.ambientIntensity
   );
+  // After ambient fill: clamp present-path texture AF to 1 (not per-frame).
+  const aniso = applyPresentAnisotropy({
+    presenting: true,
+    roots: [toolbox, scene],
+    handle: presentAnisotropyHandle,
+  });
+  presentAnisotropyHandle = aniso.handle;
+  console.info(
+    "[interactive-prop] present anisotropy",
+    aniso.anisotropy,
+    "textures",
+    aniso.count
+  );
   session?.addEventListener("inputsourceschange", onInputSourcesChange);
   session?.addEventListener("visibilitychange", onSessionVisibilityChange);
 });
@@ -740,6 +758,12 @@ renderer.xr.addEventListener("sessionend", () => {
     xrSession = null;
   }
   releaseAllHolds();
+  // Last applied on sessionstart — restore first (reverse-safe).
+  applyPresentAnisotropy({
+    presenting: false,
+    handle: presentAnisotropyHandle,
+  });
+  presentAnisotropyHandle = null;
   applyPresentPixelRatioClamp(renderer, {
     presenting: false,
     savedRatio: savedDesktopPixelRatio,
