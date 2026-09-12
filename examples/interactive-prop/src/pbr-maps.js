@@ -243,9 +243,9 @@ export const L2_NORMAL_STRENGTH = { wood: 4.2, brass: 2.8, steel: 3.4 };
 export const L2_NORMAL_SCALE = { wood: [0.62, 0.62], brass: [0.3, 0.3], steel: [0.38, 0.38] };
 
 /**
- * LOD1 (~2.4–4.5 m) `MeshStandardMaterial.normalScale` vs LOD0.
- * Same 512² albedo + ORM + normalMap (no extra canvases). Half keeps
- * mid-distance tangent detail without LOD0-strength slopes.
+ * v0.14 LOD1 (~2.4–4.5 m) `normalScale` vs LOD0. Kept as the documented
+ * half-scale constant. v0.24 LOD1 drops `normalMap` entirely (`{ normalMap:
+ * false }`), so mid materials no longer apply this multiplier.
  */
 export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
 
@@ -288,9 +288,10 @@ export function getCrateL2Maps() {
 
 /**
  * Shared MeshStandardMaterial. LOD0 binds v0.12 normalMap at full scale.
- * Pass `{ normalScaleMul }` for mid LODs (same maps, reduced slope).
- * Pass `{ normalMap: false }` for far LODs so the fragment shader skips
- * tangent-space sampling (same albedo + ORM, no extra texture bind).
+ * Pass `{ normalScaleMul }` to keep the map at reduced slope (v0.14 mid-LOD).
+ * Pass `{ normalMap: false }` so the fragment shader skips tangent-space
+ * sampling (same albedo + ORM unless `{ ormMap: false }`).
+ * LOD1 uses `{ normalMap: false }` (albedo + packed ORM, no normals).
  * Pass `{ ormMap: false }` to skip packed ORM (`roughnessMap` /
  * `metalnessMap`) and use constant wood-ORM-midtone roughness/metalness
  * (`L3_LOD2_WOOD_*`). LOD2 uses both flags (albedo-only).
