@@ -249,6 +249,16 @@ export const L2_NORMAL_SCALE = { wood: [0.62, 0.62], brass: [0.3, 0.3], steel: [
  */
 export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
 
+/**
+ * LOD2 far-wood constants matching wood ORM midtones (not headset-measured).
+ * `woodOrm` G (roughness) = 200 + stripe×40; stripe mid 0.5 → 220.
+ * `woodOrm` B (metalness) is authored as constant 8.
+ * Keeps MeshStandardMaterial lit under the present-path ambient fill
+ * without sampling packed ORM at LOD2 distances.
+ */
+export const L3_LOD2_WOOD_ROUGHNESS = 220 / 255;
+export const L3_LOD2_WOOD_METALNESS = 8 / 255;
+
 function materialMaps(albedo, orm, normal, normalScale) {
   return { albedo, orm, normal, normalScale };
 }
@@ -281,17 +291,23 @@ export function getCrateL2Maps() {
  * Pass `{ normalScaleMul }` for mid LODs (same maps, reduced slope).
  * Pass `{ normalMap: false }` for far LODs so the fragment shader skips
  * tangent-space sampling (same albedo + ORM, no extra texture bind).
+ * Pass `{ ormMap: false }` to skip packed ORM (`roughnessMap` /
+ * `metalnessMap`) and use constant wood-ORM-midtone roughness/metalness
+ * (`L3_LOD2_WOOD_*`). LOD2 uses both flags (albedo-only).
  */
 export function mappedStandard(colorHex, maps, opts = {}) {
   const useNormal = opts.normalMap !== false && Boolean(maps.normal);
+  const useOrm = opts.ormMap !== false && Boolean(maps.orm);
   const spec = {
     color: colorHex,
     map: maps.albedo,
-    roughness: 1,
-    metalness: 1,
-    roughnessMap: maps.orm,
-    metalnessMap: maps.orm,
+    roughness: useOrm ? 1 : L3_LOD2_WOOD_ROUGHNESS,
+    metalness: useOrm ? 1 : L3_LOD2_WOOD_METALNESS,
   };
+  if (useOrm) {
+    spec.roughnessMap = maps.orm;
+    spec.metalnessMap = maps.orm;
+  }
   if (useNormal) {
     const [nx, ny] = maps.normalScale ?? [0.5, 0.5];
     const mul = opts.normalScaleMul ?? 1;

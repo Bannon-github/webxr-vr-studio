@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.25.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.23.0** L3 packaging/perf UPGRADE: LOD2 visual materials omit packed ORM (`roughnessMap`/`metalnessMap`) and use constant wood-ORM-midtone roughness 220/255 + metalness 8/255 (albedo-only far crate + lid). LOD0/1 keep albedo+ORM+normal (LOD1 half `normalScale`). Same draws / tris / 9 canvases as v0.22. Headset ms / FFR still unmeasured.
+
 ## [0.24.0] — 2026-09-12
 
 ### Changed
