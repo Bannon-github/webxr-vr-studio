@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { WebXRManager } from "three/src/renderers/webxr/WebXRManager.js";
 import {
   DESKTOP_LOOKDEV_FRAMEBUFFER_SCALE,
   QUEST3_XR_FRAMEBUFFER_SCALE,
@@ -32,6 +33,19 @@ function fakeXr(initialScale = 1, { presenting = false, withGetter = false } = {
 function fakeRenderer(xr) {
   return { xr };
 }
+
+test("Three r170 WebXRManager has setFramebufferScaleFactor and no getter", () => {
+  const gl = {
+    getContextAttributes() {
+      return { antialias: false, alpha: false, depth: true, stencil: false };
+    },
+  };
+  const xr = new WebXRManager({}, gl);
+  assert.equal(typeof xr.setFramebufferScaleFactor, "function");
+  assert.equal(typeof xr.getFramebufferScaleFactor, "undefined");
+  assert.equal(xr.isPresenting, false);
+  xr.setFramebufferScaleFactor(QUEST3_XR_FRAMEBUFFER_SCALE);
+});
 
 test("QUEST3_XR_FRAMEBUFFER_SCALE is 1", () => {
   assert.equal(QUEST3_XR_FRAMEBUFFER_SCALE, 1);
