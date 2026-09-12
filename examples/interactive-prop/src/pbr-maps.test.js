@@ -4,7 +4,11 @@ import {
   L2_NORMAL_SCALE,
   L2_NORMAL_STRENGTH,
   L2_TEXTURE_SIZE,
+  L3_LOD1_BRASS_METALNESS,
+  L3_LOD1_BRASS_ROUGHNESS,
   L3_LOD1_NORMAL_SCALE_MUL,
+  L3_LOD1_WOOD_METALNESS,
+  L3_LOD1_WOOD_ROUGHNESS,
   L3_LOD2_WOOD_METALNESS,
   L3_LOD2_WOOD_ROUGHNESS,
   brassHeight,
@@ -64,15 +68,30 @@ test("mappedStandard binds normalMap unless opted out", () => {
   assert.equal(L3_LOD1_NORMAL_SCALE_MUL, 0.5);
 });
 
-test("mappedStandard LOD1-style omits normalMap and keeps ORM", () => {
+test("mappedStandard LOD1-style omits normalMap and ORM (albedo-only)", () => {
   const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
-  const mid = mappedStandard(0xffffff, maps, { normalMap: false });
+  const mid = mappedStandard(0xffffff, maps, { normalMap: false, ormMap: false });
+  const brassMid = mappedStandard(0xffffff, maps, {
+    normalMap: false,
+    ormMap: false,
+    roughness: L3_LOD1_BRASS_ROUGHNESS,
+    metalness: L3_LOD1_BRASS_METALNESS,
+  });
   assert.equal(mid.normalMap, null);
   assert.equal(mid.map, maps.albedo);
-  assert.equal(mid.roughnessMap, maps.orm);
-  assert.equal(mid.metalnessMap, maps.orm);
-  assert.equal(mid.roughness, 1);
-  assert.equal(mid.metalness, 1);
+  assert.equal(mid.roughnessMap, null);
+  assert.equal(mid.metalnessMap, null);
+  assert.equal(mid.roughness, L3_LOD1_WOOD_ROUGHNESS);
+  assert.equal(mid.metalness, L3_LOD1_WOOD_METALNESS);
+  assert.equal(brassMid.normalMap, null);
+  assert.equal(brassMid.roughnessMap, null);
+  assert.equal(brassMid.metalnessMap, null);
+  assert.equal(brassMid.roughness, L3_LOD1_BRASS_ROUGHNESS);
+  assert.equal(brassMid.metalness, L3_LOD1_BRASS_METALNESS);
+  assert.equal(L3_LOD1_WOOD_ROUGHNESS, L3_LOD2_WOOD_ROUGHNESS);
+  assert.equal(L3_LOD1_WOOD_METALNESS, L3_LOD2_WOOD_METALNESS);
+  assert.equal(L3_LOD1_BRASS_ROUGHNESS, 95 / 255);
+  assert.equal(L3_LOD1_BRASS_METALNESS, 230 / 255);
 });
 
 test("mappedStandard omits ORM maps when opted out and uses wood midtone constants", () => {

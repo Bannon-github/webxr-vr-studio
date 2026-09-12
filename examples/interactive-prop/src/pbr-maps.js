@@ -245,7 +245,8 @@ export const L2_NORMAL_SCALE = { wood: [0.62, 0.62], brass: [0.3, 0.3], steel: [
 /**
  * v0.14 LOD1 (~2.4–4.5 m) `normalScale` vs LOD0. Kept as the documented
  * half-scale constant. v0.24 LOD1 drops `normalMap` entirely (`{ normalMap:
- * false }`), so mid materials no longer apply this multiplier.
+ * false }`); v0.25 also drops packed ORM (`{ ormMap: false }`), so mid
+ * materials no longer apply this multiplier.
  */
 export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
 
@@ -258,6 +259,20 @@ export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
  */
 export const L3_LOD2_WOOD_ROUGHNESS = 220 / 255;
 export const L3_LOD2_WOOD_METALNESS = 8 / 255;
+
+/** LOD1 wood mid uses the same wood-ORM-midtone constants as LOD2 far wood. */
+export const L3_LOD1_WOOD_ROUGHNESS = L3_LOD2_WOOD_ROUGHNESS;
+export const L3_LOD1_WOOD_METALNESS = L3_LOD2_WOOD_METALNESS;
+
+/**
+ * LOD1 brass-latch constants matching brass ORM midtones (not headset-measured).
+ * `brassOrm` G (roughness) = 70 + n×50 + tarnish×90; n mid 0.5, tarnish 0
+ * (wear overlay off — same primary-term-mid convention as wood stripe 0.5)
+ * → 95. `brassOrm` B (metalness) = 230 − tarnish×80; tarnish 0 → 230.
+ * LOD1 has no steel mesh (tool stub uses wood-tinted handleMatMid).
+ */
+export const L3_LOD1_BRASS_ROUGHNESS = 95 / 255;
+export const L3_LOD1_BRASS_METALNESS = 230 / 255;
 
 function materialMaps(albedo, orm, normal, normalScale) {
   return { albedo, orm, normal, normalScale };
@@ -291,10 +306,12 @@ export function getCrateL2Maps() {
  * Pass `{ normalScaleMul }` to keep the map at reduced slope (v0.14 mid-LOD).
  * Pass `{ normalMap: false }` so the fragment shader skips tangent-space
  * sampling (same albedo + ORM unless `{ ormMap: false }`).
- * LOD1 uses `{ normalMap: false }` (albedo + packed ORM, no normals).
  * Pass `{ ormMap: false }` to skip packed ORM (`roughnessMap` /
- * `metalnessMap`) and use constant wood-ORM-midtone roughness/metalness
- * (`L3_LOD2_WOOD_*`). LOD2 uses both flags (albedo-only).
+ * `metalnessMap`) and use constant roughness/metalness so the material
+ * stays lit under the present-path ambient fill. Defaults to wood-ORM
+ * midtones (`L3_LOD2_WOOD_*` / `L3_LOD1_WOOD_*`); pass `roughness` /
+ * `metalness` for another class (LOD1 brass uses `L3_LOD1_BRASS_*`).
+ * LOD1 and LOD2 use `{ normalMap: false, ormMap: false }` (albedo-only).
  */
 export function mappedStandard(colorHex, maps, opts = {}) {
   const useNormal = opts.normalMap !== false && Boolean(maps.normal);
@@ -302,8 +319,8 @@ export function mappedStandard(colorHex, maps, opts = {}) {
   const spec = {
     color: colorHex,
     map: maps.albedo,
-    roughness: useOrm ? 1 : L3_LOD2_WOOD_ROUGHNESS,
-    metalness: useOrm ? 1 : L3_LOD2_WOOD_METALNESS,
+    roughness: useOrm ? 1 : (opts.roughness ?? L3_LOD2_WOOD_ROUGHNESS),
+    metalness: useOrm ? 1 : (opts.metalness ?? L3_LOD2_WOOD_METALNESS),
   };
   if (useOrm) {
     spec.roughnessMap = maps.orm;
