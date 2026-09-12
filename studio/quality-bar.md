@@ -36,6 +36,7 @@ An immersive feature or release is **done** only when all applicable boxes pass.
 - [ ] Present-path directional / punctual off while XR presenting; restore lookdev `DirectionalLight` visible + intensity on session end (`crate-toolbox` v0.19)
 - [ ] Present-path ambient-only fill while XR presenting (HemisphereLight off + one `AmbientLight` at intensity 0.4); restore lookdev hemi and disable/detach the present-only ambient on session end (`crate-toolbox` v0.20)
 - [ ] Present-path texture anisotropy clamped to 1 while XR presenting; restore lookdev `.anisotropy` on session end (`crate-toolbox` v0.21)
+- [ ] Present-path XR framebuffer scale factor clamped to 1 while XR presenting; restore lookdev/desktop scale on session end (`crate-toolbox` v0.22; Three r170 `setFramebufferScaleFactor` only — no getter; set while presenting does not rebuild the current layer)
 - [ ] Texture/draw/tri budgets written on the object manifest `perf` block
 - [ ] On-device matrix filled per [quest-3-on-device-qa](../docs/shipping/quest-3-on-device-qa.md) (Browser, firmware, SHA, requested Hz, FFR, method). Leave cells blank until a headset run — do not invent ms.
 

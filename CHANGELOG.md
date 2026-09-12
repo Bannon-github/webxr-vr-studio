@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.24.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.22.0** Quest 3 shipping/perf gate: present-path XR framebuffer scale factor clamp to 1 in `examples/interactive-prop` (`sessionstart` after 90/72 + FFR + v0.15 pixel-ratio clamp + v0.16 MSAA-off verify + v0.17 NoToneMapping + v0.18 IBL off + v0.19 directional off + v0.20 ambient-only fill + v0.21 anisotropy clamp; save last-set / lookdev default, `setFramebufferScaleFactor(1)`; r170 has no getter and cannot rebuild the current layer while presenting — also set 1 at renderer setup; restore lookdev scale on `sessionend`). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.23.0] — 2026-09-11
 
 ### Changed

@@ -31,13 +31,14 @@ Leave headroom for browser + compositor. Target ~70–80% of budget on device, n
 ## Foveation and resolution
 
 - Use XRWebGLLayer.fixedFoveation when supported (see fundamentals/layers-and-ffr.md)
-- Prefer runtime framebufferScaleFactor / renderScale knobs over unchecked supersampling. `crate-toolbox` v0.15 clamps `renderer.setPixelRatio(1)` on `sessionstart` and restores the desktop cap on `sessionend` (not per-frame).
+- Prefer runtime framebufferScaleFactor / renderScale knobs over unchecked supersampling. `crate-toolbox` v0.15 clamps `renderer.setPixelRatio(1)` on `sessionstart` and restores the desktop cap on `sessionend` (not per-frame). `crate-toolbox` v0.22 clamps `renderer.xr.setFramebufferScaleFactor(1)` (distinct knob — XR eye-buffer scale vs runtime recommended size). Three r170 has no getter and cannot rebuild the current layer while presenting; the example also sets 1 at renderer setup. Restore lookdev scale on `sessionend`. Not per-frame.
 - Present-path MSAA off: construct `WebGLRenderer({ antialias: false })` so Three r170 copies that into `XRWebGLLayer`. There is no live `setAntialias`. `crate-toolbox` v0.16.
 - Present-path tone mapping: `NoToneMapping` while XR presenting (skip ACESFilmic output ALU). Restore lookdev `ACESFilmicToneMapping` + prior `toneMappingExposure` on `sessionend`. `crate-toolbox` v0.17. Not per-frame.
 - Present-path IBL: null `scene.environment` while XR presenting (skip MeshStandardMaterial `USE_ENVMAP` / `textureCubeUV`). r170 `environmentIntensity` is a post-sample multiply and does not skip sampling. Restore the saved PMREM + lookdev intensity on `sessionend` (do not dispose). `crate-toolbox` v0.18. Not per-frame.
 - Present-path directional / punctual: hide the lookdev `DirectionalLight` while XR presenting (`visible = false` + intensity 0). r170 intensity 0 on a visible sun still increments `NUM_DIR_LIGHTS`. Restore lookdev visible + intensity on `sessionend`. `crate-toolbox` v0.19. Not per-frame.
 - Present-path ambient-only fill: hide the lookdev `HemisphereLight` while XR presenting (`visible = false` + intensity 0) and enable one reused `AmbientLight` (intensity 0.4). r170 intensity 0 on a visible hemi still increments `NUM_HEMI_LIGHTS`. Restore lookdev hemi and disable/detach ambient on `sessionend`. `crate-toolbox` v0.20. Not per-frame.
 - Present-path texture anisotropy: clamp bound maps to 1 while XR presenting (lookdev / packaged GLB may use GPU max). Restore saved lookdev `.anisotropy` on `sessionend`. `crate-toolbox` v0.21. Not per-frame.
+- Present-path XR framebuffer scale: clamp `setFramebufferScaleFactor` to 1 while XR presenting (lookdev / HUD code may raise it). Restore saved lookdev scale on `sessionend`. `crate-toolbox` v0.22. Not per-frame.
 - Do not render to an intermediate full-res buffer then blit if you want FFR benefits (FFR applies to the eye buffer path)
 
 ## Profiling checklist

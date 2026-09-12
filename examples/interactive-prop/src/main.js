@@ -74,6 +74,10 @@ import {
   QUEST3_XR_AMBIENT_INTENSITY,
 } from "./present-ambient-fill.js";
 import { applyPresentAnisotropy } from "./present-anisotropy.js";
+import {
+  applyPresentFramebufferScale,
+  QUEST3_XR_FRAMEBUFFER_SCALE,
+} from "./present-framebuffer-scale.js";
 import behaviorTemplate from "./behavior.json";
 import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 
@@ -105,6 +109,13 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.xr.enabled = true;
+// Present-path XR eye-buffer scale (v0.22). Three r170 snapshots this in
+// setSession *before* sessionstart (and warns if set while presenting).
+// Set 1 here so the current layer inherits the clamp. Session helpers
+// still save/apply/restore; r170 has no getter.
+if (typeof renderer.xr.setFramebufferScaleFactor === "function") {
+  renderer.xr.setFramebufferScaleFactor(QUEST3_XR_FRAMEBUFFER_SCALE);
+}
 document.body.appendChild(renderer.domElement);
 
 const sessionInit = { optionalFeatures: ["hand-tracking", "local-floor"] };
@@ -609,8 +620,9 @@ window.addEventListener("resize", () => {
  * Pixel-ratio clamp (1 while presenting), present-path antialias/MSAA off,
  * present-path NoToneMapping, present-path IBL/environment off,
  * present-path directional/punctual off, present-path ambient-only
- * fill (hemisphere off + one AmbientLight), then present-path texture
- * anisotropy clamp to 1 are applied after this on sessionstart.
+ * fill (hemisphere off + one AmbientLight), present-path texture
+ * anisotropy clamp to 1, then present-path XR framebuffer scale
+ * clamp to 1 are applied after this on sessionstart.
  * Antialias is constructor-time (Three copies getContextAttributes into
  * XRWebGLLayer); helpers verify only. Tone mapping is a live renderer
  * property (save ACES + exposure, set NoToneMapping). IBL: r170
@@ -624,7 +636,12 @@ window.addEventListener("resize", () => {
  * reused AmbientLight at intensity 0.4; restore hemi and disable/detach
  * ambient on sessionend. Anisotropy: lookdev / packaged GLB may use GPU
  * max; sessionstart clamps bound maps to 1 and sessionend restores the
- * saved values (not per-frame; do not re-upload). Do not require
+ * saved values (not per-frame; do not re-upload). Framebuffer scale:
+ * r170 has setFramebufferScaleFactor only (no getter; private default
+ * 1). sessionstart (after v0.15–v0.21) saves last-set / lookdev 1 and
+ * writes 1; a set while presenting does not rebuild the current layer.
+ * Construction-time set above is what the current session inherits.
+ * sessionend restores the saved lookdev scale first. Do not require
  * 120 / 207 / 240 Hz.
  */
 function applyQuest3SessionDefaults(session) {
@@ -665,6 +682,7 @@ let presentAmbient = null;
 let savedDesktopHemisphereVisible = null;
 let savedDesktopHemisphereIntensity = null;
 let presentAnisotropyHandle = null;
+let savedDesktopFramebufferScale = null;
 renderer.xr.addEventListener("sessionstart", () => {
   resumeAudio();
   const session = renderer.xr.getSession();
@@ -748,6 +766,25 @@ renderer.xr.addEventListener("sessionstart", () => {
     "textures",
     aniso.count
   );
+  // After anisotropy: clamp present-path XR framebuffer scale to 1
+  // (not per-frame). r170 has no getter; a set while presenting does
+  // not rebuild the current eye buffer.
+  const fb = applyPresentFramebufferScale(renderer, {
+    presenting: true,
+    savedScale: savedDesktopFramebufferScale,
+    lastSetScale: savedDesktopFramebufferScale ?? QUEST3_XR_FRAMEBUFFER_SCALE,
+  });
+  savedDesktopFramebufferScale = fb.savedScale;
+  console.info(
+    "[interactive-prop] present framebufferScale",
+    fb.scale,
+    "saved",
+    fb.savedScale,
+    "presentingLocked",
+    fb.presentingLocked,
+    "getterAvailable",
+    fb.getterAvailable
+  );
   session?.addEventListener("inputsourceschange", onInputSourcesChange);
   session?.addEventListener("visibilitychange", onSessionVisibilityChange);
 });
@@ -759,6 +796,11 @@ renderer.xr.addEventListener("sessionend", () => {
   }
   releaseAllHolds();
   // Last applied on sessionstart — restore first (reverse-safe).
+  applyPresentFramebufferScale(renderer, {
+    presenting: false,
+    savedScale: savedDesktopFramebufferScale,
+  });
+  savedDesktopFramebufferScale = null;
   applyPresentAnisotropy({
     presenting: false,
     handle: presentAnisotropyHandle,
