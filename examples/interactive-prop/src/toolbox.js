@@ -1,18 +1,11 @@
 import * as THREE from "three";
 import behaviorTemplate from "./behavior.json" with { type: "json" };
 import {
-  L3_LOD0_STEEL_METALNESS,
-  L3_LOD0_STEEL_ROUGHNESS,
   L3_LOD1_BRASS_COLOR,
-  L3_LOD1_BRASS_METALNESS,
-  L3_LOD1_BRASS_ROUGHNESS,
   L3_LOD1_WOOD_COLOR,
-  L3_LOD1_WOOD_METALNESS,
-  L3_LOD1_WOOD_ROUGHNESS,
   L3_LOD2_WOOD_COLOR,
   getCrateL2Maps,
   mappedBasic,
-  mappedStandard,
 } from "./pbr-maps.js";
 
 /**
@@ -87,26 +80,15 @@ export function createToolbox() {
   root.userData.kind = "entity";
 
   const l2 = getCrateL2Maps();
-  // LOD0: five MeshStandard materials, 256² albedo only, no normalMap,
-  // no packed ORM (v0.33; same `{ normalMap: false, ormMap: false }`
-  // opt-out v0.25 used on LOD1). Constant wood / brass / steel
-  // ORM-midtone roughness/metalness keep MeshStandard lit under the
-  // present-path ambient fill.
-  const wood = mappedStandard(0xffffff, l2.wood, { normalMap: false, ormMap: false });
-  const woodDark = mappedStandard(0x7a5840, l2.wood, { normalMap: false, ormMap: false });
-  const brass = mappedStandard(0xffffff, l2.brass, {
-    normalMap: false,
-    ormMap: false,
-    roughness: L3_LOD1_BRASS_ROUGHNESS,
-    metalness: L3_LOD1_BRASS_METALNESS,
-  });
-  const steel = mappedStandard(0xffffff, l2.steel, {
-    normalMap: false,
-    ormMap: false,
-    roughness: L3_LOD0_STEEL_ROUGHNESS,
-    metalness: L3_LOD0_STEEL_METALNESS,
-  });
-  const handleMat = mappedStandard(0xe8b42a, l2.wood, { normalMap: false, ormMap: false });
+  // LOD0: five unlit MeshBasic materials, 256² albedo map only
+  // (v0.34; same mapped-albedo MeshBasic path v0.28 used on LOD1
+  // before the v0.30 color-only drop). No roughness/metalness —
+  // those uniforms do not apply to MeshBasic.
+  const wood = mappedBasic(0xffffff, l2.wood);
+  const woodDark = mappedBasic(0x7a5840, l2.wood);
+  const brass = mappedBasic(0xffffff, l2.brass);
+  const steel = mappedBasic(0xffffff, l2.steel);
+  const handleMat = mappedBasic(0xe8b42a, l2.wood);
   // LOD1 mid crate / lid / latch / tool stub: color-only unlit MeshBasic
   // (no albedo map). Wood / dark / handle cards share the wood albedo
   // midtone; latch uses the brass albedo midtone. No roughness/metalness
@@ -239,18 +221,13 @@ export function createToolbox() {
     lodOrmMaps: { 0: false, 1: false, 2: false },
     lodNormalScaleMul: { 0: 0, 1: 0, 2: 0 },
     lodMaterialClass: {
-      0: "MeshStandardMaterial",
+      0: "MeshBasicMaterial",
       1: "MeshBasicMaterial",
       2: "MeshBasicMaterial",
     },
-    lod0Constants: {
-      wood: { roughness: L3_LOD1_WOOD_ROUGHNESS, metalness: L3_LOD1_WOOD_METALNESS },
-      brass: { roughness: L3_LOD1_BRASS_ROUGHNESS, metalness: L3_LOD1_BRASS_METALNESS },
-      steel: { roughness: L3_LOD0_STEEL_ROUGHNESS, metalness: L3_LOD0_STEEL_METALNESS },
-    },
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
-    note: "procedural canvas stand-in; LOD0 256² albedo-only MeshStandard (no normalMap, no ORM; wood/brass/steel ORM-midtone constants); LOD1 color-only unlit MeshBasic (no map; wood/brass midtones); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
+    note: "procedural canvas stand-in; LOD0 256² albedo MeshBasic (unlit; map only; no normalMap, no ORM); LOD1 color-only unlit MeshBasic (no map; wood/brass midtones); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
