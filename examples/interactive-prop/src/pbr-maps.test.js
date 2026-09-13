@@ -16,6 +16,7 @@ import {
   L3_LOD2_WOOD_METALNESS,
   L3_LOD2_WOOD_ROUGHNESS,
   brassHeight,
+  getCrateL2Maps,
   heightToNormalRgb,
   mappedBasic,
   mappedStandard,
@@ -173,6 +174,52 @@ test("mappedBasic color-only omits map (LOD1 mid wood/brass and LOD2 far wood)",
   assert.equal(far.metalness, undefined);
   assert.equal(noMaps.map, null);
   assert.equal(noMaps.color.getHex(), L3_LOD2_WOOD_COLOR);
+});
+
+function installCanvasStub() {
+  if (globalThis.document?.createElement) return;
+  globalThis.document = {
+    createElement(tag) {
+      if (tag !== "canvas") return { tagName: String(tag).toUpperCase() };
+      return {
+        width: 0,
+        height: 0,
+        getContext() {
+          return {
+            createImageData(w, h) {
+              return { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
+            },
+            putImageData() {},
+          };
+        },
+      };
+    },
+  };
+}
+
+test("getCrateL2Maps allocates six 256² albedo+ORM canvases and no normals", () => {
+  installCanvasStub();
+  const maps = getCrateL2Maps();
+  assert.equal(maps.uniqueTextures, 6);
+  assert.equal(maps.size, 256);
+  assert.equal(maps.lodAlbedoSize, 0);
+  assert.equal(maps.wood.normal, null);
+  assert.equal(maps.brass.normal, null);
+  assert.equal(maps.steel.normal, null);
+  assert.equal(maps.woodLod, undefined);
+  assert.equal(maps.brassLod, undefined);
+  assert.equal(maps.wood.albedo.image.width, 256);
+  assert.equal(maps.wood.orm.image.width, 256);
+  assert.equal(maps.brass.albedo.image.width, 256);
+  assert.equal(maps.brass.orm.image.width, 256);
+  assert.equal(maps.steel.albedo.image.width, 256);
+  assert.equal(maps.steel.orm.image.width, 256);
+  const bound = mappedStandard(0xffffff, maps.wood, { normalMap: false });
+  assert.equal(bound.isMeshStandardMaterial, true);
+  assert.equal(bound.normalMap, null);
+  assert.equal(bound.map, maps.wood.albedo);
+  assert.equal(bound.roughnessMap, maps.wood.orm);
+  assert.equal(bound.metalnessMap, maps.wood.orm);
 });
 
 test("wood / brass / steel height fields are not flat", () => {

@@ -10,8 +10,9 @@ export const L2_TEXTURE_SIZE = 256;
  * MeshBasic). Kept as the documented half-res constant / GLB authoring
  * cap if a future packaged mid LOD uses a tiny albedo. Procedural path
  * no longer allocates these canvases. v0.31 drops LOD0 hero maps from
- * 512² → 256² (`L2_TEXTURE_SIZE`); this constant stays 256 so historical
- * docs stay accurate. Not a headset-measured ms claim.
+ * 512² → 256² (`L2_TEXTURE_SIZE`); v0.32 drops LOD0 `normalMap` (albedo
+ * + ORM only). This constant stays 256 so historical docs stay accurate.
+ * Not a headset-measured ms claim.
  */
 export const L3_LOD_ALBEDO_SIZE = 256;
 
@@ -261,7 +262,9 @@ export const L2_NORMAL_SCALE = { wood: [0.62, 0.62], brass: [0.3, 0.3], steel: [
  * 256² albedo on LOD1/LOD2, so mid materials no longer apply this multiplier.
  * v0.27 switches LOD2 to MeshBasicMaterial (unlit); v0.28 does the same for
  * LOD1; v0.29 drops the LOD2 albedo map (color-only MeshBasic); v0.30 does
- * the same for LOD1. These mid constants stay on the `mappedStandard` helper only.
+ * the same for LOD1; v0.32 drops LOD0 `normalMap` the same way LOD1 did in
+ * v0.24 (`{ normalMap: false }`) while keeping packed ORM. These mid
+ * constants stay on the `mappedStandard` helper only.
  */
 export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
 
@@ -333,33 +336,32 @@ export function getCrateL2Maps() {
   const s = L2_TEXTURE_SIZE;
   const woodAlb = texFromCanvas(woodAlbedo(s), true, 2, 2);
   const woodOrmTex = texFromCanvas(woodOrm(s), false, 2, 2);
-  const woodNrm = texFromCanvas(normalCanvas(s, woodHeight, L2_NORMAL_STRENGTH.wood), false, 2, 2);
   const brassAlb = texFromCanvas(brassAlbedo(s), true, 1, 1);
   const brassOrmTex = texFromCanvas(brassOrm(s), false, 1, 1);
-  const brassNrm = texFromCanvas(normalCanvas(s, brassHeight, L2_NORMAL_STRENGTH.brass), false, 1, 1);
   const steelAlb = texFromCanvas(steelAlbedo(s), true, 2, 4);
   const steelOrmTex = texFromCanvas(steelOrm(s), false, 2, 4);
-  const steelNrm = texFromCanvas(normalCanvas(s, steelHeight, L2_NORMAL_STRENGTH.steel), false, 2, 4);
   // v0.26 added dedicated 256² wood/brass albedos for LOD1/LOD2.
   // v0.29 dropped the LOD2 map; v0.30 drops LOD1 maps too — do not
   // allocate unused woodLod / brassLod canvases. v0.31 generates the
-  // nine LOD0 albedo + ORM + normal canvases at 256² (was 512²).
+  // LOD0 albedo + ORM + normal canvases at 256² (was 512²). v0.32
+  // drops the three LOD0 normal canvases (wood / brass / steel).
   cached = {
     size: s,
     lodAlbedoSize: 0,
-    uniqueTextures: 9,
-    wood: materialMaps(woodAlb, woodOrmTex, woodNrm, L2_NORMAL_SCALE.wood),
-    brass: materialMaps(brassAlb, brassOrmTex, brassNrm, L2_NORMAL_SCALE.brass),
-    steel: materialMaps(steelAlb, steelOrmTex, steelNrm, L2_NORMAL_SCALE.steel),
+    uniqueTextures: 6,
+    wood: materialMaps(woodAlb, woodOrmTex, null, L2_NORMAL_SCALE.wood),
+    brass: materialMaps(brassAlb, brassOrmTex, null, L2_NORMAL_SCALE.brass),
+    steel: materialMaps(steelAlb, steelOrmTex, null, L2_NORMAL_SCALE.steel),
   };
   return cached;
 }
 
 /**
- * Shared MeshStandardMaterial. LOD0 binds v0.12 normalMap at full scale.
- * Pass `{ normalScaleMul }` to keep the map at reduced slope (v0.14 mid-LOD).
- * Pass `{ normalMap: false }` so the fragment shader skips tangent-space
- * sampling (same albedo + ORM unless `{ ormMap: false }`).
+ * Shared MeshStandardMaterial. v0.32 procedural LOD0 omits `normalMap`
+ * (`{ normalMap: false }`) and keeps 256² albedo + packed ORM.
+ * Pass `{ normalScaleMul }` to keep a bound map at reduced slope (v0.14
+ * mid-LOD historical). Pass `{ normalMap: false }` so the fragment shader
+ * skips tangent-space sampling (same albedo + ORM unless `{ ormMap: false }`).
  * Pass `{ ormMap: false }` to skip packed ORM (`roughnessMap` /
  * `metalnessMap`) and use constant roughness/metalness so the material
  * stays lit under the present-path ambient fill. Defaults to wood-ORM

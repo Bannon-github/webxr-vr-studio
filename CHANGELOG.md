@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.34.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.32.0** L3 packaging/perf UPGRADE: procedural LOD0 MeshStandard drops `normalMap` while keeping 256² albedo + ORM. LOD1 stays color-only MeshBasic (v0.30); LOD2 stays color-only MeshBasic (v0.29). Unique canvases 9 → 6. Same draws / tris as v0.31. Headset ms / FFR still unmeasured.
+
 ## [0.33.0] — 2026-09-13
 
 ### Changed
