@@ -5,9 +5,11 @@ import {
   L2_NORMAL_STRENGTH,
   L2_TEXTURE_SIZE,
   L3_LOD_ALBEDO_SIZE,
+  L3_LOD1_BRASS_COLOR,
   L3_LOD1_BRASS_METALNESS,
   L3_LOD1_BRASS_ROUGHNESS,
   L3_LOD1_NORMAL_SCALE_MUL,
+  L3_LOD1_WOOD_COLOR,
   L3_LOD1_WOOD_METALNESS,
   L3_LOD1_WOOD_ROUGHNESS,
   L3_LOD2_WOOD_COLOR,
@@ -141,11 +143,26 @@ test("mappedBasic is unlit MeshBasic with albedo and no lighting uniforms", () =
   assert.equal(midTint.metalness, undefined);
 });
 
-test("mappedBasic color-only omits map (LOD2 far wood)", () => {
+test("mappedBasic color-only omits map (LOD1 mid wood/brass and LOD2 far wood)", () => {
   const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
+  const midWood = mappedBasic(L3_LOD1_WOOD_COLOR, maps, { map: false });
+  const midBrass = mappedBasic(L3_LOD1_BRASS_COLOR, null, { map: false });
   const far = mappedBasic(L3_LOD2_WOOD_COLOR, maps, { map: false });
   const noMaps = mappedBasic(L3_LOD2_WOOD_COLOR, null, { map: false });
   assert.equal(L3_LOD2_WOOD_COLOR, 0x633318);
+  assert.equal(L3_LOD1_WOOD_COLOR, L3_LOD2_WOOD_COLOR);
+  assert.equal(L3_LOD1_WOOD_COLOR, 0x633318);
+  assert.equal(L3_LOD1_BRASS_COLOR, 0xbe7e31);
+  assert.equal(midWood.isMeshBasicMaterial, true);
+  assert.ok(!midWood.isMeshStandardMaterial);
+  assert.equal(midWood.map, null, "LOD1 wood MeshBasic has no albedo map");
+  assert.equal(midWood.color.getHex(), L3_LOD1_WOOD_COLOR);
+  assert.equal(midWood.roughness, undefined);
+  assert.equal(midWood.metalness, undefined);
+  assert.equal(midBrass.map, null, "LOD1 brass MeshBasic has no albedo map");
+  assert.equal(midBrass.color.getHex(), L3_LOD1_BRASS_COLOR);
+  assert.equal(midBrass.roughness, undefined);
+  assert.equal(midBrass.metalness, undefined);
   assert.equal(far.isMeshBasicMaterial, true);
   assert.ok(!far.isMeshStandardMaterial);
   assert.equal(far.map, null, "color-only MeshBasic has no albedo map");
