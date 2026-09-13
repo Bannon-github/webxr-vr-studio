@@ -232,7 +232,7 @@ export function createToolbox() {
     lod0Color: { wood: L3_LOD0_WOOD_COLOR, brass: L3_LOD0_BRASS_COLOR, steel: L3_LOD0_STEEL_COLOR },
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
-    note: "procedural canvas stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones); LOD1 color-only unlit MeshBasic (no map; wood/brass midtones); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
+    note: "procedural color-only stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones); LOD1 color-only unlit MeshBasic (no map; wood/brass midtones); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -240,7 +240,7 @@ export function createToolbox() {
     lod2: { wood: woodFar },
   };
   root.userData.packaging = {
-    source: "procedural-canvas",
+    source: "procedural-color-only",
     probedUrl: studio.source?.packagedUrl ?? "/packaged/crate-toolbox.glb",
     found: false,
   };

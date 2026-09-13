@@ -62,7 +62,7 @@ Copy the result to `assets/objects/<objectId>/current.glb` **and** `revisions/<s
 
 ## Runtime (Three.js)
 
-`GLTFLoader` + `KTX2Loader` (Basis transcoder) + optional `MeshoptDecoder`. After load: hide `collider_*`, attach the sidecar, do not raycast hero meshes. The example implements this in `packaged-visual.js`: **probe URL → load if present → else procedural canvases.**
+`GLTFLoader` + `KTX2Loader` (Basis transcoder) + optional `MeshoptDecoder`. After load: hide `collider_*`, attach the sidecar, do not raycast hero meshes. The example implements this in `packaged-visual.js`: **probe URL → load if present → else procedural color-only MeshBasic.**
 
 ## Quest 3 sign-off
 

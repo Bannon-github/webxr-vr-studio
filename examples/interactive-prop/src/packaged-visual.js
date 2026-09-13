@@ -111,7 +111,7 @@ export async function tryLoadPackagedToolbox(renderer, sidecar) {
   if (sidecar?.source?.preferPackaged === false) return null;
   const found = await probePackagedUrl(url);
   if (!found) {
-    console.info("[crate-toolbox] no packaged GLB at", url, "— procedural canvases");
+    console.info("[crate-toolbox] no packaged GLB at", url, "— procedural color-only MeshBasic");
     return null;
   }
 
