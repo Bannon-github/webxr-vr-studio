@@ -1,6 +1,9 @@
 import * as THREE from "three";
 import behaviorTemplate from "./behavior.json" with { type: "json" };
 import {
+  L3_LOD0_BRASS_COLOR,
+  L3_LOD0_STEEL_COLOR,
+  L3_LOD0_WOOD_COLOR,
   L3_LOD1_BRASS_COLOR,
   L3_LOD1_WOOD_COLOR,
   L3_LOD2_WOOD_COLOR,
@@ -80,15 +83,16 @@ export function createToolbox() {
   root.userData.kind = "entity";
 
   const l2 = getCrateL2Maps();
-  // LOD0: five unlit MeshBasic materials, 256² albedo map only
-  // (v0.34; same mapped-albedo MeshBasic path v0.28 used on LOD1
-  // before the v0.30 color-only drop). No roughness/metalness —
-  // those uniforms do not apply to MeshBasic.
-  const wood = mappedBasic(0xffffff, l2.wood);
-  const woodDark = mappedBasic(0x7a5840, l2.wood);
-  const brass = mappedBasic(0xffffff, l2.brass);
-  const steel = mappedBasic(0xffffff, l2.steel);
-  const handleMat = mappedBasic(0xe8b42a, l2.wood);
+  // LOD0: five color-only unlit MeshBasic materials (no albedo map).
+  // Wood / dark / handle cards share the wood albedo midtone; latch
+  // uses the brass albedo midtone; shaft / tip use the steel albedo
+  // midtone (v0.35; same color-only step v0.29/v0.30 used on LOD2/LOD1).
+  // No roughness/metalness — those uniforms do not apply to MeshBasic.
+  const wood = mappedBasic(L3_LOD0_WOOD_COLOR, null, { map: false });
+  const woodDark = mappedBasic(L3_LOD0_WOOD_COLOR, null, { map: false });
+  const brass = mappedBasic(L3_LOD0_BRASS_COLOR, null, { map: false });
+  const steel = mappedBasic(L3_LOD0_STEEL_COLOR, null, { map: false });
+  const handleMat = mappedBasic(L3_LOD0_WOOD_COLOR, null, { map: false });
   // LOD1 mid crate / lid / latch / tool stub: color-only unlit MeshBasic
   // (no albedo map). Wood / dark / handle cards share the wood albedo
   // midtone; latch uses the brass albedo midtone. No roughness/metalness
@@ -215,8 +219,8 @@ export function createToolbox() {
     textureSize: l2.size,
     lodAlbedoSize: l2.lodAlbedoSize,
     uniqueTextures: l2.uniqueTextures,
-    maps: "albedo",
-    lodAlbedoMaps: { 0: l2.size, 1: 0, 2: 0 },
+    maps: "none",
+    lodAlbedoMaps: { 0: 0, 1: 0, 2: 0 },
     lodNormalMaps: { 0: false, 1: false, 2: false },
     lodOrmMaps: { 0: false, 1: false, 2: false },
     lodNormalScaleMul: { 0: 0, 1: 0, 2: 0 },
@@ -225,9 +229,10 @@ export function createToolbox() {
       1: "MeshBasicMaterial",
       2: "MeshBasicMaterial",
     },
+    lod0Color: { wood: L3_LOD0_WOOD_COLOR, brass: L3_LOD0_BRASS_COLOR, steel: L3_LOD0_STEEL_COLOR },
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
-    note: "procedural canvas stand-in; LOD0 256² albedo MeshBasic (unlit; map only; no normalMap, no ORM); LOD1 color-only unlit MeshBasic (no map; wood/brass midtones); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
+    note: "procedural canvas stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones); LOD1 color-only unlit MeshBasic (no map; wood/brass midtones); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
