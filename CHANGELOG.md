@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.33.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.31.0** L3 packaging/perf UPGRADE: procedural LOD0 hero maps drop from 512² → 256² while staying MeshStandard with albedo + ORM + `normalMap` at full modest `normalScale`. LOD1 stays color-only MeshBasic (v0.30); LOD2 stays color-only MeshBasic (v0.29). Unique canvases stay 9. Same draws / tris as v0.30. Headset ms / FFR still unmeasured.
+
 ## [0.32.0] — 2026-09-13
 
 ### Changed
