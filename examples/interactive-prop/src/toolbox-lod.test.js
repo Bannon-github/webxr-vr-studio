@@ -3,8 +3,14 @@ import { test } from "node:test";
 import {
   L2_TEXTURE_SIZE,
   L3_LOD_ALBEDO_SIZE,
+  L3_LOD0_STEEL_METALNESS,
+  L3_LOD0_STEEL_ROUGHNESS,
   L3_LOD1_BRASS_COLOR,
+  L3_LOD1_BRASS_METALNESS,
+  L3_LOD1_BRASS_ROUGHNESS,
   L3_LOD1_WOOD_COLOR,
+  L3_LOD1_WOOD_METALNESS,
+  L3_LOD1_WOOD_ROUGHNESS,
   L3_LOD2_WOOD_COLOR,
   getCrateL2Maps,
 } from "./pbr-maps.js";
@@ -44,7 +50,7 @@ function mapWH(tex) {
   return [img?.width, img?.height];
 }
 
-test("LOD0 256² MeshStandard albedo+ORM (no normalMap); LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
+test("LOD0 256² MeshStandard albedo-only (no normalMap, no ORM); LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
   const crate = createToolbox();
   const maps = getCrateL2Maps();
   assert.equal(L2_TEXTURE_SIZE, 256);
@@ -57,33 +63,50 @@ test("LOD0 256² MeshStandard albedo+ORM (no normalMap); LOD1 color-only MeshBas
   assert.equal(crate.userData.l2.lodNormalScaleMul[2], 0);
   assert.equal(crate.userData.l2.textureSize, L2_TEXTURE_SIZE);
   assert.equal(crate.userData.l2.lodAlbedoSize, 0);
-  assert.equal(crate.userData.l2.uniqueTextures, 6);
+  assert.equal(crate.userData.l2.uniqueTextures, 3);
   assert.deepEqual(crate.userData.l2.lodAlbedoMaps, { 0: 256, 1: 0, 2: 0 });
   assert.equal(maps.woodLod, undefined, "v0.30 must not allocate unused woodLod canvases");
   assert.equal(maps.brassLod, undefined, "v0.30 must not allocate unused brassLod canvases");
   assert.equal(maps.wood.normal, null, "v0.32 must not allocate wood normal canvases");
   assert.equal(maps.brass.normal, null, "v0.32 must not allocate brass normal canvases");
   assert.equal(maps.steel.normal, null, "v0.32 must not allocate steel normal canvases");
+  assert.equal(maps.wood.orm, null, "v0.33 must not allocate wood ORM canvases");
+  assert.equal(maps.brass.orm, null, "v0.33 must not allocate brass ORM canvases");
+  assert.equal(maps.steel.orm, null, "v0.33 must not allocate steel ORM canvases");
   assert.deepEqual(mapWH(maps.wood.albedo), [256, 256], "LOD0 wood albedo is 256²");
-  assert.deepEqual(mapWH(maps.wood.orm), [256, 256], "LOD0 wood ORM is 256²");
   assert.deepEqual(mapWH(maps.brass.albedo), [256, 256], "LOD0 brass albedo is 256²");
-  assert.deepEqual(mapWH(maps.brass.orm), [256, 256], "LOD0 brass ORM is 256²");
   assert.deepEqual(mapWH(maps.steel.albedo), [256, 256], "LOD0 steel albedo is 256²");
-  assert.deepEqual(mapWH(maps.steel.orm), [256, 256], "LOD0 steel ORM is 256²");
   assert.deepEqual(crate.userData.l2.lod1Color, { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR });
   assert.equal(crate.userData.l2.lod2Color, L3_LOD2_WOOD_COLOR);
+  assert.deepEqual(crate.userData.l2.lod0Constants, {
+    wood: { roughness: L3_LOD1_WOOD_ROUGHNESS, metalness: L3_LOD1_WOOD_METALNESS },
+    brass: { roughness: L3_LOD1_BRASS_ROUGHNESS, metalness: L3_LOD1_BRASS_METALNESS },
+    steel: { roughness: L3_LOD0_STEEL_ROUGHNESS, metalness: L3_LOD0_STEEL_METALNESS },
+  });
 
   setToolboxLod(crate, 0);
   assert.equal(crate.userData.lod.current, 0);
   const lod0 = collectLodVisualMaterials(crate, 0);
   assert.ok(lod0.length > 0);
+  const lod0Named = crate.userData.materials.lod0;
   for (const mat of lod0) {
     assert.equal(mat.isMeshStandardMaterial, true, "LOD0 stays MeshStandard");
     assert.ok(!mat.normalMap, "LOD0 MeshStandard has no normalMap");
-    assert.ok(mat.roughnessMap, "LOD0 must keep ORM");
-    assert.ok(mat.metalnessMap, "LOD0 must keep ORM");
+    assert.ok(!mat.roughnessMap, "LOD0 MeshStandard has no ORM roughnessMap");
+    assert.ok(!mat.metalnessMap, "LOD0 MeshStandard has no ORM metalnessMap");
     assert.deepEqual(mapWH(mat.map), [256, 256], "LOD0 albedo is 256²");
-    assert.deepEqual(mapWH(mat.roughnessMap), [256, 256], "LOD0 ORM is 256²");
+    const isBrass = mat === lod0Named.brass;
+    const isSteel = mat === lod0Named.steel;
+    if (isBrass) {
+      assert.equal(mat.roughness, L3_LOD1_BRASS_ROUGHNESS, "LOD0 brass uses brass ORM midtone");
+      assert.equal(mat.metalness, L3_LOD1_BRASS_METALNESS, "LOD0 brass uses brass ORM midtone");
+    } else if (isSteel) {
+      assert.equal(mat.roughness, L3_LOD0_STEEL_ROUGHNESS, "LOD0 steel uses steel ORM midtone");
+      assert.equal(mat.metalness, L3_LOD0_STEEL_METALNESS, "LOD0 steel uses steel ORM midtone");
+    } else {
+      assert.equal(mat.roughness, L3_LOD1_WOOD_ROUGHNESS, "LOD0 wood uses wood ORM midtone");
+      assert.equal(mat.metalness, L3_LOD1_WOOD_METALNESS, "LOD0 wood uses wood ORM midtone");
+    }
   }
 
   const lod1 = collectLodVisualMaterials(crate, 1);
@@ -129,14 +152,14 @@ test("LOD0 256² MeshStandard albedo+ORM (no normalMap); LOD1 color-only MeshBas
   }
   for (const mat of lod0) {
     assert.ok(!mat.normalMap, "LOD0 still has no normalMap after LOD2 collect");
-    assert.ok(mat.roughnessMap, "LOD0 keeps ORM");
+    assert.ok(!mat.roughnessMap, "LOD0 still has no ORM after LOD2 collect");
+    assert.ok(!mat.metalnessMap, "LOD0 still has no ORM metalnessMap after LOD2 collect");
     assert.deepEqual(mapWH(mat.map), [256, 256], "LOD0 albedo stays 256² after LOD2 collect");
-    assert.deepEqual(mapWH(mat.roughnessMap), [256, 256], "LOD0 ORM stays 256² after LOD2 collect");
   }
   assert.equal(crate.userData.l2.lodNormalMaps[0], false);
   assert.equal(crate.userData.l2.lodNormalMaps[1], false);
   assert.equal(crate.userData.l2.lodNormalMaps[2], false);
-  assert.equal(crate.userData.l2.lodOrmMaps[0], true);
+  assert.equal(crate.userData.l2.lodOrmMaps[0], false);
   assert.equal(crate.userData.l2.lodOrmMaps[1], false);
   assert.equal(crate.userData.l2.lodOrmMaps[2], false);
   assert.equal(crate.userData.l2.lod1Constants, undefined, "LOD1 drops roughness/metalness constants");
@@ -151,10 +174,11 @@ test("LOD0 256² MeshStandard albedo+ORM (no normalMap); LOD1 color-only MeshBas
   assert.equal(fastener.material, crate.userData.materials.lod0.brass);
   assert.equal(fastener.material.isMeshStandardMaterial, true, "fastener stays MeshStandard");
   assert.ok(!fastener.material.normalMap, "fastener stays on shared LOD0 brass (no normalMap)");
-  assert.ok(fastener.material.roughnessMap, "fastener keeps shared LOD0 brass ORM");
-  assert.ok(fastener.material.metalnessMap, "fastener keeps shared LOD0 brass ORM");
+  assert.ok(!fastener.material.roughnessMap, "fastener stays on shared LOD0 brass (no ORM)");
+  assert.ok(!fastener.material.metalnessMap, "fastener stays on shared LOD0 brass (no ORM)");
+  assert.equal(fastener.material.roughness, L3_LOD1_BRASS_ROUGHNESS);
+  assert.equal(fastener.material.metalness, L3_LOD1_BRASS_METALNESS);
   assert.deepEqual(mapWH(fastener.material.map), [256, 256], "fastener uses the 256² LOD0 brass albedo");
-  assert.deepEqual(mapWH(fastener.material.roughnessMap), [256, 256], "fastener uses the 256² LOD0 brass ORM");
 });
 
 test("setToolboxLod is visibility-only (no material swap on switch)", () => {

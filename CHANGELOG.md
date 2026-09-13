@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.35.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.33.0** L3 packaging/perf UPGRADE: procedural LOD0 MeshStandard drops packed ORM and becomes albedo-only (256² albedo; constant wood/brass/steel ORM-midtone roughness/metalness). LOD1 stays color-only MeshBasic (v0.30); LOD2 stays color-only MeshBasic (v0.29). Unique canvases 6 → 3. Same draws / tris as v0.32. Headset ms / FFR still unmeasured.
+
 ## [0.34.0] — 2026-09-13
 
 ### Changed
