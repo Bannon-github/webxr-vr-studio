@@ -4,8 +4,9 @@ import * as THREE from "three";
 export const L2_TEXTURE_SIZE = 512;
 
 /**
- * LOD1 / LOD2 albedo authoring size (half of `L2_TEXTURE_SIZE`).
- * Mid/far bind these maps instead of the shared 512² L2 albedos.
+ * LOD1 albedo authoring size (half of `L2_TEXTURE_SIZE`).
+ * LOD1 binds these maps instead of the shared 512² L2 albedos.
+ * LOD2 (v0.29) is color-only MeshBasic — no albedo map.
  * LOD0 keeps 512² albedo + ORM + normal. Not a headset-measured ms claim.
  */
 export const L3_LOD_ALBEDO_SIZE = 256;
@@ -255,7 +256,8 @@ export const L2_NORMAL_SCALE = { wood: [0.62, 0.62], brass: [0.3, 0.3], steel: [
  * false }`); v0.25 also drops packed ORM (`{ ormMap: false }`); v0.26 binds
  * 256² albedo on LOD1/LOD2, so mid materials no longer apply this multiplier.
  * v0.27 switches LOD2 to MeshBasicMaterial (unlit); v0.28 does the same for
- * LOD1. These mid constants stay on the `mappedStandard` helper only.
+ * LOD1; v0.29 drops the LOD2 albedo map (color-only MeshBasic). These mid
+ * constants stay on the `mappedStandard` helper only.
  */
 export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
 
@@ -264,11 +266,25 @@ export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
  * `woodOrm` G (roughness) = 200 + stripe×40; stripe mid 0.5 → 220.
  * `woodOrm` B (metalness) is authored as constant 8.
  * Historical v0.25 LOD1 wood MeshStandard defaults on `mappedStandard`
- * (`{ ormMap: false }`). Procedural LOD1 (v0.28) and LOD2 (v0.27) are
+ * (`{ ormMap: false }`). Procedural LOD1 (v0.28) and LOD2 (v0.27+) are
  * MeshBasicMaterial — roughness/metalness do not apply.
  */
 export const L3_LOD2_WOOD_ROUGHNESS = 220 / 255;
 export const L3_LOD2_WOOD_METALNESS = 8 / 255;
+
+/**
+ * Wood-albedo midtone for color-only LOD2 MeshBasic (not headset-measured).
+ * `woodAlbedo`: t = stripe×0.78 + pore×0.14 + knot×0.45
+ *   stripe mid 0.5; pore mid 0.5 (same primary-term-mid convention as
+ *   woodOrm stripe 0.5); knot overlay off (localized).
+ *   t = 0.5×0.78 + 0.5×0.14 = 0.46
+ *   r = 72 + 0.46×58 = 98.68 → 99
+ *   g = 38 + 0.46×28 = 50.88 → 51
+ *   b = 18 + 0.46×14 = 24.44 → 24
+ * Hex `0x633318`. Matches a 256² `woodAlbedo` pixel average
+ * (~98.75 / 50.65 / 24.33).
+ */
+export const L3_LOD2_WOOD_COLOR = 0x633318;
 
 /** LOD1 wood mid uses the wood-ORM-midtone constants (historical LOD2 names). */
 export const L3_LOD1_WOOD_ROUGHNESS = L3_LOD2_WOOD_ROUGHNESS;
@@ -304,8 +320,10 @@ export function getCrateL2Maps() {
   const steelAlb = texFromCanvas(steelAlbedo(s), true, 2, 4);
   const steelOrmTex = texFromCanvas(steelOrm(s), false, 2, 4);
   const steelNrm = texFromCanvas(normalCanvas(s, steelHeight, L2_NORMAL_STRENGTH.steel), false, 2, 4);
-  // v0.26: dedicated half-res albedos for LOD1/LOD2 (wood + brass). Steel
+  // v0.26: dedicated half-res albedos for LOD1 (wood + brass). Steel
   // has no mid/far mesh (LOD1 tool stub is wood-tinted handleMatMid).
+  // v0.29: LOD2 no longer binds woodLod; LOD1 still needs both 256²
+  // canvases, so uniqueTextures stays 11.
   const woodAlbLod = texFromCanvas(woodAlbedo(lodAlb), true, 2, 2);
   const brassAlbLod = texFromCanvas(brassAlbedo(lodAlb), true, 1, 1);
   cached = {
@@ -333,7 +351,8 @@ export function getCrateL2Maps() {
  * `metalness` for another class (LOD1 brass uses `L3_LOD1_BRASS_*`).
  * Historical LOD1 MeshStandard path used `{ normalMap: false, ormMap: false }`
  * (albedo-only) at `L3_LOD_ALBEDO_SIZE` (256²). Procedural LOD1 (v0.28)
- * and LOD2 far wood (v0.27) are `mappedBasic` (unlit), not this helper.
+ * is `mappedBasic` (unlit + 256² map). LOD2 far wood (v0.29) is
+ * `mappedBasic` color-only (`{ map: false }`), not this helper.
  */
 export function mappedStandard(colorHex, maps, opts = {}) {
   const useNormal = opts.normalMap !== false && Boolean(maps.normal);
@@ -359,12 +378,15 @@ export function mappedStandard(colorHex, maps, opts = {}) {
 
 /**
  * Unlit mid / far card-like material. LOD1 body / lid / latch / tool stub
- * and LOD2 body + lid bind 256² albedo (`maps.albedo`) with no lighting
- * uniforms. Roughness / metalness / normalMap / ORM do not apply to MeshBasic.
+ * bind 256² albedo (`maps.albedo`) with no lighting uniforms. LOD2 body +
+ * lid (v0.29) are color-only: pass `{ map: false }` (or omit `maps`) so
+ * the fragment skips a baseColor sample. Roughness / metalness / normalMap /
+ * ORM do not apply to MeshBasic.
  */
-export function mappedBasic(colorHex, maps) {
-  return new THREE.MeshBasicMaterial({
-    color: colorHex,
-    map: maps.albedo,
-  });
+export function mappedBasic(colorHex, maps, opts = {}) {
+  const spec = { color: colorHex };
+  if (opts.map !== false && maps?.albedo) {
+    spec.map = maps.albedo;
+  }
+  return new THREE.MeshBasicMaterial(spec);
 }

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import behaviorTemplate from "./behavior.json" with { type: "json" };
 import {
+  L3_LOD2_WOOD_COLOR,
   getCrateL2Maps,
   mappedBasic,
   mappedStandard,
@@ -91,9 +92,9 @@ export function createToolbox() {
   const woodDarkMid = mappedBasic(0x7a5840, l2.woodLod);
   const brassMid = mappedBasic(0xffffff, l2.brassLod);
   const handleMatMid = mappedBasic(0xe8b42a, l2.woodLod);
-  // LOD2 far crate + lid: unlit MeshBasic with the same 256² wood albedo
-  // (card-like). Unchanged vs v0.27.
-  const woodFar = mappedBasic(0xffffff, l2.woodLod);
+  // LOD2 far crate + lid: color-only unlit MeshBasic (no albedo map).
+  // Flat wood midtone approximating the procedural wood albedo average.
+  const woodFar = mappedBasic(L3_LOD2_WOOD_COLOR, null, { map: false });
 
   const body = new THREE.Group();
   body.name = "body";
@@ -210,7 +211,7 @@ export function createToolbox() {
     lodAlbedoSize: l2.lodAlbedoSize,
     uniqueTextures: l2.uniqueTextures,
     maps: "albedo+ORM+normal",
-    lodAlbedoMaps: { 0: l2.size, 1: l2.lodAlbedoSize, 2: l2.lodAlbedoSize },
+    lodAlbedoMaps: { 0: l2.size, 1: l2.lodAlbedoSize, 2: 0 },
     lodNormalMaps: { 0: true, 1: false, 2: false },
     lodOrmMaps: { 0: true, 1: false, 2: false },
     lodNormalScaleMul: { 0: 1, 1: 0, 2: 0 },
@@ -219,7 +220,8 @@ export function createToolbox() {
       1: "MeshBasicMaterial",
       2: "MeshBasicMaterial",
     },
-    note: "procedural canvas stand-in; LOD0 512² albedo+ORM+normal MeshStandard; LOD1 256² unlit MeshBasic; LOD2 256² unlit MeshBasic (no lighting uniforms)",
+    lod2Color: L3_LOD2_WOOD_COLOR,
+    note: "procedural canvas stand-in; LOD0 512² albedo+ORM+normal MeshStandard; LOD1 256² unlit MeshBasic; LOD2 color-only unlit MeshBasic (no map; wood midtone)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
