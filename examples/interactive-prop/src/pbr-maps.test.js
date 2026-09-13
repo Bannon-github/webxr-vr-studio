@@ -12,6 +12,8 @@ import {
   L3_LOD1_WOOD_COLOR,
   L3_LOD1_WOOD_METALNESS,
   L3_LOD1_WOOD_ROUGHNESS,
+  L3_LOD0_STEEL_METALNESS,
+  L3_LOD0_STEEL_ROUGHNESS,
   L3_LOD2_WOOD_COLOR,
   L3_LOD2_WOOD_METALNESS,
   L3_LOD2_WOOD_ROUGHNESS,
@@ -197,29 +199,43 @@ function installCanvasStub() {
   };
 }
 
-test("getCrateL2Maps allocates six 256² albedo+ORM canvases and no normals", () => {
+test("getCrateL2Maps allocates three 256² albedo canvases and no normals or ORM", () => {
   installCanvasStub();
   const maps = getCrateL2Maps();
-  assert.equal(maps.uniqueTextures, 6);
+  assert.equal(maps.uniqueTextures, 3);
   assert.equal(maps.size, 256);
   assert.equal(maps.lodAlbedoSize, 0);
   assert.equal(maps.wood.normal, null);
   assert.equal(maps.brass.normal, null);
   assert.equal(maps.steel.normal, null);
+  assert.equal(maps.wood.orm, null);
+  assert.equal(maps.brass.orm, null);
+  assert.equal(maps.steel.orm, null);
   assert.equal(maps.woodLod, undefined);
   assert.equal(maps.brassLod, undefined);
   assert.equal(maps.wood.albedo.image.width, 256);
-  assert.equal(maps.wood.orm.image.width, 256);
   assert.equal(maps.brass.albedo.image.width, 256);
-  assert.equal(maps.brass.orm.image.width, 256);
   assert.equal(maps.steel.albedo.image.width, 256);
-  assert.equal(maps.steel.orm.image.width, 256);
-  const bound = mappedStandard(0xffffff, maps.wood, { normalMap: false });
+  const bound = mappedStandard(0xffffff, maps.wood, { normalMap: false, ormMap: false });
   assert.equal(bound.isMeshStandardMaterial, true);
   assert.equal(bound.normalMap, null);
   assert.equal(bound.map, maps.wood.albedo);
-  assert.equal(bound.roughnessMap, maps.wood.orm);
-  assert.equal(bound.metalnessMap, maps.wood.orm);
+  assert.equal(bound.roughnessMap, null);
+  assert.equal(bound.metalnessMap, null);
+  assert.equal(bound.roughness, L3_LOD1_WOOD_ROUGHNESS);
+  assert.equal(bound.metalness, L3_LOD1_WOOD_METALNESS);
+  const steel = mappedStandard(0xffffff, maps.steel, {
+    normalMap: false,
+    ormMap: false,
+    roughness: L3_LOD0_STEEL_ROUGHNESS,
+    metalness: L3_LOD0_STEEL_METALNESS,
+  });
+  assert.equal(steel.roughnessMap, null);
+  assert.equal(steel.metalnessMap, null);
+  assert.equal(steel.roughness, L3_LOD0_STEEL_ROUGHNESS);
+  assert.equal(steel.metalness, L3_LOD0_STEEL_METALNESS);
+  assert.equal(L3_LOD0_STEEL_ROUGHNESS, 77.5 / 255);
+  assert.equal(L3_LOD0_STEEL_METALNESS, 235 / 255);
 });
 
 test("wood / brass / steel height fields are not flat", () => {
