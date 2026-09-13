@@ -10,6 +10,7 @@ import {
   L3_LOD1_NORMAL_SCALE_MUL,
   L3_LOD1_WOOD_METALNESS,
   L3_LOD1_WOOD_ROUGHNESS,
+  L3_LOD2_WOOD_COLOR,
   L3_LOD2_WOOD_METALNESS,
   L3_LOD2_WOOD_ROUGHNESS,
   brassHeight,
@@ -120,16 +121,16 @@ test("mappedStandard omits ORM maps when opted out and uses wood midtone constan
 
 test("mappedBasic is unlit MeshBasic with albedo and no lighting uniforms", () => {
   const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
-  const far = mappedBasic(0xffffff, maps);
+  const mid = mappedBasic(0xffffff, maps);
   const midTint = mappedBasic(0x7a5840, maps);
-  assert.equal(far.isMeshBasicMaterial, true);
-  assert.ok(!far.isMeshStandardMaterial);
-  assert.equal(far.map, maps.albedo);
-  assert.ok(!far.normalMap);
-  assert.ok(!far.roughnessMap);
-  assert.ok(!far.metalnessMap);
-  assert.equal(far.roughness, undefined);
-  assert.equal(far.metalness, undefined);
+  assert.equal(mid.isMeshBasicMaterial, true);
+  assert.ok(!mid.isMeshStandardMaterial);
+  assert.equal(mid.map, maps.albedo);
+  assert.ok(!mid.normalMap);
+  assert.ok(!mid.roughnessMap);
+  assert.ok(!mid.metalnessMap);
+  assert.equal(mid.roughness, undefined);
+  assert.equal(mid.metalness, undefined);
   assert.equal(midTint.isMeshBasicMaterial, true, "LOD1-style tinted wood is also MeshBasic");
   assert.ok(!midTint.isMeshStandardMaterial);
   assert.equal(midTint.map, maps.albedo);
@@ -138,6 +139,24 @@ test("mappedBasic is unlit MeshBasic with albedo and no lighting uniforms", () =
   assert.ok(!midTint.metalnessMap);
   assert.equal(midTint.roughness, undefined);
   assert.equal(midTint.metalness, undefined);
+});
+
+test("mappedBasic color-only omits map (LOD2 far wood)", () => {
+  const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
+  const far = mappedBasic(L3_LOD2_WOOD_COLOR, maps, { map: false });
+  const noMaps = mappedBasic(L3_LOD2_WOOD_COLOR, null, { map: false });
+  assert.equal(L3_LOD2_WOOD_COLOR, 0x633318);
+  assert.equal(far.isMeshBasicMaterial, true);
+  assert.ok(!far.isMeshStandardMaterial);
+  assert.equal(far.map, null, "color-only MeshBasic has no albedo map");
+  assert.equal(far.color.getHex(), L3_LOD2_WOOD_COLOR);
+  assert.ok(!far.normalMap);
+  assert.ok(!far.roughnessMap);
+  assert.ok(!far.metalnessMap);
+  assert.equal(far.roughness, undefined);
+  assert.equal(far.metalness, undefined);
+  assert.equal(noMaps.map, null);
+  assert.equal(noMaps.color.getHex(), L3_LOD2_WOOD_COLOR);
 });
 
 test("wood / brass / steel height fields are not flat", () => {

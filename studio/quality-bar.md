@@ -50,7 +50,7 @@ Applies when the user hovers, grabs, or drives a multi-step activity. Full path:
 - [ ] Controllers: `select` = use, `squeeze` = grab; core loop works without hands
 - [ ] Hand path (if advertised) is optional; pinch maps to the same intents; hover-before-pinch matches controller emissive (`crate-toolbox` v0.9)
 - [ ] Texture / LOD / triangle class meets [photoreal-realtime](../docs/performance/photoreal-realtime.md) **on Quest 3** (L2/L3 inside [quest-3-target](../docs/shipping/quest-3-target.md); baked maps + LODs, not scan density)
-- [ ] LOD2 far materials are unlit `MeshBasicMaterial` (or glTF `KHR_materials_unlit`) with ≤256² albedo — no `normalMap`, no ORM, no roughness/metalness uniforms (`crate-toolbox` v0.27; loader does not rewrite materials)
+- [ ] LOD2 far materials are unlit `MeshBasicMaterial` (or glTF `KHR_materials_unlit`) **without** a `baseColorTexture` (color-only, or tiny 1×1 / vertex color) — no `normalMap`, no ORM, no roughness/metalness uniforms (`crate-toolbox` v0.29; loader does not rewrite materials)
 - [ ] LOD1 mid materials are unlit `MeshBasicMaterial` (or glTF `KHR_materials_unlit`) with ≤256² albedo — no `normalMap`, no ORM, no roughness/metalness uniforms (`crate-toolbox` v0.28; loader does not rewrite materials)
 - [ ] Scale 1 unit = 1 m; seated reach or ray-use for every required step
 - [ ] Throw / physics never applies impulse to the camera rig

@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.31.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.29.0** L3 packaging/perf UPGRADE: LOD2 far body + lid drop the albedo `map` and use color-only unlit `MeshBasicMaterial` (wood midtone `0x633318`). LOD0 stays 512² albedo+ORM+normal MeshStandard; LOD1 stays 256² MeshBasic (v0.28). Unique canvases stay 11. Same draws / tris as v0.28. Headset ms / FFR still unmeasured.
+
 ## [0.30.0] — 2026-09-12
 
 ### Changed
