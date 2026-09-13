@@ -1,16 +1,16 @@
 # Quest 3 KTX2 / Basis packaging
 
-Concrete recipe for turning a DCC **glTF 2.0 GLB** into a Quest 3–safe package. Gate: [quest-3-target](../shipping/quest-3-target.md) — **90 Hz** ship / **72 Hz** fallback; never require 207/240 Hz. Soft caps: ≲100 draws, ≲750k tris/eye. Props: textures **≤1024²** (LOD0 PBR may be **albedo-only ≤256²** — no `normalTexture`, no ORM texture — with constant roughness/metalness; LOD1 and LOD2 color-only / no `baseColorTexture`). **No 4K.**
+Concrete recipe for turning a DCC **glTF 2.0 GLB** into a Quest 3–safe package. Gate: [quest-3-target](../shipping/quest-3-target.md) — **90 Hz** ship / **72 Hz** fallback; never require 207/240 Hz. Soft caps: ≲100 draws, ≲750k tris/eye. Props: textures **≤1024²** (LOD0 may be **unlit/basic** or `KHR_materials_unlit` with **≤256²** albedo — no `normalTexture`, no ORM texture; LOD1 and LOD2 color-only / no `baseColorTexture`). **No 4K.**
 
 This page is the missing “how.” Policy lives in [photoreal-realtime](photoreal-realtime.md) and [content-pipeline](../../studio/content-pipeline.md) step 5. Identity stays on the same `objectId` ([additive-object-iteration](../../studio/additive-object-iteration.md)).
 
-`crate-toolbox` today still **renders procedural canvases** (256² LOD0 albedo-only MeshStandard, no `normalMap`, no ORM; color-only LOD1 unlit MeshBasic; color-only LOD2 unlit MeshBasic). Drop a packaged GLB at the URL the example probes (`/packaged/crate-toolbox.glb`) and the runtime prefers it. The loader does **not** strip, downsample, or rewrite materials at ingest — author LOD0 PBR that may be **albedo-only ≤256²** (no `normalTexture`, no ORM texture) with constant roughness/metalness; author LOD1 and LOD2 as unlit/basic (or `KHR_materials_unlit`) **without** a `baseColorTexture` (or a tiny 1×1 / vertex color). Do not invent headset ms after packaging — fill [quest-3-on-device-qa](../shipping/quest-3-on-device-qa.md) on a headset.
+`crate-toolbox` today still **renders procedural canvases** (256² LOD0 MeshBasic unlit albedo, no `normalMap`, no ORM; color-only LOD1 unlit MeshBasic; color-only LOD2 unlit MeshBasic). Drop a packaged GLB at the URL the example probes (`/packaged/crate-toolbox.glb`) and the runtime prefers it. The loader does **not** strip, downsample, or rewrite materials at ingest — author LOD0 as unlit/basic (or `KHR_materials_unlit`) with **≤256²** albedo and no `normalTexture` / ORM; author LOD1 and LOD2 as unlit/basic (or `KHR_materials_unlit`) **without** a `baseColorTexture` (or a tiny 1×1 / vertex color). Do not invent headset ms after packaging — fill [quest-3-on-device-qa](../shipping/quest-3-on-device-qa.md) on a headset.
 
 ## Before you run a compressor
 
 1. Export **one GLB** (y-up, 1 unit = 1 m). Visual meshes and `collider_*` hulls are **different nodes**. Do not merge the grab hull into the hero batch.
-2. Keep **LOD0 / LOD1 / LOD2** groups if they already exist. Packaging must not flatten LODs into a single draw soup. LOD0 PBR may be **albedo-only ≤256²** (no `normalTexture`, no ORM texture) with constant roughness/metalness — crate-toolbox v0.33. Mid and far LOD primitives should be **unlit** (`KHR_materials_unlit` / Three `MeshBasicMaterial`) **without** a `baseColorTexture` (or tiny 1×1 / vertex color) — crate-toolbox v0.30 LOD1 and v0.29 LOD2. The runtime prefers a packaged GLB when present and does **not** strip, downsample, or rewrite materials — author the GLB to this recipe.
-3. `gltf-transform inspect in.glb` — list texture slots and pixel sizes. If anything is >1024 on a handheld prop, resize **down**. Never upscale 256 → 512/1024 “for quality.” crate-toolbox v0.33 authors LOD0 albedo-only at 256 and omits `normalTexture` + ORM; do not smash a *larger* authored hero on another object with a global 256 resize if that object still ships 512. Author LOD1 and LOD2 without a baseColorTexture before this pass.
+2. Keep **LOD0 / LOD1 / LOD2** groups if they already exist. Packaging must not flatten LODs into a single draw soup. LOD0 may be **unlit/basic** (`KHR_materials_unlit` / Three `MeshBasicMaterial`) with **≤256²** albedo and no `normalTexture` / ORM — crate-toolbox v0.34. Mid and far LOD primitives should be **unlit** (`KHR_materials_unlit` / Three `MeshBasicMaterial`) **without** a `baseColorTexture` (or tiny 1×1 / vertex color) — crate-toolbox v0.30 LOD1 and v0.29 LOD2. The runtime prefers a packaged GLB when present and does **not** strip, downsample, or rewrite materials — author the GLB to this recipe.
+3. `gltf-transform inspect in.glb` — list texture slots and pixel sizes. If anything is >1024 on a handheld prop, resize **down**. Never upscale 256 → 512/1024 “for quality.” crate-toolbox v0.34 authors LOD0 unlit/basic albedo at 256 and omits `normalTexture` + ORM; do not smash a *larger* authored hero on another object with a global 256 resize if that object still ships 512. Author LOD1 and LOD2 without a baseColorTexture before this pass.
 4. Albedo is sRGB and unlit (no baked scene shadows). ORM / metallicRoughness is linear.
 
 ## Recipe (`gltf-transform` CLI)
@@ -21,13 +21,13 @@ Studio default: **npx** so the repo does not pin a global. Node LTS. Commands ma
 # 0. Inspect (slot names + dimensions). Fail if a prop map is 4K.
 npx --yes @gltf-transform/cli inspect authored.glb
 
-# 1. Cap prop maps. crate-toolbox LOD0 PBR may be albedo-only
-#    ≤256² (no normalTexture, no ORM texture) with constant
-#    roughness/metalness. LOD1 and LOD2 should have no
-#    baseColorTexture (or a 1×1). Do not use a global resize to
-#    smash a larger authored hero if that object still ships 512;
-#    crate-toolbox v0.33 authors LOD0 albedo-only at 256. Skip when
-#    every remaining color/ORM/normal is already ≤ the cap.
+# 1. Cap prop maps. crate-toolbox LOD0 may be unlit/basic
+#    ≤256² albedo (no normalTexture, no ORM texture). LOD1 and
+#    LOD2 should have no baseColorTexture (or a 1×1). Do not use
+#    a global resize to smash a larger authored hero if that
+#    object still ships 512; crate-toolbox v0.34 authors LOD0
+#    unlit/basic albedo at 256. Skip when every remaining
+#    color/ORM/normal is already ≤ the cap.
 npx --yes @gltf-transform/cli resize authored.glb resized.glb --width 1024 --height 1024
 
 # 2. UASTC + zstd on normals and packed ORM (uncorrelated RGB — ETC1S blocks badly).
