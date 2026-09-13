@@ -23,10 +23,9 @@ import {
   woodHeight,
 } from "./pbr-maps.js";
 
-test("L2 authoring caps stay 512² with three normal slots", () => {
-  assert.equal(L2_TEXTURE_SIZE, 512);
-  assert.equal(L3_LOD_ALBEDO_SIZE, 256);
-  assert.equal(L3_LOD_ALBEDO_SIZE * 2, L2_TEXTURE_SIZE);
+test("L2 authoring caps stay 256² with three normal slots", () => {
+  assert.equal(L2_TEXTURE_SIZE, 256);
+  assert.equal(L3_LOD_ALBEDO_SIZE, 256, "historical mid/far half-res constant stays 256");
   assert.equal(Object.keys(L2_NORMAL_STRENGTH).join(","), "wood,brass,steel");
   assert.equal(Object.keys(L2_NORMAL_SCALE).join(","), "wood,brass,steel");
   for (const pair of Object.values(L2_NORMAL_SCALE)) {

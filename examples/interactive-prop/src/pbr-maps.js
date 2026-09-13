@@ -1,15 +1,17 @@
 import * as THREE from "three";
 
-/** Shared L2 stand-in maps. 512², mipmapped. Not photoreal desktop 4K. */
-export const L2_TEXTURE_SIZE = 512;
+/** Shared L2 stand-in maps. 256² as of v0.31 (was 512² through v0.30), mipmapped. Not photoreal desktop 4K. */
+export const L2_TEXTURE_SIZE = 256;
 
 /**
- * Historical LOD1/LOD2 albedo authoring size (half of `L2_TEXTURE_SIZE`).
- * v0.26–v0.28 bound 256² maps on mid/far; v0.29 dropped the LOD2 map;
- * v0.30 drops the LOD1 map too (color-only MeshBasic). Kept as the
- * documented half-res constant / GLB authoring cap if a future packaged
- * mid LOD uses a tiny albedo. Procedural path no longer allocates these
- * canvases. LOD0 keeps 512² albedo + ORM + normal. Not a headset-measured ms claim.
+ * Historical LOD1/LOD2 albedo authoring size (half of the pre-v0.31
+ * `L2_TEXTURE_SIZE` of 512). v0.26–v0.28 bound 256² maps on mid/far;
+ * v0.29 dropped the LOD2 map; v0.30 drops the LOD1 map too (color-only
+ * MeshBasic). Kept as the documented half-res constant / GLB authoring
+ * cap if a future packaged mid LOD uses a tiny albedo. Procedural path
+ * no longer allocates these canvases. v0.31 drops LOD0 hero maps from
+ * 512² → 256² (`L2_TEXTURE_SIZE`); this constant stays 256 so historical
+ * docs stay accurate. Not a headset-measured ms claim.
  */
 export const L3_LOD_ALBEDO_SIZE = 256;
 
@@ -340,8 +342,8 @@ export function getCrateL2Maps() {
   const steelNrm = texFromCanvas(normalCanvas(s, steelHeight, L2_NORMAL_STRENGTH.steel), false, 2, 4);
   // v0.26 added dedicated 256² wood/brass albedos for LOD1/LOD2.
   // v0.29 dropped the LOD2 map; v0.30 drops LOD1 maps too — do not
-  // allocate unused woodLod / brassLod canvases. LOD0 still owns its
-  // own 512² albedo + ORM + normal (9 unique canvases).
+  // allocate unused woodLod / brassLod canvases. v0.31 generates the
+  // nine LOD0 albedo + ORM + normal canvases at 256² (was 512²).
   cached = {
     size: s,
     lodAlbedoSize: 0,

@@ -49,11 +49,11 @@ function mapWH(tex) {
   return [img?.width, img?.height];
 }
 
-test("LOD0 512² MeshStandard; LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
+test("LOD0 256² MeshStandard; LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
   const crate = createToolbox();
   const maps = getCrateL2Maps();
-  assert.equal(L3_LOD_ALBEDO_SIZE, 256);
-  assert.equal(L3_LOD_ALBEDO_SIZE * 2, L2_TEXTURE_SIZE);
+  assert.equal(L2_TEXTURE_SIZE, 256);
+  assert.equal(L3_LOD_ALBEDO_SIZE, 256, "historical mid/far half-res constant stays 256");
   assert.equal(L3_LOD1_WOOD_COLOR, L3_LOD2_WOOD_COLOR);
   assert.equal(L3_LOD2_WOOD_COLOR, 0x633318);
   assert.equal(L3_LOD1_BRASS_COLOR, 0xbe7e31);
@@ -63,12 +63,12 @@ test("LOD0 512² MeshStandard; LOD1 color-only MeshBasic; LOD2 color-only MeshBa
   assert.equal(crate.userData.l2.textureSize, L2_TEXTURE_SIZE);
   assert.equal(crate.userData.l2.lodAlbedoSize, 0);
   assert.equal(crate.userData.l2.uniqueTextures, 9);
-  assert.deepEqual(crate.userData.l2.lodAlbedoMaps, { 0: 512, 1: 0, 2: 0 });
+  assert.deepEqual(crate.userData.l2.lodAlbedoMaps, { 0: 256, 1: 0, 2: 0 });
   assert.equal(maps.woodLod, undefined, "v0.30 must not allocate unused woodLod canvases");
   assert.equal(maps.brassLod, undefined, "v0.30 must not allocate unused brassLod canvases");
-  assert.deepEqual(mapWH(maps.wood.albedo), [512, 512], "LOD0 still has its own 512² wood albedo");
-  assert.deepEqual(mapWH(maps.brass.albedo), [512, 512], "LOD0 still has its own 512² brass albedo");
-  assert.deepEqual(mapWH(maps.steel.albedo), [512, 512], "LOD0 still has its own 512² steel albedo");
+  assert.deepEqual(mapWH(maps.wood.albedo), [256, 256], "LOD0 wood albedo is 256²");
+  assert.deepEqual(mapWH(maps.brass.albedo), [256, 256], "LOD0 brass albedo is 256²");
+  assert.deepEqual(mapWH(maps.steel.albedo), [256, 256], "LOD0 steel albedo is 256²");
   assert.deepEqual(crate.userData.l2.lod1Color, { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR });
   assert.equal(crate.userData.l2.lod2Color, L3_LOD2_WOOD_COLOR);
 
@@ -81,9 +81,9 @@ test("LOD0 512² MeshStandard; LOD1 color-only MeshBasic; LOD2 color-only MeshBa
     assert.ok(mat.normalMap, "LOD0 must keep v0.12 normalMap");
     assert.ok(mat.roughnessMap, "LOD0 must keep ORM");
     assert.ok(mat.metalnessMap, "LOD0 must keep ORM");
-    assert.deepEqual(mapWH(mat.map), [512, 512], "LOD0 albedo stays 512²");
-    assert.deepEqual(mapWH(mat.roughnessMap), [512, 512], "LOD0 ORM stays 512²");
-    assert.deepEqual(mapWH(mat.normalMap), [512, 512], "LOD0 normal stays 512²");
+    assert.deepEqual(mapWH(mat.map), [256, 256], "LOD0 albedo is 256²");
+    assert.deepEqual(mapWH(mat.roughnessMap), [256, 256], "LOD0 ORM is 256²");
+    assert.deepEqual(mapWH(mat.normalMap), [256, 256], "LOD0 normal is 256²");
     const [nx, ny] = scaleXY(mat);
     assert.ok(nx > 0 && ny > 0);
     const expected = Object.values(L2_NORMAL_SCALE).find(([sx]) => sx === nx);
@@ -135,7 +135,7 @@ test("LOD0 512² MeshStandard; LOD1 color-only MeshBasic; LOD2 color-only MeshBa
   for (const mat of lod0) {
     assert.ok(mat.normalMap, "LOD0 keeps normalMap after LOD2 collect");
     assert.ok(mat.roughnessMap, "LOD0 keeps ORM");
-    assert.deepEqual(mapWH(mat.map), [512, 512], "LOD0 albedo stays 512² after LOD2 collect");
+    assert.deepEqual(mapWH(mat.map), [256, 256], "LOD0 albedo stays 256² after LOD2 collect");
   }
   assert.equal(crate.userData.l2.lodNormalMaps[0], true);
   assert.equal(crate.userData.l2.lodNormalMaps[1], false);
@@ -155,6 +155,8 @@ test("LOD0 512² MeshStandard; LOD1 color-only MeshBasic; LOD2 color-only MeshBa
   assert.equal(fastener.material, crate.userData.materials.lod0.brass);
   assert.equal(fastener.material.isMeshStandardMaterial, true, "fastener stays MeshStandard");
   assert.ok(fastener.material.normalMap, "fastener stays on shared LOD0 brass (keeps normalMap)");
+  assert.deepEqual(mapWH(fastener.material.map), [256, 256], "fastener uses the 256² LOD0 brass albedo");
+  assert.deepEqual(mapWH(fastener.material.normalMap), [256, 256], "fastener uses the 256² LOD0 brass normal");
 });
 
 test("setToolboxLod is visibility-only (no material swap on switch)", () => {

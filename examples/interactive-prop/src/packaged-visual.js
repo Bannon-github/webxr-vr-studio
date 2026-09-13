@@ -1,6 +1,6 @@
 /**
  * Prefer a packaged GLB (KTX2 / meshopt) when the URL exists.
- * Missing file → null (caller keeps procedural canvases: 512² LOD0
+ * Missing file → null (caller keeps procedural canvases: 256² LOD0
  * MeshStandard + color-only LOD1 MeshBasic + color-only LOD2 MeshBasic). Does not
  * strip, downsample, or rewrite materials at ingest.
  * Loaders are dynamic-imported only after a successful probe.

@@ -81,7 +81,7 @@ export function createToolbox() {
   root.userData.kind = "entity";
 
   const l2 = getCrateL2Maps();
-  // LOD0 keeps the five v0.12 materials (512² albedo+ORM+normal, full scale).
+  // LOD0 keeps the five v0.12 materials (256² albedo+ORM+normal, full scale).
   const wood = mappedStandard(0xffffff, l2.wood);
   const woodDark = mappedStandard(0x7a5840, l2.wood);
   const brass = mappedStandard(0xffffff, l2.brass);
@@ -225,7 +225,7 @@ export function createToolbox() {
     },
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
-    note: "procedural canvas stand-in; LOD0 512² albedo+ORM+normal MeshStandard; LOD1 color-only unlit MeshBasic (no map; wood/brass midtones); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
+    note: "procedural canvas stand-in; LOD0 256² albedo+ORM+normal MeshStandard; LOD1 color-only unlit MeshBasic (no map; wood/brass midtones); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
