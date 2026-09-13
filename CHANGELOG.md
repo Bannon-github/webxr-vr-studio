@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.30.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.28.0** L3 packaging/perf UPGRADE: LOD1 body / lid / latch / tool stub switch from albedo-only `MeshStandardMaterial` to unlit `MeshBasicMaterial` with the same 256² wood / brass albedos (no roughness/metalness uniforms). LOD0 stays 512² albedo+ORM+normal MeshStandard; LOD2 stays 256² MeshBasic (v0.27). Unique canvases stay 11. Same draws / tris as v0.27. Headset ms / FFR still unmeasured.
+
 ## [0.29.0] — 2026-09-12
 
 ### Changed

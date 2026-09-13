@@ -254,8 +254,8 @@ export const L2_NORMAL_SCALE = { wood: [0.62, 0.62], brass: [0.3, 0.3], steel: [
  * half-scale constant. v0.24 LOD1 drops `normalMap` entirely (`{ normalMap:
  * false }`); v0.25 also drops packed ORM (`{ ormMap: false }`); v0.26 binds
  * 256² albedo on LOD1/LOD2, so mid materials no longer apply this multiplier.
- * v0.27 switches LOD2 to MeshBasicMaterial (unlit); these mid constants
- * stay on LOD1 MeshStandard only.
+ * v0.27 switches LOD2 to MeshBasicMaterial (unlit); v0.28 does the same for
+ * LOD1. These mid constants stay on the `mappedStandard` helper only.
  */
 export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
 
@@ -263,9 +263,9 @@ export const L3_LOD1_NORMAL_SCALE_MUL = 0.5;
  * Wood-ORM-midtone constants (not headset-measured).
  * `woodOrm` G (roughness) = 200 + stripe×40; stripe mid 0.5 → 220.
  * `woodOrm` B (metalness) is authored as constant 8.
- * LOD1 wood MeshStandard uses these so the material stays lit under the
- * present-path ambient fill without sampling packed ORM. LOD2 (v0.27)
- * is MeshBasicMaterial — roughness/metalness do not apply.
+ * Historical v0.25 LOD1 wood MeshStandard defaults on `mappedStandard`
+ * (`{ ormMap: false }`). Procedural LOD1 (v0.28) and LOD2 (v0.27) are
+ * MeshBasicMaterial — roughness/metalness do not apply.
  */
 export const L3_LOD2_WOOD_ROUGHNESS = 220 / 255;
 export const L3_LOD2_WOOD_METALNESS = 8 / 255;
@@ -275,11 +275,13 @@ export const L3_LOD1_WOOD_ROUGHNESS = L3_LOD2_WOOD_ROUGHNESS;
 export const L3_LOD1_WOOD_METALNESS = L3_LOD2_WOOD_METALNESS;
 
 /**
- * LOD1 brass-latch constants matching brass ORM midtones (not headset-measured).
- * `brassOrm` G (roughness) = 70 + n×50 + tarnish×90; n mid 0.5, tarnish 0
- * (wear overlay off — same primary-term-mid convention as wood stripe 0.5)
- * → 95. `brassOrm` B (metalness) = 230 − tarnish×80; tarnish 0 → 230.
- * LOD1 has no steel mesh (tool stub uses wood-tinted handleMatMid).
+ * Historical v0.25 LOD1 brass-latch constants matching brass ORM midtones
+ * (not headset-measured). `brassOrm` G (roughness) = 70 + n×50 + tarnish×90;
+ * n mid 0.5, tarnish 0 (wear overlay off — same primary-term-mid convention
+ * as wood stripe 0.5) → 95. `brassOrm` B (metalness) = 230 − tarnish×80;
+ * tarnish 0 → 230. Procedural LOD1 brass is MeshBasic (v0.28); these stay
+ * on the `mappedStandard` helper. LOD1 has no steel mesh (tool stub uses
+ * wood-tinted handleMatMid).
  */
 export const L3_LOD1_BRASS_ROUGHNESS = 95 / 255;
 export const L3_LOD1_BRASS_METALNESS = 230 / 255;
@@ -329,9 +331,9 @@ export function getCrateL2Maps() {
  * stays lit under the present-path ambient fill. Defaults to wood-ORM
  * midtones (`L3_LOD2_WOOD_*` / `L3_LOD1_WOOD_*`); pass `roughness` /
  * `metalness` for another class (LOD1 brass uses `L3_LOD1_BRASS_*`).
- * LOD1 uses `{ normalMap: false, ormMap: false }` (albedo-only) and binds
- * `maps.albedo` at `L3_LOD_ALBEDO_SIZE` (256²), not the 512² L2 maps.
- * LOD2 far wood is `mappedBasic` (unlit), not this helper.
+ * Historical LOD1 MeshStandard path used `{ normalMap: false, ormMap: false }`
+ * (albedo-only) at `L3_LOD_ALBEDO_SIZE` (256²). Procedural LOD1 (v0.28)
+ * and LOD2 far wood (v0.27) are `mappedBasic` (unlit), not this helper.
  */
 export function mappedStandard(colorHex, maps, opts = {}) {
   const useNormal = opts.normalMap !== false && Boolean(maps.normal);
@@ -356,9 +358,9 @@ export function mappedStandard(colorHex, maps, opts = {}) {
 }
 
 /**
- * Unlit far / card-like material. LOD2 body + lid bind the same 256²
- * wood albedo as LOD1 wood (`maps.albedo`) with no lighting uniforms.
- * Roughness / metalness / normalMap / ORM do not apply to MeshBasic.
+ * Unlit mid / far card-like material. LOD1 body / lid / latch / tool stub
+ * and LOD2 body + lid bind 256² albedo (`maps.albedo`) with no lighting
+ * uniforms. Roughness / metalness / normalMap / ORM do not apply to MeshBasic.
  */
 export function mappedBasic(colorHex, maps) {
   return new THREE.MeshBasicMaterial({
