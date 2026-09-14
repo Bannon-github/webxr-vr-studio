@@ -244,24 +244,12 @@ export function createToolbox() {
     probedUrl: studio.source?.packagedUrl ?? "/packaged/crate-toolbox.glb",
     found: false,
   };
-  root.userData.lod = {
-    current: 0,
-    mode: "auto",
-    distances: { lod1: 2.4, lod2: 4.5, hysteresis: 0.2 },
-    groups: {
-      0: [bodyL0, lidL0, latchL0, toolL0],
-      1: [bodyL1, lidL1, latchL1, toolL1],
-      2: [bodyL2, lidL2, latchL2, toolL2],
-    },
-    stats: {
-      0: mergeStats([bodyL0, lidL0, latchL0, toolL0]),
-      1: mergeStats([bodyL1, lidL1, latchL1, toolL1]),
-      2: mergeStats([bodyL2, lidL2, latchL2, toolL2]),
-    },
-  };
-
   applyActivityVisual(root, 1);
-  setToolboxLod(root, 0);
+  attachToolboxLod(root, {
+    0: [bodyL0, lidL0, latchL0, toolL0],
+    1: [bodyL1, lidL1, latchL1, toolL1],
+    2: [bodyL2, lidL2, latchL2, toolL2],
+  });
 
   return root;
 }
@@ -295,6 +283,39 @@ function mergeStats(groups) {
     },
     { tris: 0, draws: 0 }
   );
+}
+
+/** Studio L3 distance bands. Shared by procedural create and packaged ingest. */
+export const TOOLBOX_LOD_DISTANCES = Object.freeze({
+  lod1: 2.4,
+  lod2: 4.5,
+  hysteresis: 0.2,
+});
+
+/**
+ * Bind the same `userData.lod` shape procedural create uses, then show LOD0.
+ * Visibility-only — no material swap, no frame-loop allocation.
+ */
+export function attachToolboxLod(entity, groups) {
+  const g0 = groups?.[0] ?? groups?.["0"] ?? [];
+  const g1 = groups?.[1] ?? groups?.["1"] ?? [];
+  const g2 = groups?.[2] ?? groups?.["2"] ?? [];
+  entity.userData.lod = {
+    current: 0,
+    mode: "auto",
+    distances: {
+      lod1: TOOLBOX_LOD_DISTANCES.lod1,
+      lod2: TOOLBOX_LOD_DISTANCES.lod2,
+      hysteresis: TOOLBOX_LOD_DISTANCES.hysteresis,
+    },
+    groups: { 0: g0, 1: g1, 2: g2 },
+    stats: {
+      0: mergeStats(g0),
+      1: mergeStats(g1),
+      2: mergeStats(g2),
+    },
+  };
+  return setToolboxLod(entity, 0);
 }
 
 const _lodCam = new THREE.Vector3();
