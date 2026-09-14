@@ -193,7 +193,7 @@ function refreshLodStatus() {
   lodStatus.textContent = `${lod.mode} / ${lod.current} · ${stats.tris} tris · ${stats.draws} draws`;
 }
 refreshLodStatus();
-console.info("[crate-toolbox] LOD geometry stats (not Quest frame time)", toolbox.userData.lod.stats);
+console.info("[crate-toolbox] LOD geometry stats (not Quest frame time)", toolbox.userData.lod?.stats);
 
 const quest3Panel = document.getElementById("quest3-diag");
 initQuest3Diagnostics({
@@ -597,10 +597,10 @@ window.addEventListener("keydown", (e) => {
       setAction("nack — crate must be open to return");
     }
   }
-  if (e.key === "0") {
+  if (e.key === "0" && toolbox.userData.lod) {
     toolbox.userData.lod.mode = "auto";
   }
-  if (e.key === "1" || e.key === "2" || e.key === "3") {
+  if ((e.key === "1" || e.key === "2" || e.key === "3") && toolbox.userData.lod) {
     toolbox.userData.lod.mode = "force";
     setToolboxLod(toolbox, Number(e.key) - 1);
   }

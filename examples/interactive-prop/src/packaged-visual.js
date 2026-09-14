@@ -4,7 +4,14 @@
  * on LOD0 / LOD1 / LOD2). Does not
  * strip, downsample, or rewrite materials at ingest.
  * Loaders are dynamic-imported only after a successful probe.
+ *
+ * v0.36: if the GLB has conventional `lod0` / `lod1` / `lod2` groups
+ * (same names as procedural `lodGroup()`, plus `userData.lodLevel`),
+ * ingest wires `userData.lod` and shows only LOD0. Missing names fail
+ * soft — one visual set stays visible; no fake LODs.
  */
+
+import { attachToolboxLod } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
   "collider_grab",
@@ -12,6 +19,11 @@ const REQUIRED_COLLIDERS = [
   "collider_lid",
   "collider_tool",
 ];
+
+/** Procedural + KTX2 recipe names: `lod0` / `LOD0` / `lod_0` / `lod-0`. */
+const PACKAGED_LOD_NAME = /^lod[-_]?([012])$/i;
+
+const FASTENER_NAMES = new Set(["fastener", "fastenerMesh"]);
 
 export function resolvePackagedUrl(sidecar) {
   const params = new URLSearchParams(window.location.search);
@@ -51,7 +63,41 @@ function findNamed(root, name) {
   return hit;
 }
 
-function ingestPackagedRoot(root, sidecar) {
+function isColliderNode(object) {
+  if (object.userData?.collider) return true;
+  return Boolean(object.name && object.name.startsWith("collider_"));
+}
+
+function isFastenerNode(object) {
+  return FASTENER_NAMES.has(object.name);
+}
+
+/** Level 0/1/2 from conventional node name or `userData.lodLevel`. */
+export function packagedLodLevel(object) {
+  if (!object || isColliderNode(object) || isFastenerNode(object)) return null;
+  const tagged = object.userData?.lodLevel;
+  if (tagged === 0 || tagged === 1 || tagged === 2) return tagged;
+  const match = PACKAGED_LOD_NAME.exec(object.name || "");
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Collect every `lod0` / `lod1` / `lod2` visual group.
+ * Colliders and the fastener stay out of the arrays.
+ * @returns {{0: object[], 1: object[], 2: object[]}|null}
+ */
+export function discoverPackagedLodGroups(root) {
+  const groups = { 0: [], 1: [], 2: [] };
+  root.traverse((o) => {
+    const level = packagedLodLevel(o);
+    if (level == null) return;
+    groups[level].push(o);
+  });
+  if (!groups[0].length && !groups[1].length && !groups[2].length) return null;
+  return groups;
+}
+
+export function ingestPackagedRoot(root, sidecar) {
   const missing = REQUIRED_COLLIDERS.filter((n) => !findNamed(root, n));
   if (missing.length) {
     console.warn("[crate-toolbox] packaged GLB missing colliders, using procedural:", missing);
@@ -101,6 +147,15 @@ function ingestPackagedRoot(root, sidecar) {
   if (tool && !tool.userData.restLocal) {
     tool.userData.restLocal = tool.position.clone();
     tool.userData.feedbackEntity = root;
+  }
+
+  const lodGroups = discoverPackagedLodGroups(root);
+  if (lodGroups) {
+    attachToolboxLod(root, lodGroups);
+  } else {
+    console.info(
+      "[crate-toolbox] packaged GLB has no lod0/lod1/lod2 groups — all visuals stay visible (author lod0/lod1/lod2 to switch)"
+    );
   }
   return root;
 }
