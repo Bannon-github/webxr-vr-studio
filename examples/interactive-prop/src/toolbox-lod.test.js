@@ -84,10 +84,12 @@ test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only Mesh
   setToolboxLod(crate, 0);
   assert.equal(crate.userData.lod.current, 0);
   const lod0 = collectLodVisualMaterials(crate, 0);
-  assert.ok(lod0.length > 0);
+  assert.equal(lod0.length, 3, "LOD0 unique materials: wood, brass, steel");
   const lod0Named = crate.userData.materials.lod0;
   assert.equal(lod0Named.wood.isMeshBasicMaterial, true, "LOD0 wood is MeshBasic");
   assert.equal(lod0Named.wood.color.getHex(), L3_LOD0_WOOD_COLOR);
+  assert.equal(lod0Named.woodDark, lod0Named.wood, "LOD0 woodDark aliases the wood MeshBasic instance");
+  assert.equal(lod0Named.handleMat, lod0Named.wood, "LOD0 handleMat aliases the wood MeshBasic instance");
   assert.equal(lod0Named.woodDark.color.getHex(), L3_LOD0_WOOD_COLOR, "LOD0 dark wood uses the wood midtone");
   assert.equal(lod0Named.handleMat.color.getHex(), L3_LOD0_WOOD_COLOR, "LOD0 handle uses the wood midtone");
   assert.equal(lod0Named.brass.color.getHex(), L3_LOD0_BRASS_COLOR);
@@ -108,10 +110,12 @@ test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only Mesh
   }
 
   const lod1 = collectLodVisualMaterials(crate, 1);
-  assert.ok(lod1.length > 0);
+  assert.equal(lod1.length, 2, "LOD1 unique materials: wood, brass");
   const lod1Named = crate.userData.materials.lod1;
   assert.equal(lod1Named.wood.isMeshBasicMaterial, true, "LOD1 wood is MeshBasic");
   assert.equal(lod1Named.wood.color.getHex(), L3_LOD1_WOOD_COLOR);
+  assert.equal(lod1Named.woodDark, lod1Named.wood, "LOD1 woodDark aliases the wood MeshBasic instance");
+  assert.equal(lod1Named.handleMat, lod1Named.wood, "LOD1 handleMat aliases the wood MeshBasic instance");
   assert.equal(lod1Named.woodDark.color.getHex(), L3_LOD1_WOOD_COLOR);
   assert.equal(lod1Named.handleMat.color.getHex(), L3_LOD1_WOOD_COLOR);
   assert.equal(lod1Named.brass.color.getHex(), L3_LOD1_BRASS_COLOR);
@@ -197,10 +201,33 @@ test("setToolboxLod is visibility-only (no material swap on switch)", () => {
   assert.equal(crate.userData.lod.groups[0][0].visible, false);
 });
 
-test("LOD draws and tris stay at the v0.13 envelope", () => {
+test("LOD draws drop after same-material merge; tris stay at the v0.13 envelope", () => {
   const crate = createToolbox();
   const stats = getToolboxLodStats(crate);
-  assert.deepEqual(stats[0], { tris: 240, draws: 14 });
-  assert.deepEqual(stats[1], { tris: 96, draws: 8 });
+  assert.deepEqual(stats[0], { tris: 240, draws: 6 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4 });
   assert.deepEqual(stats[2], { tris: 24, draws: 2 });
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const lidL0 = crate.userData.lod.groups[0][1];
+  const latchL0 = crate.userData.lod.groups[0][2];
+  const toolL0 = crate.userData.lod.groups[0][3];
+  const bodyL1 = crate.userData.lod.groups[1][0];
+  const visualMeshes = (g) => g.children.filter((o) => o.isMesh && !o.userData.collider);
+  assert.equal(visualMeshes(bodyL0).length, 1, "bodyL0 wood boxes merge to one mesh");
+  assert.equal(visualMeshes(lidL0).length, 2, "lidL0 keeps wood + brass (different materials / lidMesh name)");
+  assert.equal(visualMeshes(latchL0).length, 1, "latchL0 stays one brass mesh");
+  assert.equal(visualMeshes(toolL0).length, 2, "toolL0 steel shaft+tip merge; grip stays wood");
+  assert.equal(visualMeshes(bodyL1).length, 1, "bodyL1 wood boxes merge to one mesh");
+
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  const fastenerMesh = crate.getObjectByName("fastenerMesh");
+  assert.ok(lidMesh?.isMesh, "lidMesh name survives on the unmerged wood lid");
+  assert.equal(lidMesh.parent.parent.name, "lid", "lidMesh stays under the lid pivot");
+  assert.ok(latchMesh?.isMesh, "latchMesh name survives");
+  assert.equal(latchMesh.parent.parent.name, "latch", "latchMesh stays under the latch pivot");
+  assert.ok(fastenerMesh?.isMesh, "fastenerMesh is not an LOD mesh and stays named");
+  assert.equal(fastenerMesh.parent.name, "toolbox", "fastener stays on the toolbox root");
+  assert.equal(fastenerMesh.material, crate.userData.materials.lod0.brass);
 });

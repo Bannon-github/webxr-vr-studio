@@ -56,6 +56,103 @@ function countGroupStats(group) {
   return { tris, draws };
 }
 
+/**
+ * Concatenate BufferGeometries that share the same attributes.
+ * Does not weld vertices (tri count stays the sum of parts) and does
+ * not copy BoxGeometry per-face groups (those would multiply GPU draws
+ * under a single material). Load-time only.
+ */
+function concatGeometries(geometries) {
+  if (!geometries.length) return null;
+  const first = geometries[0];
+  const names = Object.keys(first.attributes);
+  for (const g of geometries) {
+    if (Object.keys(g.attributes).length !== names.length) return null;
+    for (const name of names) {
+      const a = g.getAttribute(name);
+      const b = first.getAttribute(name);
+      if (!a || a.itemSize !== b.itemSize) return null;
+    }
+    if (Boolean(g.index) !== Boolean(first.index)) return null;
+  }
+
+  const merged = new THREE.BufferGeometry();
+  for (const name of names) {
+    const proto = first.getAttribute(name);
+    let length = 0;
+    for (const g of geometries) length += g.getAttribute(name).array.length;
+    const data = new proto.array.constructor(length);
+    let offset = 0;
+    for (const g of geometries) {
+      const arr = g.getAttribute(name).array;
+      data.set(arr, offset);
+      offset += arr.length;
+    }
+    merged.setAttribute(name, new THREE.BufferAttribute(data, proto.itemSize, proto.normalized));
+  }
+
+  if (first.index) {
+    let total = 0;
+    for (const g of geometries) total += g.index.count;
+    const index = new Uint32Array(total);
+    let offset = 0;
+    let vertexOffset = 0;
+    for (const g of geometries) {
+      const src = g.index.array;
+      for (let i = 0; i < src.length; i++) index[offset + i] = src[i] + vertexOffset;
+      offset += src.length;
+      vertexOffset += g.getAttribute("position").count;
+    }
+    merged.setIndex(new THREE.BufferAttribute(index, 1));
+  }
+  return merged;
+}
+
+/**
+ * Merge visual meshes that share one material instance inside a single
+ * lodGroup. Does not cross body / lidPivot / latchPivot / tool — call
+ * once per group. Bakes each mesh's local matrix into the merged
+ * geometry. A named source keeps its name on the survivor. Colliders
+ * are skipped. Load-time only — not per-frame.
+ */
+function mergeSameMaterialMeshes(lodGroup) {
+  const buckets = new Map();
+  for (const child of [...lodGroup.children]) {
+    if (!child.isMesh || child.userData.collider) continue;
+    const mat = child.material;
+    if (!mat || Array.isArray(mat)) continue;
+    let list = buckets.get(mat);
+    if (!list) {
+      list = [];
+      buckets.set(mat, list);
+    }
+    list.push(child);
+  }
+  for (const [mat, meshes] of buckets) {
+    if (meshes.length < 2) continue;
+    const baked = [];
+    for (const mesh of meshes) {
+      mesh.updateMatrix();
+      const geo = mesh.geometry.clone();
+      geo.applyMatrix4(mesh.matrix);
+      baked.push(geo);
+    }
+    const merged = concatGeometries(baked);
+    for (const geo of baked) geo.dispose();
+    if (!merged) continue;
+    const survivor = new THREE.Mesh(merged, mat);
+    survivor.castShadow = false;
+    survivor.receiveShadow = false;
+    const named = meshes.find((m) => m.name);
+    if (named) survivor.name = named.name;
+    for (const mesh of meshes) {
+      lodGroup.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    lodGroup.add(survivor);
+  }
+}
+
 function makeCollider(name, w, h, d, x, y, z) {
   const mat = new THREE.MeshBasicMaterial({
     color: 0x22ff66,
@@ -83,24 +180,24 @@ export function createToolbox() {
   root.userData.kind = "entity";
 
   const l2 = getCrateL2Maps();
-  // LOD0: five color-only unlit MeshBasic materials (no albedo map).
-  // Wood / dark / handle cards share the wood albedo midtone; latch
-  // uses the brass albedo midtone; shaft / tip use the steel albedo
-  // midtone (v0.35; same color-only step v0.29/v0.30 used on LOD2/LOD1).
+  // LOD0: three color-only unlit MeshBasic materials (no albedo map).
+  // Wood / dark / handle cards share one instance at the wood albedo
+  // midtone (v0.37; they were duplicate MeshBasics of the same hex in
+  // v0.35). Latch / fastener use brass; shaft / tip use steel.
   // No roughness/metalness — those uniforms do not apply to MeshBasic.
   const wood = mappedBasic(L3_LOD0_WOOD_COLOR, null, { map: false });
-  const woodDark = mappedBasic(L3_LOD0_WOOD_COLOR, null, { map: false });
+  const woodDark = wood;
   const brass = mappedBasic(L3_LOD0_BRASS_COLOR, null, { map: false });
   const steel = mappedBasic(L3_LOD0_STEEL_COLOR, null, { map: false });
-  const handleMat = mappedBasic(L3_LOD0_WOOD_COLOR, null, { map: false });
+  const handleMat = wood;
   // LOD1 mid crate / lid / latch / tool stub: color-only unlit MeshBasic
-  // (no albedo map). Wood / dark / handle cards share the wood albedo
-  // midtone; latch uses the brass albedo midtone. No roughness/metalness
-  // — those uniforms do not apply to MeshBasic.
+  // (no albedo map). Wood / dark / handle cards share one instance at
+  // the wood albedo midtone (v0.37). Latch uses brass. No
+  // roughness/metalness — those uniforms do not apply to MeshBasic.
   const woodMid = mappedBasic(L3_LOD1_WOOD_COLOR, null, { map: false });
-  const woodDarkMid = mappedBasic(L3_LOD1_WOOD_COLOR, null, { map: false });
+  const woodDarkMid = woodMid;
   const brassMid = mappedBasic(L3_LOD1_BRASS_COLOR, null, { map: false });
-  const handleMatMid = mappedBasic(L3_LOD1_WOOD_COLOR, null, { map: false });
+  const handleMatMid = woodMid;
   // LOD2 far crate + lid: color-only unlit MeshBasic (no albedo map).
   // Flat wood midtone — unchanged vs v0.29.
   const woodFar = mappedBasic(L3_LOD2_WOOD_COLOR, null, { map: false });
@@ -232,7 +329,7 @@ export function createToolbox() {
     lod0Color: { wood: L3_LOD0_WOOD_COLOR, brass: L3_LOD0_BRASS_COLOR, steel: L3_LOD0_STEEL_COLOR },
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
-    note: "procedural color-only stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones); LOD1 color-only unlit MeshBasic (no map; wood/brass midtones); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
+    note: "procedural color-only stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones; woodDark/handleMat alias the wood instance); same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool); LOD1 color-only unlit MeshBasic (woodDark/handleMat alias wood; body boxes merged); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -244,6 +341,18 @@ export function createToolbox() {
     probedUrl: studio.source?.packagedUrl ?? "/packaged/crate-toolbox.glb",
     found: false,
   };
+  // v0.37: merge same-material meshes inside each static lodGroup so
+  // unused material slots do not multiply draws. Pivots stay separate.
+  mergeSameMaterialMeshes(bodyL0);
+  mergeSameMaterialMeshes(lidL0);
+  mergeSameMaterialMeshes(latchL0);
+  mergeSameMaterialMeshes(toolL0);
+  mergeSameMaterialMeshes(bodyL1);
+  mergeSameMaterialMeshes(lidL1);
+  mergeSameMaterialMeshes(latchL1);
+  mergeSameMaterialMeshes(toolL1);
+  mergeSameMaterialMeshes(bodyL2);
+  mergeSameMaterialMeshes(lidL2);
   applyActivityVisual(root, 1);
   attachToolboxLod(root, {
     0: [bodyL0, lidL0, latchL0, toolL0],
