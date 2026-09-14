@@ -15,6 +15,10 @@
  * `lod*` node (direct mesh children, same material reference). Does
  * not merge across LOD levels, pivots outside that node, colliders,
  * or the fastener. Does not rewrite materials.
+ *
+ * v0.39: that helper welds coincident vertices after concat (same
+ * path for procedural and packaged). Author still prefers pre-welded
+ * batches in DCC; runtime weld is a safety net.
  */
 
 import { attachToolboxLod, mergeSameMaterialMeshes } from "./toolbox.js";

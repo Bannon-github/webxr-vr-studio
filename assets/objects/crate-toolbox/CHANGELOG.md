@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.39.0 — 2026-09-14
+
+- **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After v0.38 ran `mergeSameMaterialMeshes` on packaged `lod*` groups, **that helper welds coincident vertices after concat** (Three.js `mergeVertices`-style position hash, 1e-4 m). UV / normal channels stay (first-seen values). Does not merge across body / lidPivot / latchPivot / tool, does not fold colliders or fastener, does not rewrite materials. **Measured** (`userData.lod.stats` / `countGroupStats`; unit tests, not headset): draws stay **6 / 4 / 2** + fastener 1; tris stay **240 / 96 / 24** (index length / 3 — weld does not drop faces). Unique verts **440 → 230** (LOD0), **192 → 100** (LOD1), **48 → 48** (LOD2, no concat). Attribute bytes **16456 → 8800** (LOD0), **7080 → 3776** (LOD1), **1680** unchanged (LOD2). Unit/mock: 3 coincident MeshBasic boxes **72 → 8** verts. Author still prefers pre-welded batches in DCC; runtime weld is a safety net. Unique canvases stay **0**. Session present-path chain (v0.15–v0.22) and v0.8 allocation scrub kept.
+- **Layers:** still L0–L5. This revisits already-claimed L3 (post-merge vertex reuse / GPU attribute footprint), not a new layer.
+- **Quest 3:** Tighter unique-vert / attribute footprint after same-material merge. Draws unchanged. No invented headset ms. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.39.0/`
+
 ## 0.38.0 — 2026-09-14
 
 - **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After v0.37 merged same-material meshes on the procedural path, **packaged GLB ingest runs the same `mergeSameMaterialMeshes` helper** on each discovered `lod0` / `lod1` / `lod2` node (direct mesh children; same material reference; skip multi-material). Does not merge across LOD levels, across pivots outside that `lod*` node, into colliders, or into the fastener. Does not rewrite materials. Missing lod names still fail soft (v0.36). **Unit/mock** (not headset): packaged `lod0` 3 MeshBasic → 1 (tris unchanged). Procedural draws stay **6 / 4 / 2** + fastener 1; `drawCallsEstimate` **7**. Unique canvases stay **0**. Session present-path chain (v0.15–v0.22) and v0.8 allocation scrub kept.

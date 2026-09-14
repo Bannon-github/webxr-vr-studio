@@ -40,6 +40,7 @@ const {
   createToolbox,
   getToolboxLodStats,
   setToolboxLod,
+  weldCoincidentVertices,
 } = await import("./toolbox.js");
 
 test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
@@ -201,12 +202,18 @@ test("setToolboxLod is visibility-only (no material swap on switch)", () => {
   assert.equal(crate.userData.lod.groups[0][0].visible, false);
 });
 
-test("LOD draws drop after same-material merge; tris stay at the v0.13 envelope", () => {
+test("LOD draws stay merged; coincident weld cuts unique verts (tris stay at the v0.13 envelope)", () => {
   const crate = createToolbox();
   const stats = getToolboxLodStats(crate);
-  assert.deepEqual(stats[0], { tris: 240, draws: 6 });
-  assert.deepEqual(stats[1], { tris: 96, draws: 4 });
-  assert.deepEqual(stats[2], { tris: 24, draws: 2 });
+  // v0.38 concat-without-weld envelope: 440 / 192 / 48 unique verts
+  // (Uint32 index on concatenated meshes). v0.39 welds coincident
+  // corners: 230 / 100 / 48. Tris stay index-length/3.
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 8800 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 3776 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 1680 });
+  assert.ok(stats[0].verts < 440, "LOD0 unique verts drop vs concat-without-weld");
+  assert.ok(stats[1].verts < 192, "LOD1 unique verts drop vs concat-without-weld");
+  assert.equal(stats[2].verts, 48, "LOD2 has no concat so no weld");
 
   const bodyL0 = crate.userData.lod.groups[0][0];
   const lidL0 = crate.userData.lod.groups[0][1];
@@ -215,6 +222,9 @@ test("LOD draws drop after same-material merge; tris stay at the v0.13 envelope"
   const bodyL1 = crate.userData.lod.groups[1][0];
   const visualMeshes = (g) => g.children.filter((o) => o.isMesh && !o.userData.collider);
   assert.equal(visualMeshes(bodyL0).length, 1, "bodyL0 wood boxes merge to one mesh");
+  assert.equal(visualMeshes(bodyL0)[0].geometry.getAttribute("position").count, 48, "bodyL0 8 boxes weld 192 → 48 unique verts");
+  assert.ok(visualMeshes(bodyL0)[0].geometry.getAttribute("normal"));
+  assert.ok(visualMeshes(bodyL0)[0].geometry.getAttribute("uv"));
   assert.equal(visualMeshes(lidL0).length, 2, "lidL0 keeps wood + brass (different materials / lidMesh name)");
   assert.equal(visualMeshes(latchL0).length, 1, "latchL0 stays one brass mesh");
   assert.equal(visualMeshes(toolL0).length, 2, "toolL0 steel shaft+tip merge; grip stays wood");
