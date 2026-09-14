@@ -7,3 +7,5 @@ The example probes `/packaged/crate-toolbox.glb` (or `?packaged=`). Missing file
 Required nodes (same contract as the procedural crate): `collider_grab`, `collider_latch`, `collider_lid`, `collider_tool`, plus `lid` / `latch` / `tool`. Do not use hero meshes as colliders.
 
 **LOD visibility (v0.36):** name visual groups `lod0` / `lod1` / `lod2` (case-insensitive; `lod_0` / `lod-0` also match) or tag `userData.lodLevel` 0/1/2. Ingest wires `userData.lod` and shows only one level (`setToolboxLod` / `updateToolboxLod` / keys `1`/`2`/`3`). Keep `collider_*` and `fastener` / `fastenerMesh` **outside** those groups. If those names are missing, ingest fails soft: every authored visual stays visible (no fake LODs).
+
+**Same-material batches (v0.37 procedural; author the GLB the same way):** merge static meshes that share a material **inside** each `lod*` group. Do not flatten lid / latch / tool into the body, and do not merge the fastener into an LOD node. Ingest still does not merge or rewrite materials.
