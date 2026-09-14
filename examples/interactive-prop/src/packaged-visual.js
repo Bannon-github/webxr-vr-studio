@@ -1,7 +1,7 @@
 /**
  * Prefer a packaged GLB (KTX2 / meshopt) when the URL exists.
- * Missing file → null (caller keeps procedural canvases: 256² LOD0
- * MeshStandard + color-only LOD1 MeshBasic + color-only LOD2 MeshBasic). Does not
+ * Missing file → null (caller keeps procedural color-only MeshBasic
+ * on LOD0 / LOD1 / LOD2). Does not
  * strip, downsample, or rewrite materials at ingest.
  * Loaders are dynamic-imported only after a successful probe.
  */
@@ -111,7 +111,7 @@ export async function tryLoadPackagedToolbox(renderer, sidecar) {
   if (sidecar?.source?.preferPackaged === false) return null;
   const found = await probePackagedUrl(url);
   if (!found) {
-    console.info("[crate-toolbox] no packaged GLB at", url, "— procedural canvases");
+    console.info("[crate-toolbox] no packaged GLB at", url, "— procedural color-only MeshBasic");
     return null;
   }
 

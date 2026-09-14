@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.37.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.35.0** L3 packaging/perf UPGRADE: procedural LOD0 hero meshes drop the 256² albedo `map` and use color-only unlit `MeshBasicMaterial` (wood/handle `0x633318`, brass `0xBE7E31`, steel `0xC1C3C9`). LOD1 stays color-only MeshBasic (v0.30); LOD2 stays color-only MeshBasic (v0.29). Unique canvases 3 → 0. Same draws / tris as v0.34. Headset ms / FFR still unmeasured.
+
 ## [0.36.0] — 2026-09-13
 
 ### Changed

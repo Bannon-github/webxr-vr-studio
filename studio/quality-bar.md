@@ -52,7 +52,7 @@ Applies when the user hovers, grabs, or drives a multi-step activity. Full path:
 - [ ] Texture / LOD / triangle class meets [photoreal-realtime](../docs/performance/photoreal-realtime.md) **on Quest 3** (L2/L3 inside [quest-3-target](../docs/shipping/quest-3-target.md); baked maps + LODs, not scan density)
 - [ ] LOD2 far materials are unlit `MeshBasicMaterial` (or glTF `KHR_materials_unlit`) **without** a `baseColorTexture` (color-only, or tiny 1×1 / vertex color) — no `normalMap`, no ORM, no roughness/metalness uniforms (`crate-toolbox` v0.29; loader does not rewrite materials)
 - [ ] LOD1 mid materials are unlit `MeshBasicMaterial` (or glTF `KHR_materials_unlit`) **without** a `baseColorTexture` (color-only, or tiny 1×1 / vertex color) — no `normalMap`, no ORM, no roughness/metalness uniforms (`crate-toolbox` v0.30; loader does not rewrite materials)
-- [ ] LOD0 hero materials may be unlit/basic (or `KHR_materials_unlit`) with ≤256² albedo and no `normalTexture` / ORM textures — `crate-toolbox` v0.34; loader does not rewrite materials
+- [ ] LOD0 hero materials may be unlit/basic (or `KHR_materials_unlit`) **without** a `baseColorTexture` (color-only, or tiny 1×1 / vertex color) — no `normalMap`, no ORM, no roughness/metalness uniforms (`crate-toolbox` v0.35; loader does not rewrite materials)
 - [ ] Scale 1 unit = 1 m; seated reach or ray-use for every required step
 - [ ] Throw / physics never applies impulse to the camera rig
 - [ ] State change is visual + audio and/or haptic; not audio-only

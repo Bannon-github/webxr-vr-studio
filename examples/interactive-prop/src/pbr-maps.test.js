@@ -12,8 +12,11 @@ import {
   L3_LOD1_WOOD_COLOR,
   L3_LOD1_WOOD_METALNESS,
   L3_LOD1_WOOD_ROUGHNESS,
+  L3_LOD0_BRASS_COLOR,
+  L3_LOD0_STEEL_COLOR,
   L3_LOD0_STEEL_METALNESS,
   L3_LOD0_STEEL_ROUGHNESS,
+  L3_LOD0_WOOD_COLOR,
   L3_LOD2_WOOD_COLOR,
   L3_LOD2_WOOD_METALNESS,
   L3_LOD2_WOOD_ROUGHNESS,
@@ -145,22 +148,34 @@ test("mappedBasic is unlit MeshBasic with albedo and no lighting uniforms", () =
   assert.ok(!midTint.metalnessMap);
   assert.equal(midTint.roughness, undefined);
   assert.equal(midTint.metalness, undefined);
-  assert.equal(handleTint.map, maps.albedo, "LOD0 handle keeps the wood albedo map");
+  assert.equal(handleTint.map, maps.albedo, "historical mapped-albedo MeshBasic still binds map");
   assert.equal(handleTint.color.getHex(), 0xe8b42a);
   assert.equal(handleTint.roughness, undefined);
   assert.equal(handleTint.metalness, undefined);
 });
 
-test("mappedBasic color-only omits map (LOD1 mid wood/brass and LOD2 far wood)", () => {
+test("mappedBasic color-only omits map (LOD0 hero, LOD1 mid wood/brass, LOD2 far wood)", () => {
   const maps = { albedo: { id: "alb" }, orm: { id: "orm" }, normal: { id: "nrm" }, normalScale: [0.5, 0.5] };
+  const heroWood = mappedBasic(L3_LOD0_WOOD_COLOR, maps, { map: false });
+  const heroBrass = mappedBasic(L3_LOD0_BRASS_COLOR, null, { map: false });
+  const heroSteel = mappedBasic(L3_LOD0_STEEL_COLOR, maps, { map: false });
   const midWood = mappedBasic(L3_LOD1_WOOD_COLOR, maps, { map: false });
   const midBrass = mappedBasic(L3_LOD1_BRASS_COLOR, null, { map: false });
   const far = mappedBasic(L3_LOD2_WOOD_COLOR, maps, { map: false });
   const noMaps = mappedBasic(L3_LOD2_WOOD_COLOR, null, { map: false });
   assert.equal(L3_LOD2_WOOD_COLOR, 0x633318);
+  assert.equal(L3_LOD0_WOOD_COLOR, L3_LOD1_WOOD_COLOR);
   assert.equal(L3_LOD1_WOOD_COLOR, L3_LOD2_WOOD_COLOR);
   assert.equal(L3_LOD1_WOOD_COLOR, 0x633318);
+  assert.equal(L3_LOD0_BRASS_COLOR, L3_LOD1_BRASS_COLOR);
   assert.equal(L3_LOD1_BRASS_COLOR, 0xbe7e31);
+  assert.equal(L3_LOD0_STEEL_COLOR, 0xc1c3c9);
+  assert.equal(heroWood.map, null, "LOD0 wood MeshBasic has no albedo map");
+  assert.equal(heroWood.color.getHex(), L3_LOD0_WOOD_COLOR);
+  assert.equal(heroBrass.map, null, "LOD0 brass MeshBasic has no albedo map");
+  assert.equal(heroBrass.color.getHex(), L3_LOD0_BRASS_COLOR);
+  assert.equal(heroSteel.map, null, "LOD0 steel MeshBasic has no albedo map");
+  assert.equal(heroSteel.color.getHex(), L3_LOD0_STEEL_COLOR);
   assert.equal(midWood.isMeshBasicMaterial, true);
   assert.ok(!midWood.isMeshStandardMaterial);
   assert.equal(midWood.map, null, "LOD1 wood MeshBasic has no albedo map");
@@ -205,10 +220,10 @@ function installCanvasStub() {
   };
 }
 
-test("getCrateL2Maps allocates three 256² albedo canvases and no normals or ORM", () => {
+test("getCrateL2Maps allocates no albedo, normal, or ORM canvases", () => {
   installCanvasStub();
   const maps = getCrateL2Maps();
-  assert.equal(maps.uniqueTextures, 3);
+  assert.equal(maps.uniqueTextures, 0);
   assert.equal(maps.size, 256);
   assert.equal(maps.lodAlbedoSize, 0);
   assert.equal(maps.wood.normal, null);
@@ -217,29 +232,32 @@ test("getCrateL2Maps allocates three 256² albedo canvases and no normals or ORM
   assert.equal(maps.wood.orm, null);
   assert.equal(maps.brass.orm, null);
   assert.equal(maps.steel.orm, null);
+  assert.equal(maps.wood.albedo, null, "v0.35 must not allocate wood albedo canvases");
+  assert.equal(maps.brass.albedo, null, "v0.35 must not allocate brass albedo canvases");
+  assert.equal(maps.steel.albedo, null, "v0.35 must not allocate steel albedo canvases");
   assert.equal(maps.woodLod, undefined);
   assert.equal(maps.brassLod, undefined);
-  assert.equal(maps.wood.albedo.image.width, 256);
-  assert.equal(maps.brass.albedo.image.width, 256);
-  assert.equal(maps.steel.albedo.image.width, 256);
-  const bound = mappedBasic(0xffffff, maps.wood);
-  assert.equal(bound.isMeshBasicMaterial, true, "v0.34 LOD0 wood is MeshBasic");
+  const bound = mappedBasic(L3_LOD0_WOOD_COLOR, maps.wood, { map: false });
+  assert.equal(bound.isMeshBasicMaterial, true, "v0.35 LOD0 wood is color-only MeshBasic");
   assert.ok(!bound.isMeshStandardMaterial);
   assert.equal(bound.normalMap, undefined);
-  assert.equal(bound.map, maps.wood.albedo);
+  assert.equal(bound.map, null);
+  assert.equal(bound.color.getHex(), L3_LOD0_WOOD_COLOR);
   assert.equal(bound.roughnessMap, undefined);
   assert.equal(bound.metalnessMap, undefined);
   assert.equal(bound.roughness, undefined);
   assert.equal(bound.metalness, undefined);
-  const steel = mappedBasic(0xffffff, maps.steel);
-  assert.equal(steel.isMeshBasicMaterial, true, "v0.34 LOD0 steel is MeshBasic");
-  assert.equal(steel.map, maps.steel.albedo);
+  const steel = mappedBasic(L3_LOD0_STEEL_COLOR, maps.steel, { map: false });
+  assert.equal(steel.isMeshBasicMaterial, true, "v0.35 LOD0 steel is color-only MeshBasic");
+  assert.equal(steel.map, null);
+  assert.equal(steel.color.getHex(), L3_LOD0_STEEL_COLOR);
   assert.equal(steel.roughness, undefined);
   assert.equal(steel.metalness, undefined);
-  const historical = mappedStandard(0xffffff, maps.wood, { normalMap: false, ormMap: false });
+  const fakeAlb = { id: "alb" };
+  const historical = mappedStandard(0xffffff, { albedo: fakeAlb, orm: null, normal: null }, { normalMap: false, ormMap: false });
   assert.equal(historical.isMeshStandardMaterial, true, "mappedStandard helper stays available");
   assert.equal(historical.normalMap, null);
-  assert.equal(historical.map, maps.wood.albedo);
+  assert.equal(historical.map, fakeAlb);
   assert.equal(historical.roughnessMap, null);
   assert.equal(historical.metalnessMap, null);
   assert.equal(historical.roughness, L3_LOD1_WOOD_ROUGHNESS);
