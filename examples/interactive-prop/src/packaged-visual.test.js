@@ -7,7 +7,13 @@ import {
   ingestPackagedRoot,
   packagedLodLevel,
 } from "./packaged-visual.js";
-import { mergeSameMaterialMeshes, setToolboxLod, TOOLBOX_LOD_DISTANCES, updateToolboxLod } from "./toolbox.js";
+import {
+  mergeSameMaterialMeshes,
+  setToolboxLod,
+  TOOLBOX_LOD_DISTANCES,
+  updateToolboxLod,
+  weldCoincidentVertices,
+} from "./toolbox.js";
 
 function mesh(name) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
@@ -258,7 +264,10 @@ test("packaged ingest merges same-material MeshBasic children inside each lod* g
   assert.equal(afterBody.length, 1, "mock packaged lod0 3 → 1 (unit evidence, not headset)");
   assert.equal(afterBody[0].material, shared, "survivor keeps the shared material reference");
   assert.ok(afterBody[0].name, "merged mesh keeps a non-empty name from an input");
-  assert.equal(boxTris(afterBody[0]), beforeTris, "tris concatenate; no weld");
+  assert.equal(boxTris(afterBody[0]), beforeTris, "tris stay concatenated (weld does not drop faces)");
+  assert.equal(afterBody[0].geometry.getAttribute("position").count, 8, "unit/mock: 3 coincident boxes weld 72 → 8 unique verts");
+  assert.ok(afterBody[0].geometry.getAttribute("normal"), "weld keeps normal channel");
+  assert.ok(afterBody[0].geometry.getAttribute("uv"), "weld keeps uv channel");
   assert.equal(visualMeshes(lidLod0).length, 1);
   assert.equal(lidLod0.children[0], lidOnly, "single-mesh lod groups are no-ops");
   assert.equal(latchLod0.children[0], latchOnly);
@@ -279,6 +288,7 @@ test("packaged ingest merges same-material MeshBasic children inside each lod* g
   // body 1 + lid 1 + latch 1 + tool 1 after merge (was 3+1+1+1 = 6 draws)
   assert.equal(stats[0].draws, 4, "packaged lod.stats draws drop after merge");
   assert.equal(stats[0].tris, 72, "tris stay the concatenated envelope (3×12 + 3×12)");
+  assert.equal(stats[0].verts, 80, "unit/mock unique verts: welded body 8 + 3 unmerged boxes 24");
   assert.ok(stats[1].draws > 0);
 });
 
@@ -353,6 +363,21 @@ test("mergeSameMaterialMeshes is the shared helper (direct call matches ingest)"
   assert.equal(meshes.length, 3, "two shared-mat merge; lonely + multi-material stay");
   const merged = meshes.find((m) => m.material === mat);
   assert.equal(merged.name, "namedWall", "keep a non-empty .name from one input");
+  assert.equal(boxTris(merged), 24, "two boxes stay 24 tris after weld");
+  assert.equal(merged.geometry.getAttribute("position").count, 8, "two coincident boxes weld 48 → 8 unique verts");
   assert.equal(meshes.includes(lonely), true);
   assert.equal(meshes.includes(multi), true);
+});
+
+test("weldCoincidentVertices hashes position and keeps other attribute channels", () => {
+  const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const beforeTris = geo.index.count / 3;
+  const beforeVerts = geo.getAttribute("position").count;
+  assert.equal(beforeVerts, 24);
+  const welded = weldCoincidentVertices(geo);
+  assert.equal(welded.getAttribute("position").count, 8);
+  assert.equal(welded.index.count / 3, beforeTris, "index tri count unchanged");
+  assert.ok(welded.getAttribute("normal"));
+  assert.ok(welded.getAttribute("uv"));
+  assert.equal(geo.getAttribute("position").count, 24, "source geometry is not rewritten in place when verts drop");
 });

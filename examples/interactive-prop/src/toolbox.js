@@ -40,9 +40,21 @@ function lodGroup(level) {
   return g;
 }
 
+function geometryAttrBytes(geo) {
+  let bytes = 0;
+  for (const name of Object.keys(geo.attributes)) {
+    const arr = geo.getAttribute(name)?.array;
+    if (arr) bytes += arr.byteLength;
+  }
+  if (geo.index?.array) bytes += geo.index.array.byteLength;
+  return bytes;
+}
+
 function countGroupStats(group) {
   let tris = 0;
   let draws = 0;
+  let verts = 0;
+  let attrBytes = 0;
   group.traverse((o) => {
     if (!o.isMesh || o.userData.collider) return;
     const geo = o.geometry;
@@ -51,15 +63,17 @@ function countGroupStats(group) {
     const pos = geo.getAttribute("position");
     if (idx) tris += idx.count / 3;
     else if (pos) tris += pos.count / 3;
+    if (pos) verts += pos.count;
+    attrBytes += geometryAttrBytes(geo);
     draws += 1;
   });
-  return { tris, draws };
+  return { tris, draws, verts, attrBytes };
 }
 
 /**
  * Concatenate BufferGeometries that share the same attributes.
- * Does not weld vertices (tri count stays the sum of parts) and does
- * not copy BoxGeometry per-face groups (those would multiply GPU draws
+ * Does not weld (call `weldCoincidentVertices` after) and does not
+ * copy BoxGeometry per-face groups (those would multiply GPU draws
  * under a single material). Load-time only.
  */
 function concatGeometries(geometries) {
@@ -108,6 +122,81 @@ function concatGeometries(geometries) {
   return merged;
 }
 
+/** Position-hash bin size in meters (Three.js `mergeVertices` default). */
+export const MERGE_WELD_TOLERANCE = 1e-4;
+
+const _weldGetters = ["getX", "getY", "getZ", "getW"];
+
+/**
+ * Weld vertices whose positions match within `tolerance` (Three.js
+ * mergeVertices-style truncation hash). UV / normal / other attribute
+ * *channels* stay — the surviving vertex keeps the first-seen values.
+ * Position is the weld key so shared corners between former sibling
+ * meshes become one vertex even when per-face UVs/normals differ
+ * (BoxGeometry). Does not drop triangles. Load-time only.
+ *
+ * Prefer DCC pre-weld for mapped UV islands; this is a safety net
+ * after same-material concat.
+ */
+export function weldCoincidentVertices(geometry, tolerance = MERGE_WELD_TOLERANCE) {
+  if (!geometry) return geometry;
+  const pos = geometry.getAttribute("position");
+  if (!pos || pos.count < 2) return geometry;
+  if (Object.keys(geometry.morphAttributes || {}).length) return geometry;
+  const names = Object.keys(geometry.attributes);
+  for (const name of names) {
+    if (geometry.getAttribute(name)?.isInterleavedBufferAttribute) return geometry;
+  }
+
+  const eps = Math.max(tolerance, Number.EPSILON);
+  const shiftMultiplier = Math.pow(10, Math.log10(1 / eps));
+  const vertexCount = pos.count;
+  const remap = new Uint32Array(vertexCount);
+  const hashToNew = new Map();
+  let next = 0;
+
+  for (let i = 0; i < vertexCount; i++) {
+    const hash = `${~~(pos.getX(i) * shiftMultiplier)},${~~(pos.getY(i) * shiftMultiplier)},${~~(pos.getZ(i) * shiftMultiplier)}`;
+    let dst = hashToNew.get(hash);
+    if (dst === undefined) {
+      dst = next++;
+      hashToNew.set(hash, dst);
+    }
+    remap[i] = dst;
+  }
+  if (next === vertexCount) return geometry;
+
+  const welded = new THREE.BufferGeometry();
+  const written = new Uint8Array(next);
+  for (const name of names) {
+    const attr = geometry.getAttribute(name);
+    const itemSize = attr.itemSize;
+    const data = new attr.array.constructor(next * itemSize);
+    const out = new THREE.BufferAttribute(data, itemSize, attr.normalized);
+    written.fill(0);
+    for (let i = 0; i < vertexCount; i++) {
+      const dst = remap[i];
+      if (written[dst]) continue;
+      written[dst] = 1;
+      for (let k = 0; k < itemSize; k++) {
+        out[_weldGetters[k]](dst, attr[_weldGetters[k]](i));
+      }
+    }
+    welded.setAttribute(name, out);
+  }
+
+  const srcIndex = geometry.getIndex();
+  const srcCount = srcIndex ? srcIndex.count : vertexCount;
+  const compact = next > 65535 ? new Uint32Array(srcCount) : new Uint16Array(srcCount);
+  if (srcIndex) {
+    for (let i = 0; i < srcCount; i++) compact[i] = remap[srcIndex.getX(i)];
+  } else {
+    for (let i = 0; i < vertexCount; i++) compact[i] = remap[i];
+  }
+  welded.setIndex(new THREE.BufferAttribute(compact, 1));
+  return welded;
+}
+
 const LOD_MERGE_SKIP_NAMES = new Set(["fastener", "fastenerMesh"]);
 
 function skipLodMergeChild(child) {
@@ -122,11 +211,12 @@ function skipLodMergeChild(child) {
  * Merge visual meshes that share one material instance inside a single
  * lodGroup. Does not cross body / lidPivot / latchPivot / tool — call
  * once per group. Bakes each mesh's local matrix into the merged
- * geometry. A named source keeps its name on the survivor. Colliders
- * and the fastener (`fastener` / `fastenerMesh`) are skipped. Direct
- * mesh children only — nested Groups (pivots) stay. Load-time only —
- * not per-frame. Shared by procedural create (v0.37) and packaged
- * ingest (v0.38).
+ * geometry, then welds coincident vertices (v0.39). A named source
+ * keeps its name on the survivor. Colliders and the fastener
+ * (`fastener` / `fastenerMesh`) are skipped. Direct mesh children
+ * only — nested Groups (pivots) stay. Load-time only — not per-frame.
+ * Shared by procedural create (v0.37) and packaged ingest (v0.38);
+ * weld is the v0.39 upgrade on the same helper.
  */
 export function mergeSameMaterialMeshes(lodGroup) {
   if (!lodGroup) return lodGroup;
@@ -151,9 +241,11 @@ export function mergeSameMaterialMeshes(lodGroup) {
       geo.applyMatrix4(mesh.matrix);
       baked.push(geo);
     }
-    const merged = concatGeometries(baked);
+    const concatenated = concatGeometries(baked);
     for (const geo of baked) geo.dispose();
-    if (!merged) continue;
+    if (!concatenated) continue;
+    const merged = weldCoincidentVertices(concatenated);
+    if (merged !== concatenated) concatenated.dispose();
     const survivor = new THREE.Mesh(merged, mat);
     survivor.castShadow = false;
     survivor.receiveShadow = false;
@@ -344,7 +436,7 @@ export function createToolbox() {
     lod0Color: { wood: L3_LOD0_WOOD_COLOR, brass: L3_LOD0_BRASS_COLOR, steel: L3_LOD0_STEEL_COLOR },
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
-    note: "procedural color-only stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones; woodDark/handleMat alias the wood instance); same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool); LOD1 color-only unlit MeshBasic (woodDark/handleMat alias wood; body boxes merged); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
+    note: "procedural color-only stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones; woodDark/handleMat alias the wood instance); same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39); LOD1 color-only unlit MeshBasic (woodDark/handleMat alias wood; body boxes merged); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -357,7 +449,8 @@ export function createToolbox() {
     found: false,
   };
   // v0.37: merge same-material meshes inside each static lodGroup so
-  // unused material slots do not multiply draws. Pivots stay separate.
+  // unused material slots do not multiply draws. v0.39: weld coincident
+  // vertices after concat. Pivots stay separate.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);
   mergeSameMaterialMeshes(latchL0);
@@ -403,9 +496,11 @@ function mergeStats(groups) {
       const s = countGroupStats(g);
       acc.tris += s.tris;
       acc.draws += s.draws;
+      acc.verts += s.verts;
+      acc.attrBytes += s.attrBytes;
       return acc;
     },
-    { tris: 0, draws: 0 }
+    { tris: 0, draws: 0, verts: 0, attrBytes: 0 }
   );
 }
 
