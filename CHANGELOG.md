@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.42.0] — 2026-09-14
+
+### Changed
+
+- `crate-toolbox` **v0.40.0** L3 packaging/perf UPGRADE: strip unused `uv` / `normal` after same-material concat + coincident weld on color-only unlit MeshBasic (procedural + packaged helper). Attribute bytes 8800 → 4200 (LOD0), 3776 → 1776 (LOD1), 1680 → 720 (LOD2); draws 6 / 4 / 2 and tris 240 / 96 / 24 unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.41.0] — 2026-09-14
 
 ### Changed
