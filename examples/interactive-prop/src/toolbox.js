@@ -108,17 +108,31 @@ function concatGeometries(geometries) {
   return merged;
 }
 
+const LOD_MERGE_SKIP_NAMES = new Set(["fastener", "fastenerMesh"]);
+
+function skipLodMergeChild(child) {
+  if (!child?.isMesh) return true;
+  if (child.userData?.collider) return true;
+  if (LOD_MERGE_SKIP_NAMES.has(child.name)) return true;
+  if (child.name && child.name.startsWith("collider_")) return true;
+  return false;
+}
+
 /**
  * Merge visual meshes that share one material instance inside a single
  * lodGroup. Does not cross body / lidPivot / latchPivot / tool — call
  * once per group. Bakes each mesh's local matrix into the merged
  * geometry. A named source keeps its name on the survivor. Colliders
- * are skipped. Load-time only — not per-frame.
+ * and the fastener (`fastener` / `fastenerMesh`) are skipped. Direct
+ * mesh children only — nested Groups (pivots) stay. Load-time only —
+ * not per-frame. Shared by procedural create (v0.37) and packaged
+ * ingest (v0.38).
  */
-function mergeSameMaterialMeshes(lodGroup) {
+export function mergeSameMaterialMeshes(lodGroup) {
+  if (!lodGroup) return lodGroup;
   const buckets = new Map();
   for (const child of [...lodGroup.children]) {
-    if (!child.isMesh || child.userData.collider) continue;
+    if (skipLodMergeChild(child)) continue;
     const mat = child.material;
     if (!mat || Array.isArray(mat)) continue;
     let list = buckets.get(mat);
@@ -151,6 +165,7 @@ function mergeSameMaterialMeshes(lodGroup) {
     }
     lodGroup.add(survivor);
   }
+  return lodGroup;
 }
 
 function makeCollider(name, w, h, d, x, y, z) {

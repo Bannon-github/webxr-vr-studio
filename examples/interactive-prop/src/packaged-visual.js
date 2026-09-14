@@ -9,9 +9,15 @@
  * (same names as procedural `lodGroup()`, plus `userData.lodLevel`),
  * ingest wires `userData.lod` and shows only LOD0. Missing names fail
  * soft — one visual set stays visible; no fake LODs.
+ *
+ * v0.38: after those groups are discovered, the same load-time
+ * `mergeSameMaterialMeshes` helper as procedural v0.37 runs on each
+ * `lod*` node (direct mesh children, same material reference). Does
+ * not merge across LOD levels, pivots outside that node, colliders,
+ * or the fastener. Does not rewrite materials.
  */
 
-import { attachToolboxLod } from "./toolbox.js";
+import { attachToolboxLod, mergeSameMaterialMeshes } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
   "collider_grab",
@@ -151,6 +157,14 @@ export function ingestPackagedRoot(root, sidecar) {
 
   const lodGroups = discoverPackagedLodGroups(root);
   if (lodGroups) {
+    // Same helper as procedural v0.37, per discovered lod* node only.
+    // Direct mesh children; nested pivots / Groups are not flattened.
+    for (const level of [0, 1, 2]) {
+      for (const group of lodGroups[level]) {
+        mergeSameMaterialMeshes(group);
+      }
+    }
+    // Attach after merge so lod.stats draws match the surviving meshes.
     attachToolboxLod(root, lodGroups);
   } else {
     console.info(

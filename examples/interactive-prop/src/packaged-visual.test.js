@@ -7,7 +7,7 @@ import {
   ingestPackagedRoot,
   packagedLodLevel,
 } from "./packaged-visual.js";
-import { setToolboxLod, TOOLBOX_LOD_DISTANCES, updateToolboxLod } from "./toolbox.js";
+import { mergeSameMaterialMeshes, setToolboxLod, TOOLBOX_LOD_DISTANCES, updateToolboxLod } from "./toolbox.js";
 
 function mesh(name) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
@@ -59,6 +59,22 @@ function makePackagedFixture({ withLod = true, lodNames } = {}) {
   addRequiredColliders(root);
   root.add(body, lid, latch, tool, fastener);
   return { root, body, lid, latch, tool, fastener, groups };
+}
+
+function visualMeshes(group) {
+  return group.children.filter((o) => o.isMesh && !o.userData.collider);
+}
+
+function boxMesh(name, material) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), material);
+  m.name = name;
+  return m;
+}
+
+function boxTris(mesh) {
+  const idx = mesh.geometry.index;
+  if (idx) return idx.count / 3;
+  return mesh.geometry.getAttribute("position").count / 3;
 }
 
 function visibleLevels(lod) {
@@ -212,4 +228,131 @@ test("ingest still requires lid/latch/tool and does not crash without LODs", () 
   assert.ok(ingestPackagedRoot(ok, sidecar));
   assert.doesNotThrow(() => setToolboxLod(ok, 0));
   assert.doesNotThrow(() => setToolboxLod(ok, 2));
+});
+
+test("packaged ingest merges same-material MeshBasic children inside each lod* group", () => {
+  const { root, body, lid, latch, tool, fastener, groups } = makePackagedFixture();
+  const shared = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const bodyLod0 = groups[0][0];
+  bodyLod0.clear();
+  bodyLod0.add(boxMesh("crateFloor", shared), boxMesh("crateWallA", shared), boxMesh("crateWallB", shared));
+  const lidLod0 = groups[0][1];
+  const latchLod0 = groups[0][2];
+  const toolLod0 = groups[0][3];
+  const bodyLod1 = groups[1][0];
+  const beforeBody = visualMeshes(bodyLod0).length;
+  const beforeTris = visualMeshes(bodyLod0).reduce((n, m) => n + boxTris(m), 0);
+  assert.equal(beforeBody, 3);
+  assert.equal(beforeTris, 36);
+  assert.equal(visualMeshes(lidLod0).length, 1, "single-mesh lid lod0 is a no-op candidate");
+  const lidOnly = lidLod0.children[0];
+  const latchOnly = latchLod0.children[0];
+  const toolOnly = toolLod0.children[0];
+  const bodyLod1Only = bodyLod1.children[0];
+  const fastenerMat = fastener.material;
+  const colliderGrab = root.getObjectByName("collider_grab");
+
+  const ingested = ingestPackagedRoot(root, sidecar);
+  assert.equal(ingested, root);
+  const afterBody = visualMeshes(bodyLod0);
+  assert.equal(afterBody.length, 1, "mock packaged lod0 3 → 1 (unit evidence, not headset)");
+  assert.equal(afterBody[0].material, shared, "survivor keeps the shared material reference");
+  assert.ok(afterBody[0].name, "merged mesh keeps a non-empty name from an input");
+  assert.equal(boxTris(afterBody[0]), beforeTris, "tris concatenate; no weld");
+  assert.equal(visualMeshes(lidLod0).length, 1);
+  assert.equal(lidLod0.children[0], lidOnly, "single-mesh lod groups are no-ops");
+  assert.equal(latchLod0.children[0], latchOnly);
+  assert.equal(toolLod0.children[0], toolOnly);
+  assert.equal(bodyLod1.children[0], bodyLod1Only, "must not merge across lod levels");
+  assert.equal(fastener.visible, true);
+  assert.equal(fastener.parent, root, "fastener stays on the packaged root");
+  assert.equal(fastener.material, fastenerMat);
+  assert.ok(fastener.geometry, "fastener geometry is not disposed");
+  assert.equal(colliderGrab.visible, false);
+  assert.equal(colliderGrab.parent, root);
+  assert.ok(body.children.includes(bodyLod0));
+  assert.ok(lid.children.includes(lidLod0));
+  assert.ok(latch.children.includes(latchLod0));
+  assert.ok(tool.children.includes(toolLod0));
+
+  const stats = root.userData.lod.stats;
+  // body 1 + lid 1 + latch 1 + tool 1 after merge (was 3+1+1+1 = 6 draws)
+  assert.equal(stats[0].draws, 4, "packaged lod.stats draws drop after merge");
+  assert.equal(stats[0].tris, 72, "tris stay the concatenated envelope (3×12 + 3×12)");
+  assert.ok(stats[1].draws > 0);
+});
+
+test("packaged merge skips colliders and fastener even when they share a material", () => {
+  const { root, fastener, groups } = makePackagedFixture();
+  const shared = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  const bodyLod0 = groups[0][0];
+  bodyLod0.clear();
+  const a = boxMesh("plaqueA", shared);
+  const b = boxMesh("plaqueB", shared);
+  const colliderInLod = boxMesh("collider_in_lod", shared);
+  colliderInLod.userData.collider = true;
+  colliderInLod.visible = false;
+  bodyLod0.add(a, b, colliderInLod);
+  fastener.material = shared;
+
+  ingestPackagedRoot(root, sidecar);
+  const visuals = visualMeshes(bodyLod0);
+  assert.equal(visuals.length, 1, "two brass plaques merge; collider stays out");
+  assert.equal(bodyLod0.children.includes(colliderInLod), true, "collider child is not merged away");
+  assert.equal(colliderInLod.material, shared);
+  assert.ok(colliderInLod.geometry);
+  assert.equal(fastener.parent, root);
+  assert.equal(fastener.material, shared);
+  assert.ok(fastener.isMesh);
+});
+
+test("single-mesh packaged lod groups are no-ops", () => {
+  const { root, groups } = makePackagedFixture();
+  const identities = groups[0].map((g) => g.children[0]);
+  ingestPackagedRoot(root, sidecar);
+  for (let i = 0; i < groups[0].length; i++) {
+    assert.equal(visualMeshes(groups[0][i]).length, 1);
+    assert.equal(groups[0][i].children[0], identities[i]);
+  }
+});
+
+test("no lod groups skips merge and still fails soft", () => {
+  const { root, fastener } = makePackagedFixture({ withLod: false });
+  const shared = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const body = root.getObjectByName("body");
+  const extraA = boxMesh("bodyExtraA", shared);
+  const extraB = boxMesh("bodyExtraB", shared);
+  const extraC = boxMesh("bodyExtraC", shared);
+  body.add(extraA, extraB, extraC);
+  const before = body.children.filter((o) => o.isMesh).length;
+  assert.ok(before >= 3);
+
+  const ingested = ingestPackagedRoot(root, sidecar);
+  assert.equal(ingested, root);
+  assert.equal(root.userData.lod, undefined, "must not invent userData.lod");
+  assert.equal(body.children.includes(extraA), true);
+  assert.equal(body.children.includes(extraB), true);
+  assert.equal(body.children.includes(extraC), true);
+  assert.equal(extraA.geometry.uuid === extraB.geometry.uuid, false);
+  assert.equal(visualMeshes(body).length, before, "without lod* groups, same-material meshes stay unmerged");
+  assert.equal(fastener.visible, true);
+});
+
+test("mergeSameMaterialMeshes is the shared helper (direct call matches ingest)", () => {
+  const g = new THREE.Group();
+  g.name = "lod0";
+  const mat = new THREE.MeshBasicMaterial();
+  g.add(boxMesh("namedWall", mat), boxMesh("", mat));
+  const other = new THREE.MeshBasicMaterial();
+  const lonely = boxMesh("lonely", other);
+  g.add(lonely);
+  const multi = boxMesh("multi", [mat, other]);
+  g.add(multi);
+  mergeSameMaterialMeshes(g);
+  const meshes = visualMeshes(g);
+  assert.equal(meshes.length, 3, "two shared-mat merge; lonely + multi-material stay");
+  const merged = meshes.find((m) => m.material === mat);
+  assert.equal(merged.name, "namedWall", "keep a non-empty .name from one input");
+  assert.equal(meshes.includes(lonely), true);
+  assert.equal(meshes.includes(multi), true);
 });
