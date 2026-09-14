@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.39.0] — 2026-09-14
+
+### Changed
+
+- `crate-toolbox` **v0.37.0** L3 packaging/perf UPGRADE: procedural LOD0/LOD1 same-material mesh merge within each static lodGroup (wood/woodDark/handleMat share one MeshBasic). Measured draws 14 → 6 (LOD0) and 8 → 4 (LOD1); tris unchanged. Packaged v0.36 LOD visibility left intact. Headset ms / FFR still unmeasured.
+
 ## [0.38.0] — 2026-09-14
 
 ### Changed
