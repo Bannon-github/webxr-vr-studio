@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.40.0] — 2026-09-14
+
+### Changed
+
+- `crate-toolbox` **v0.38.0** L3 packaging/perf UPGRADE: packaged GLB ingest applies the same load-time same-material mesh merge as procedural v0.37, within each discovered `lod0`/`lod1`/`lod2` group. Unit/mock 3 MeshBasic → 1 (tris unchanged). Procedural draws stay 6/4/2. Headset ms / FFR still unmeasured.
+
 ## [0.39.0] — 2026-09-14
 
 ### Changed
