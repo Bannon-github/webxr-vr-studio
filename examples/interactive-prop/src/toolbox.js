@@ -122,6 +122,38 @@ function concatGeometries(geometries) {
   return merged;
 }
 
+/**
+ * Color-only unlit MeshBasic: no maps and no envMap (envMap samples
+ * normals). Those materials do not read `uv` / `normal` / `tangent`.
+ * Load-time only.
+ */
+export function isColorOnlyUnlitBasic(material) {
+  if (!material || Array.isArray(material) || !material.isMeshBasicMaterial) return false;
+  if (material.map || material.lightMap || material.aoMap) return false;
+  if (material.specularMap || material.alphaMap || material.envMap) return false;
+  return true;
+}
+
+/** Channels MeshBasic ignores when `isColorOnlyUnlitBasic` is true. */
+export const COLOR_ONLY_UNUSED_ATTRS = Object.freeze(["normal", "uv", "uv1", "uv2", "uv3", "tangent"]);
+
+/**
+ * Drop unused BufferGeometry attributes on color-only unlit MeshBasic.
+ * Keeps `position` (and `color` when `vertexColors` is set). Mapped or
+ * lit materials are left intact. Mutates in place. Load-time only —
+ * author may omit these in DCC; this is a safety net after merge/weld.
+ */
+export function stripUnusedColorOnlyAttributes(geometry, material) {
+  if (!geometry || !isColorOnlyUnlitBasic(material)) return geometry;
+  for (const name of COLOR_ONLY_UNUSED_ATTRS) {
+    if (geometry.getAttribute(name)) geometry.deleteAttribute(name);
+  }
+  if (!material.vertexColors && geometry.getAttribute("color")) {
+    geometry.deleteAttribute("color");
+  }
+  return geometry;
+}
+
 /** Position-hash bin size in meters (Three.js `mergeVertices` default). */
 export const MERGE_WELD_TOLERANCE = 1e-4;
 
@@ -211,12 +243,16 @@ function skipLodMergeChild(child) {
  * Merge visual meshes that share one material instance inside a single
  * lodGroup. Does not cross body / lidPivot / latchPivot / tool — call
  * once per group. Bakes each mesh's local matrix into the merged
- * geometry, then welds coincident vertices (v0.39). A named source
+ * geometry, then welds coincident vertices (v0.39), then strips
+ * unused `uv` / `normal` (and other unused channels) when the
+ * material is color-only unlit MeshBasic (v0.40). A named source
  * keeps its name on the survivor. Colliders and the fastener
  * (`fastener` / `fastenerMesh`) are skipped. Direct mesh children
  * only — nested Groups (pivots) stay. Load-time only — not per-frame.
  * Shared by procedural create (v0.37) and packaged ingest (v0.38);
- * weld is the v0.39 upgrade on the same helper.
+ * weld is the v0.39 upgrade on the same helper; unused-attr strip
+ * is the v0.40 upgrade. Single-mesh groups still skip concat/weld
+ * but still strip unused attrs on color-only MeshBasic.
  */
 export function mergeSameMaterialMeshes(lodGroup) {
   if (!lodGroup) return lodGroup;
@@ -233,7 +269,12 @@ export function mergeSameMaterialMeshes(lodGroup) {
     list.push(child);
   }
   for (const [mat, meshes] of buckets) {
-    if (meshes.length < 2) continue;
+    if (meshes.length < 2) {
+      for (const mesh of meshes) {
+        stripUnusedColorOnlyAttributes(mesh.geometry, mat);
+      }
+      continue;
+    }
     const baked = [];
     for (const mesh of meshes) {
       mesh.updateMatrix();
@@ -246,6 +287,7 @@ export function mergeSameMaterialMeshes(lodGroup) {
     if (!concatenated) continue;
     const merged = weldCoincidentVertices(concatenated);
     if (merged !== concatenated) concatenated.dispose();
+    stripUnusedColorOnlyAttributes(merged, mat);
     const survivor = new THREE.Mesh(merged, mat);
     survivor.castShadow = false;
     survivor.receiveShadow = false;
@@ -436,7 +478,7 @@ export function createToolbox() {
     lod0Color: { wood: L3_LOD0_WOOD_COLOR, brass: L3_LOD0_BRASS_COLOR, steel: L3_LOD0_STEEL_COLOR },
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
-    note: "procedural color-only stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones; woodDark/handleMat alias the wood instance); same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39); LOD1 color-only unlit MeshBasic (woodDark/handleMat alias wood; body boxes merged); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
+    note: "procedural color-only stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones; woodDark/handleMat alias the wood instance); same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40); LOD1 color-only unlit MeshBasic (woodDark/handleMat alias wood; body boxes merged); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -450,7 +492,9 @@ export function createToolbox() {
   };
   // v0.37: merge same-material meshes inside each static lodGroup so
   // unused material slots do not multiply draws. v0.39: weld coincident
-  // vertices after concat. Pivots stay separate.
+  // vertices after concat. v0.40: strip unused uv/normal on color-only
+  // MeshBasic after weld (and on unmerged singles in the same helper).
+  // Pivots stay separate.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);
   mergeSameMaterialMeshes(latchL0);
