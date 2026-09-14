@@ -56,6 +56,7 @@ Applies when the user hovers, grabs, or drives a multi-step activity. Full path:
 - [ ] Packaged GLB ingest wires conventional `lod0` / `lod1` / `lod2` (or `userData.lodLevel`) into `userData.lod` and shows only one level; missing names fail soft without inventing fake LODs; colliders and fastener stay out of LOD groups (`crate-toolbox` v0.36; visibility-only switch)
 - [ ] Procedural LOD0/LOD1 merge same-material meshes within each static lodGroup (do not merge across body / lid / latch / tool); duplicate same-color MeshBasics share one instance (`crate-toolbox` v0.37; measured LOD0 14 → 6 draws, LOD1 8 → 4; tris unchanged)
 - [ ] Packaged GLB ingest merges same-material meshes within each discovered `lod0` / `lod1` / `lod2` group (same helper as procedural v0.37; direct mesh children; skip colliders / fastener / multi-material; do not merge across LOD levels); missing names still fail soft (`crate-toolbox` v0.38; unit/mock 3→1 draws, tris unchanged; no material rewrite)
+- [ ] After same-material concat, weld coincident vertices (position hash 1e-4 m; keep UV/normal channels). Prefer DCC pre-weld; runtime weld is a safety net (`crate-toolbox` v0.39; unique verts 440 → 230 / 192 → 100; tris and draws unchanged; unit/mock 72 → 8)
 - [ ] Scale 1 unit = 1 m; seated reach or ray-use for every required step
 - [ ] Throw / physics never applies impulse to the camera rig
 - [ ] State change is visual + audio and/or haptic; not audio-only

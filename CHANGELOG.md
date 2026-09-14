@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.41.0] — 2026-09-14
+
+### Changed
+
+- `crate-toolbox` **v0.39.0** L3 packaging/perf UPGRADE: weld coincident vertices after same-material concat (procedural + packaged helper). Unique verts 440 → 230 (LOD0) and 192 → 100 (LOD1); tris 240 / 96 / 24 and draws 6 / 4 / 2 unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.40.0] — 2026-09-14
 
 ### Changed
