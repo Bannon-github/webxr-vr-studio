@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.38.0] — 2026-09-14
+
+### Changed
+
+- `crate-toolbox` **v0.36.0** L3 packaging/perf UPGRADE: packaged GLB ingest wires `lod0` / `lod1` / `lod2` (or `userData.lodLevel`) into `userData.lod` and shows only one level. Missing names fail soft (no fake LODs). Procedural path unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.37.0] — 2026-09-13
 
 ### Changed
