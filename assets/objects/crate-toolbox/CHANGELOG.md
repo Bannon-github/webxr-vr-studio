@@ -1,5 +1,12 @@
 # crate-toolbox
 
+## 0.38.0 — 2026-09-14
+
+- **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After v0.37 merged same-material meshes on the procedural path, **packaged GLB ingest runs the same `mergeSameMaterialMeshes` helper** on each discovered `lod0` / `lod1` / `lod2` node (direct mesh children; same material reference; skip multi-material). Does not merge across LOD levels, across pivots outside that `lod*` node, into colliders, or into the fastener. Does not rewrite materials. Missing lod names still fail soft (v0.36). **Unit/mock** (not headset): packaged `lod0` 3 MeshBasic → 1 (tris unchanged). Procedural draws stay **6 / 4 / 2** + fastener 1; `drawCallsEstimate` **7**. Unique canvases stay **0**. Session present-path chain (v0.15–v0.22) and v0.8 allocation scrub kept.
+- **Layers:** still L0–L5. This revisits already-claimed L3 (packaged LOD draw waste), not a new layer.
+- **Quest 3:** Fewer draws inside authored `lod*` groups when a packaged GLB shares material instances. No invented headset ms. 90 Hz / 72 fallback **requested**, not measured. Headset ms / FFR still **TODO**.
+- **Revision:** `revisions/v0.38.0/`
+
 ## 0.37.0 — 2026-09-14
 
 - **Delta (additive, L3 packaging/perf UPGRADE):** Same `objectId`, same L0–L5 claim — not a new layer and not NEW. After v0.36 wired packaged `lod0` / `lod1` / `lod2` visibility, **procedural LOD0 (and LOD1) merge meshes that share a material inside each static lodGroup**. `bodyL0` wood + woodDark boxes become one wood mesh; `toolL0` steel shaft + tip become one steel mesh; the wood grip stays separate. Lid / latch / tool stay under their pivots (do not merge across body / lidPivot / latchPivot / tool). Fastener is not an LOD mesh. Duplicate same-color MeshBasics collapse: LOD0 `wood` / `woodDark` / `handleMat` share one instance at `L3_LOD0_WOOD_COLOR` (`0x633318`); LOD1 `wood` / `woodDark` / `handleMat` share one instance. **Measured** procedural draws **14 → 6** (LOD0) and **8 → 4** (LOD1); LOD2 stays **2**. Tris unchanged (**240 / 96 / 24** — concatenate, no weld). `drawCallsEstimate` **15 → 7** (LOD0 6 + fastener 1). Named meshes `lidMesh` / `latchMesh` / `fastenerMesh` kept. Packaged ingest from v0.36 left intact (visibility-only, fail-soft when unnamed, no material rewrite). Unique canvases stay **0**. Session present-path chain (v0.15–v0.22) and v0.8 allocation scrub kept.
