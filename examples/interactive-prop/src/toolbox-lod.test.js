@@ -37,18 +37,25 @@ function installCanvasStub() {
 installCanvasStub();
 
 const {
+  activityState,
+  applyActivityVisual,
   collectCrateVisualMaterials,
   collectLodVisualMaterials,
   compactIndexToUint16,
   createToolbox,
+  freezeStaticColorOnlyWorldMatrices,
   getToolboxLodStats,
   isColorOnlyUnlitBasic,
+  isUnderAnimatedToolboxPivot,
   packColorOnlyGeometry,
   quantizePositionToFloat16,
   releaseCpuArraysOnGpuUpload,
+  resetToolbox,
   setToolboxLod,
   shareColorOnlyUnlitBasic,
   stripUnusedColorOnlyAttributes,
+  tryDriveFastener,
+  tryUse,
   weldCoincidentVertices,
 } = await import("./toolbox.js");
 
@@ -541,4 +548,151 @@ test("procedural LOD/fastener release CPU arrays after simulated upload; collide
     assert.ok(c.geometry.getAttribute("position").array, "collider CPU arrays survive default onUpload");
     assert.ok(c.geometry.index.array, "collider index stays on CPU");
   }
+});
+
+function countVisualMatrixAutoUpdate(crate) {
+  let frozen = 0;
+  let live = 0;
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.matrixAutoUpdate) live += 1;
+    else frozen += 1;
+  }
+  return { frozen, live, total: frozen + live };
+}
+
+test("v0.45 freezes static color-only MeshBasic body leaves; lid/latch/tool/fastener stay live", () => {
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 6 + 4 + 2 + 1, "LOD0 6 + LOD1 4 + LOD2 2 + fastener 1");
+  const counts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(counts.total, 13);
+  assert.equal(counts.frozen, 3, "body LOD0/1/2 color-only MeshBasic leaves freeze");
+  assert.equal(counts.live, 10, "lid/latch/tool LOD meshes + fastener stay live");
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyL1 = crate.userData.lod.groups[1][0];
+  const bodyL2 = crate.userData.lod.groups[2][0];
+  const lidL0 = crate.userData.lod.groups[0][1];
+  const latchL0 = crate.userData.lod.groups[0][2];
+  const toolL0 = crate.userData.lod.groups[0][3];
+  const visualMeshes = (g) => g.children.filter((o) => o.isMesh && !o.userData.collider);
+
+  const bodyMeshes = [...visualMeshes(bodyL0), ...visualMeshes(bodyL1), ...visualMeshes(bodyL2)];
+  assert.equal(bodyMeshes.length, 3);
+  for (const mesh of bodyMeshes) {
+    assert.equal(mesh.matrixAutoUpdate, false, "static body MeshBasic is frozen");
+    assert.equal(isColorOnlyUnlitBasic(mesh.material), true);
+    assert.equal(isUnderAnimatedToolboxPivot(mesh, crate), false);
+  }
+
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  const fastenerMesh = crate.getObjectByName("fastenerMesh");
+  assert.equal(lidMesh.matrixAutoUpdate, true, "lidMesh under lid pivot stays live");
+  assert.equal(latchMesh.matrixAutoUpdate, true, "latchMesh under latch pivot stays live");
+  assert.equal(fastenerMesh.matrixAutoUpdate, true, "fastener animates via applyFastenerVisual");
+  assert.equal(crate.userData.parts.lidPivot.matrixAutoUpdate, true);
+  assert.equal(crate.userData.parts.latchPivot.matrixAutoUpdate, true);
+  assert.equal(crate.userData.parts.tool.matrixAutoUpdate, true);
+  assert.equal(isUnderAnimatedToolboxPivot(lidMesh, crate), true);
+  assert.equal(isUnderAnimatedToolboxPivot(latchMesh, crate), true);
+  assert.equal(isUnderAnimatedToolboxPivot(visualMeshes(toolL0)[0], crate), true);
+
+  for (const mesh of visualMeshes(lidL0)) assert.equal(mesh.matrixAutoUpdate, true);
+  for (const mesh of visualMeshes(latchL0)) assert.equal(mesh.matrixAutoUpdate, true);
+  for (const mesh of visualMeshes(toolL0)) assert.equal(mesh.matrixAutoUpdate, true);
+
+  for (const c of crate.userData.colliders) {
+    assert.equal(c.matrixAutoUpdate, true, "colliders stay live for pick AABB");
+  }
+
+  // Frozen local matrix still follows crate grab via parent world compose.
+  const bodyHero = visualMeshes(bodyL0)[0];
+  crate.position.set(1.5, 0, 0);
+  crate.updateMatrixWorld(true);
+  const world = new THREE.Vector3();
+  bodyHero.getWorldPosition(world);
+  assert.ok(world.x > 1, "frozen body leaf world matrix follows root motion");
+  crate.position.set(0, 0, 0);
+  crate.updateMatrixWorld(true);
+});
+
+test("L4/L5 activity smoke still passes after static matrix freeze", () => {
+  const crate = createToolbox();
+  const { lidPivot, latchPivot, tool } = crate.userData.parts;
+  const fastener = crate.userData.fastener.mesh;
+  assert.equal(activityState(crate), "closed");
+  assert.equal(lidPivot.matrixAutoUpdate, true);
+  assert.equal(latchPivot.matrixAutoUpdate, true);
+  assert.equal(tool.matrixAutoUpdate, true);
+  assert.equal(fastener.matrixAutoUpdate, true);
+
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1, "latch hinge still rotates after freeze");
+  assert.equal(lidPivot.rotation.x, 0);
+
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2, "lid hinge still rotates after freeze");
+  crate.updateMatrixWorld(true);
+  const lidWorld = new THREE.Vector3();
+  crate.getObjectByName("lidMesh").getWorldPosition(lidWorld);
+  assert.ok(lidWorld.y > 0.1, "live lidMesh world position follows pivot");
+
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6, "fastener rotation still applies");
+  assert.ok(fastener.position.z < 0.131, "fastener seats incrementally");
+
+  const cancel = tryUse(crate, "collider_lid");
+  assert.equal(cancel.ok, true);
+  assert.equal(cancel.to, "closed");
+
+  resetToolbox(crate);
+  assert.equal(activityState(crate), "closed");
+  applyActivityVisual(crate, 1);
+  assert.equal(crate.userData.fastener.turns, 0);
+  assert.equal(fastener.rotation.z, 0);
+});
+
+test("freezeStaticColorOnlyWorldMatrices skips mapped MeshBasic and colliders", () => {
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mapped = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } })
+  );
+  const colorOnly = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  const collider = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  body.add(mapped, colorOnly);
+  root.add(body, collider);
+  root.userData.parts = {};
+  freezeStaticColorOnlyWorldMatrices(root);
+  assert.equal(colorOnly.matrixAutoUpdate, false);
+  assert.equal(mapped.matrixAutoUpdate, true, "mapped MeshBasic stays live");
+  assert.equal(collider.matrixAutoUpdate, true, "collider stays live");
 });

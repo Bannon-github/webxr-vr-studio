@@ -265,7 +265,8 @@ export function releaseCpuArraysOnGpuUpload(geometry, material) {
  * Strip unused color-only attrs, compact a wasteful 32-bit index, quantize
  * Float32 `position` to Float16, then hook GPU-upload CPU-array release
  * on color-only unlit MeshBasic. Shared by procedural create (v0.37–v0.44)
- * and packaged ingest.
+ * and packaged ingest. v0.45 matrix freeze is a post-attach Object3D
+ * step, not a geometry pack step.
  */
 export function packColorOnlyGeometry(geometry, material) {
   stripUnusedColorOnlyAttributes(geometry, material);
@@ -273,6 +274,70 @@ export function packColorOnlyGeometry(geometry, material) {
   quantizePositionToFloat16(geometry, material);
   releaseCpuArraysOnGpuUpload(geometry, material);
   return geometry;
+}
+
+/**
+ * Scene names for L4/L5 animated pivots. Procedural create uses
+ * `lid` / `latch` / `tool` (`lidPivot` / `latchPivot` are the JS
+ * bindings). Packaged ingest also accepts `lidPivot` / `latchPivot`.
+ */
+export const ANIMATED_TOOLBOX_PIVOT_NAMES = Object.freeze(["lid", "lidPivot", "latch", "latchPivot", "tool"]);
+
+const ANIMATED_PIVOT_NAME_SET = new Set(ANIMATED_TOOLBOX_PIVOT_NAMES);
+const FASTENER_MESH_NAMES = new Set(["fastener", "fastenerMesh"]);
+
+function isFastenerVisual(object, entity) {
+  if (!object) return false;
+  if (entity?.userData?.fastener?.mesh === object) return true;
+  return FASTENER_MESH_NAMES.has(object.name);
+}
+
+/** True when `object` is an animated pivot or a descendant of one. */
+export function isUnderAnimatedToolboxPivot(object, entity) {
+  const parts = entity?.userData?.parts;
+  const pivots = [];
+  if (parts?.lidPivot) pivots.push(parts.lidPivot);
+  if (parts?.latchPivot) pivots.push(parts.latchPivot);
+  if (parts?.tool) pivots.push(parts.tool);
+  let node = object;
+  while (node) {
+    if (pivots.includes(node)) return true;
+    if (ANIMATED_PIVOT_NAME_SET.has(node.name)) return true;
+    node = node.parent;
+  }
+  return false;
+}
+
+/**
+ * After the entity is fully built and LODs attached, bake world
+ * matrices once then freeze local-matrix auto-update on **static**
+ * packed color-only unlit MeshBasic visual leaves.
+ *
+ * **Verified r170 API:** `Object3D.matrixAutoUpdate` (default true via
+ * `DEFAULT_MATRIX_AUTO_UPDATE`); `updateMatrixWorld(force)` still
+ * composes `matrixWorld = parent.matrixWorld * matrix` when force /
+ * needsUpdate even if local auto-update is off. Do **not** set
+ * `matrixWorldAutoUpdate` false — crate grab still needs world
+ * matrices to follow the root.
+ *
+ * Skip colliders (pick AABB uses `updateWorldMatrix` + `userData.size`).
+ * Skip meshes under lid/latch/tool pivots (L4 hinge / L5 extract).
+ * Skip fastener: `applyFastenerVisual` writes `rotation.z` / `position.z`
+ * on the mesh itself — freeze would stall L5 drive. Mapped / lit
+ * materials stay live. Load-time only — not per-frame.
+ */
+export function freezeStaticColorOnlyWorldMatrices(entity) {
+  if (!entity) return entity;
+  entity.updateMatrixWorld(true);
+  entity.traverse((o) => {
+    if (!o.isMesh || o.userData.collider) return;
+    if (o.name && o.name.startsWith("collider_")) return;
+    if (!isColorOnlyUnlitBasic(o.material)) return;
+    if (isFastenerVisual(o, entity)) return;
+    if (isUnderAnimatedToolboxPivot(o, entity)) return;
+    o.matrixAutoUpdate = false;
+  });
+  return entity;
 }
 
 /** Position-hash bin size in meters (Three.js `mergeVertices` default). */
@@ -571,6 +636,8 @@ export function createToolbox() {
   // Stays outside mergeSameMaterialMeshes (skip set); still gets the
   // color-only unused-attr strip + Uint16 compact (v0.41) + Float16
   // position quantize (v0.44) + post-upload CPU array release (v0.43).
+  // applyFastenerVisual mutates this mesh's rotation.z / position.z,
+  // so v0.45 must not freeze its matrixAutoUpdate.
   const fastener = boxMesh(0.028, 0.028, 0.02, brass, -0.12, 0.07, 0.131);
   fastener.name = "fastenerMesh";
   packColorOnlyGeometry(fastener.geometry, fastener.material);
@@ -623,7 +690,7 @@ export function createToolbox() {
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
     uniqueMaterials: colorOnlyByHex.size,
-    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
+    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -646,6 +713,8 @@ export function createToolbox() {
   // release on those color-only MeshBasic geos (not colliders).
   // v0.44: after Uint16 compact and before that upload hook, quantize
   // Float32 position to Float16 on those same color-only geos.
+  // v0.45: after LODs attach, freeze matrixAutoUpdate on static
+  // color-only MeshBasic body leaves (not lid/latch/tool/fastener).
   // Pivots stay separate. Fastener is packed above, not merged here.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);
@@ -663,6 +732,7 @@ export function createToolbox() {
     1: [bodyL1, lidL1, latchL1, toolL1],
     2: [bodyL2, lidL2, latchL2, toolL2],
   });
+  freezeStaticColorOnlyWorldMatrices(root);
 
   return root;
 }
