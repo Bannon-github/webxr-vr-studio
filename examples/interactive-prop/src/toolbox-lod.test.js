@@ -43,6 +43,8 @@ const {
   createToolbox,
   getToolboxLodStats,
   isColorOnlyUnlitBasic,
+  packColorOnlyGeometry,
+  releaseCpuArraysOnGpuUpload,
   setToolboxLod,
   shareColorOnlyUnlitBasic,
   stripUnusedColorOnlyAttributes,
@@ -360,4 +362,133 @@ test("compactIndexToUint16 copies a forced Uint32 index when verts fit", () => {
   compactIndexToUint16(already);
   assert.equal(already.index.uuid, beforeUuid, "already-Uint16 is a no-op");
   assert.equal(already.index.array.BYTES_PER_ELEMENT, 2);
+});
+
+function simulateGpuUpload(geometry) {
+  for (const name of Object.keys(geometry.attributes)) {
+    geometry.getAttribute(name)?.onUploadCallback();
+  }
+  geometry.index?.onUploadCallback();
+}
+
+function cpuAttrBytes(geo) {
+  let bytes = 0;
+  for (const name of Object.keys(geo.attributes)) {
+    const arr = geo.getAttribute(name)?.array;
+    if (arr) bytes += arr.byteLength;
+  }
+  if (geo.index?.array) bytes += geo.index.array.byteLength;
+  return bytes;
+}
+
+function crateVisualMeshes(crate) {
+  const meshes = [];
+  for (const level of [0, 1, 2]) {
+    for (const g of crate.userData.lod.groups[level]) {
+      g.traverse((o) => {
+        if (o.isMesh && !o.userData.collider) meshes.push(o);
+      });
+    }
+  }
+  const fastener = crate.userData.fastener?.mesh;
+  if (fastener?.isMesh && !fastener.userData.collider) meshes.push(fastener);
+  return meshes;
+}
+
+test("releaseCpuArraysOnGpuUpload nulls CPU arrays only on color-only MeshBasic after simulated upload", () => {
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const std = new THREE.MeshStandardMaterial();
+
+  const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  stripUnusedColorOnlyAttributes(geo, colorOnly);
+  compactIndexToUint16(geo);
+  const beforeBytes = cpuAttrBytes(geo);
+  assert.equal(beforeBytes, 360);
+  assert.ok(geo.boundingSphere === null, "BoxGeometry leaves boundingSphere uncomputed");
+  releaseCpuArraysOnGpuUpload(geo, colorOnly);
+  assert.ok(geo.boundingSphere, "bounds computed before the upload hook so frustum culls need no .array");
+  assert.ok(geo.boundingBox);
+  const pos = geo.getAttribute("position");
+  assert.equal(pos.usage, THREE.StaticDrawUsage);
+  assert.equal(geo.index.usage, THREE.StaticDrawUsage);
+  assert.ok(pos.array, "CPU array stays until onUploadCallback");
+  assert.equal(cpuAttrBytes(geo), beforeBytes, "pre-upload attrBytes unchanged");
+  simulateGpuUpload(geo);
+  assert.equal(pos.array, null, "position CPU array released after upload");
+  assert.equal(geo.index.array, null, "index CPU array released after upload");
+  assert.equal(cpuAttrBytes(geo), 0, "post-upload CPU attrBytes are 0");
+  assert.equal(pos.count, 24, "BufferAttribute.count stays after array null");
+  assert.equal(geo.index.count, 36, "index count stays after array null");
+
+  const keptMapped = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  releaseCpuArraysOnGpuUpload(keptMapped, mapped);
+  simulateGpuUpload(keptMapped);
+  assert.ok(keptMapped.getAttribute("position").array, "mapped MeshBasic keeps CPU arrays");
+  const keptStd = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  releaseCpuArraysOnGpuUpload(keptStd, std);
+  simulateGpuUpload(keptStd);
+  assert.ok(keptStd.getAttribute("position").array, "MeshStandard keeps CPU arrays");
+});
+
+test("packColorOnlyGeometry is strip + compact + upload-release (shared procedural/packaged path)", () => {
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const src = geo.index.array;
+  const forced = new Uint32Array(src.length);
+  forced.set(src);
+  geo.setIndex(new THREE.BufferAttribute(forced, 1));
+  packColorOnlyGeometry(geo, colorOnly);
+  assert.equal(geo.getAttribute("uv"), undefined);
+  assert.ok(geo.index.array instanceof Uint16Array);
+  assert.equal(cpuAttrBytes(geo), 360, "pre-upload envelope after strip+compact");
+  simulateGpuUpload(geo);
+  assert.equal(geo.getAttribute("position").array, null);
+  assert.equal(geo.index.array, null);
+});
+
+test("procedural LOD/fastener release CPU arrays after simulated upload; colliders keep them; pre-upload envelope stays v0.42", () => {
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  // Measurement rule: userData.lod.stats.attrBytes is the pre-upload CPU
+  // envelope (arrays still present). After GPU upload, CPU .array is
+  // nulled on color-only MeshBasic visuals so live cpuAttrBytes → 0;
+  // draws / tris / verts stay (BufferAttribute.count is independent).
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 4200 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1776 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 720 });
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 6 + 4 + 2 + 1, "LOD0 6 + LOD1 4 + LOD2 2 + fastener 1");
+  let preUploadBytes = 0;
+  for (const mesh of visuals) {
+    const pos = mesh.geometry.getAttribute("position");
+    assert.ok(pos.array, "visual CPU array present before upload");
+    assert.equal(pos.usage, THREE.StaticDrawUsage);
+    assert.equal(mesh.geometry.index.usage, THREE.StaticDrawUsage);
+    preUploadBytes += cpuAttrBytes(mesh.geometry);
+  }
+  assert.equal(preUploadBytes, 4200 + 1776 + 720 + 360, "LOD + fastener pre-upload CPU attrBytes");
+
+  const colliders = crate.userData.colliders;
+  assert.equal(colliders.length, 5);
+  for (const c of colliders) {
+    assert.ok(c.geometry.getAttribute("position").array, "collider CPU arrays stay at create");
+  }
+
+  for (const mesh of visuals) simulateGpuUpload(mesh.geometry);
+  for (const mesh of visuals) {
+    assert.equal(mesh.geometry.getAttribute("position").array, null, "visual position released");
+    assert.equal(mesh.geometry.index.array, null, "visual index released");
+    assert.equal(cpuAttrBytes(mesh.geometry), 0);
+    assert.ok(mesh.geometry.getAttribute("position").count > 0);
+    assert.ok(mesh.geometry.index.count > 0);
+    assert.ok(mesh.geometry.boundingSphere, "packed visual has bounds without CPU arrays");
+  }
+  assert.deepEqual(getToolboxLodStats(crate), stats, "lod.stats snapshot is the pre-upload envelope");
+  for (const c of colliders) {
+    simulateGpuUpload(c.geometry);
+    assert.ok(c.geometry.getAttribute("position").array, "collider CPU arrays survive default onUpload");
+    assert.ok(c.geometry.index.array, "collider index stays on CPU");
+  }
 });
