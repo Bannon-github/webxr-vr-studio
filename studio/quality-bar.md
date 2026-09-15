@@ -59,6 +59,7 @@ Applies when the user hovers, grabs, or drives a multi-step activity. Full path:
 - [ ] After same-material concat, weld coincident vertices (position hash 1e-4 m; keep UV/normal channels). Prefer DCC pre-weld; runtime weld is a safety net (`crate-toolbox` v0.39; unique verts 440 → 230 / 192 → 100; tris and draws unchanged; unit/mock 72 → 8)
 - [ ] After weld, strip unused `uv` / `normal` (and other unused channels) from color-only unlit MeshBasic (no map / no lighting). Prefer omitting them in DCC; runtime strip is a safety net (`crate-toolbox` v0.40; attrBytes 8800 → 4200 / 3776 → 1776 / 1680 → 720; draws / tris / unique verts unchanged)
 - [ ] After unused-attr strip, compact a lingering Uint32 index to Uint16 when `position.count` ≤ 65535 (concat always builds Uint32; weld only rewrites Uint16 when verts drop). Fastener stays outside LOD merge but gets the same strip + compact (`crate-toolbox` v0.41; LOD attrBytes stay 4200 / 1776 / 720; fastener 840 → 360)
+- [ ] Procedural color-only unlit MeshBasic instances are shared across LOD levels when the midtone hex matches (one wood for LOD0/1/2, one brass for LOD0/1 + fastener, one steel). Packaged ingest does not hex-dedupe (`crate-toolbox` v0.42; unique MeshBasic 6 → 3; draws / tris / verts / attrBytes unchanged vs v0.41)
 - [ ] Scale 1 unit = 1 m; seated reach or ray-use for every required step
 - [ ] Throw / physics never applies impulse to the camera rig
 - [ ] State change is visual + audio and/or haptic; not audio-only
