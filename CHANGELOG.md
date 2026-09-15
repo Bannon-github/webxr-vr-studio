@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.48.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.46.0** L3 packaging/perf UPGRADE: after the v0.45 static matrix freeze, disable `Mesh.raycast` on packed color-only unlit MeshBasic visuals (body + lid/latch/tool + fastener; named no-op). Colliders keep `Mesh.prototype.raycast`. Measured 13 raycast-off / 5 collider default. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, frozen 3 / live 10 unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.47.0] — 2026-09-15
 
 ### Changed
