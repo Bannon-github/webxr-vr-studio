@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.45.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.43.0** L3 packaging/perf UPGRADE: after GPU upload, release CPU typed arrays on color-only unlit MeshBasic LOD/fastener geometries (`StaticDrawUsage` + Three r170 `onUpload`). Pre-upload draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 4200 / 1776 / 720 unchanged; post-upload CPU attrBytes → 0. Colliders keep arrays. Headset ms / FFR still unmeasured.
+
 ## [0.44.0] — 2026-09-15
 
 ### Changed
