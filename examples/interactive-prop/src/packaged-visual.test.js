@@ -420,3 +420,31 @@ test("merge compact converts concat Uint32 when weld early-returns", () => {
   assert.equal(merged.geometry.index.array.byteLength, 24, "12 indices × 2 B");
   assert.equal(merged.geometry.getAttribute("uv"), undefined);
 });
+
+function simulateGpuUpload(geometry) {
+  for (const name of Object.keys(geometry.attributes)) {
+    geometry.getAttribute(name)?.onUploadCallback();
+  }
+  geometry.index?.onUploadCallback();
+}
+
+test("packaged ingest hooks onUpload CPU-array release on color-only MeshBasic, not colliders", () => {
+  const { root, fastener, groups } = makePackagedFixture();
+  ingestPackagedRoot(root, sidecar);
+  const bodyMerged = visualMeshes(groups[0][0])[0];
+  const lidOnly = visualMeshes(groups[0][1])[0];
+  assert.ok(bodyMerged.geometry.getAttribute("position").array, "pre-upload arrays present for lod.stats");
+  assert.equal(bodyMerged.geometry.getAttribute("position").usage, THREE.StaticDrawUsage);
+  assert.equal(root.userData.lod.stats[0].attrBytes, 1440, "default fixture: 4 packed boxes × 360 B pre-upload");
+  simulateGpuUpload(bodyMerged.geometry);
+  simulateGpuUpload(lidOnly.geometry);
+  simulateGpuUpload(fastener.geometry);
+  assert.equal(bodyMerged.geometry.getAttribute("position").array, null);
+  assert.equal(bodyMerged.geometry.index.array, null);
+  assert.equal(lidOnly.geometry.getAttribute("position").array, null);
+  assert.equal(fastener.geometry.getAttribute("position").array, null);
+  assert.equal(fastener.geometry.index.array, null);
+  const colliderGrab = root.getObjectByName("collider_grab");
+  simulateGpuUpload(colliderGrab.geometry);
+  assert.ok(colliderGrab.geometry.getAttribute("position").array, "collider CPU arrays are not released");
+});

@@ -38,13 +38,18 @@
  * hex-dedupe materials (same-hex MeshBasics can still differ in
  * side / opacity / transparent; multi-material slots must stay
  * intact). Author shared glTF material slots in DCC instead.
+ *
+ * v0.43: after that pack, color-only unlit MeshBasic geometries
+ * (LOD meshes via `mergeSameMaterialMeshes` / `packColorOnlyGeometry`,
+ * plus an authored root fastener) set `StaticDrawUsage` and
+ * `onUpload` so the first GPU upload releases CPU `.array`. Collider
+ * hulls are not packed. Mapped / lit materials are not released.
  */
 
 import {
   attachToolboxLod,
-  compactIndexToUint16,
   mergeSameMaterialMeshes,
-  stripUnusedColorOnlyAttributes,
+  packColorOnlyGeometry,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -166,9 +171,8 @@ export function ingestPackagedRoot(root, sidecar) {
   });
 
   const fastener = findNamed(root, "fastenerMesh") || findNamed(root, "fastener");
-  if (fastener?.isMesh && fastener.geometry) {
-    stripUnusedColorOnlyAttributes(fastener.geometry, fastener.material);
-    compactIndexToUint16(fastener.geometry);
+  if (fastener?.isMesh && fastener.geometry && !fastener.userData?.collider) {
+    packColorOnlyGeometry(fastener.geometry, fastener.material);
   }
   root.userData.parts = { body, lidPivot, latchPivot, tool, fastener };
   root.userData.highlightables = {
