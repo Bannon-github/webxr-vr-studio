@@ -154,6 +154,35 @@ export function stripUnusedColorOnlyAttributes(geometry, material) {
   return geometry;
 }
 
+/**
+ * Copy a >16-bit index into Uint16 when `position.count` fits.
+ * No-op when there is no index, verts exceed 65535, or the index is
+ * already ≤2 bytes/element. Does not change triangle or vertex count.
+ * Load-time only — a safety net when concat leaves Uint32 and weld
+ * early-returns (`next === vertexCount`), or a packaged mesh arrives
+ * with a 32-bit index.
+ */
+export function compactIndexToUint16(geometry) {
+  if (!geometry) return geometry;
+  const index = geometry.getIndex();
+  if (!index?.array) return geometry;
+  const pos = geometry.getAttribute("position");
+  if (!pos || pos.count > 65535) return geometry;
+  const src = index.array;
+  if (!(src.BYTES_PER_ELEMENT > 2)) return geometry;
+  const compact = new Uint16Array(src.length);
+  compact.set(src);
+  geometry.setIndex(new THREE.BufferAttribute(compact, 1));
+  return geometry;
+}
+
+/** Strip unused color-only attrs, then compact a wasteful 32-bit index. */
+function packColorOnlyGeometry(geometry, material) {
+  stripUnusedColorOnlyAttributes(geometry, material);
+  compactIndexToUint16(geometry);
+  return geometry;
+}
+
 /** Position-hash bin size in meters (Three.js `mergeVertices` default). */
 export const MERGE_WELD_TOLERANCE = 1e-4;
 
@@ -245,14 +274,16 @@ function skipLodMergeChild(child) {
  * once per group. Bakes each mesh's local matrix into the merged
  * geometry, then welds coincident vertices (v0.39), then strips
  * unused `uv` / `normal` (and other unused channels) when the
- * material is color-only unlit MeshBasic (v0.40). A named source
+ * material is color-only unlit MeshBasic (v0.40), then compact a
+ * 32-bit index to Uint16 when verts fit (v0.41). A named source
  * keeps its name on the survivor. Colliders and the fastener
  * (`fastener` / `fastenerMesh`) are skipped. Direct mesh children
  * only — nested Groups (pivots) stay. Load-time only — not per-frame.
  * Shared by procedural create (v0.37) and packaged ingest (v0.38);
  * weld is the v0.39 upgrade on the same helper; unused-attr strip
- * is the v0.40 upgrade. Single-mesh groups still skip concat/weld
- * but still strip unused attrs on color-only MeshBasic.
+ * is the v0.40 upgrade; Uint16 index compact is the v0.41 upgrade.
+ * Single-mesh groups still skip concat/weld but still strip unused
+ * attrs and compact the index on color-only MeshBasic.
  */
 export function mergeSameMaterialMeshes(lodGroup) {
   if (!lodGroup) return lodGroup;
@@ -271,7 +302,7 @@ export function mergeSameMaterialMeshes(lodGroup) {
   for (const [mat, meshes] of buckets) {
     if (meshes.length < 2) {
       for (const mesh of meshes) {
-        stripUnusedColorOnlyAttributes(mesh.geometry, mat);
+        packColorOnlyGeometry(mesh.geometry, mat);
       }
       continue;
     }
@@ -287,7 +318,7 @@ export function mergeSameMaterialMeshes(lodGroup) {
     if (!concatenated) continue;
     const merged = weldCoincidentVertices(concatenated);
     if (merged !== concatenated) concatenated.dispose();
-    stripUnusedColorOnlyAttributes(merged, mat);
+    packColorOnlyGeometry(merged, mat);
     const survivor = new THREE.Mesh(merged, mat);
     survivor.castShadow = false;
     survivor.receiveShadow = false;
@@ -428,8 +459,11 @@ export function createToolbox() {
   root.add(tool);
 
   // L5 work target: front fastener. Extra 12 tris / 1 draw, not an LOD mesh.
+  // Stays outside mergeSameMaterialMeshes (skip set); still gets the
+  // color-only unused-attr strip + Uint16 compact (v0.41).
   const fastener = boxMesh(0.028, 0.028, 0.02, brass, -0.12, 0.07, 0.131);
   fastener.name = "fastenerMesh";
+  packColorOnlyGeometry(fastener.geometry, fastener.material);
   root.add(fastener);
 
   const colliderGrab = makeCollider("collider_grab", 0.38, 0.15, 0.24, 0, 0.075, 0);
@@ -478,7 +512,7 @@ export function createToolbox() {
     lod0Color: { wood: L3_LOD0_WOOD_COLOR, brass: L3_LOD0_BRASS_COLOR, steel: L3_LOD0_STEEL_COLOR },
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
-    note: "procedural color-only stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones; woodDark/handleMat alias the wood instance); same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40); LOD1 color-only unlit MeshBasic (woodDark/handleMat alias wood; body boxes merged); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
+    note: "procedural color-only stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones; woodDark/handleMat alias the wood instance); same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41); fastener (not an LOD mesh) gets the same unused-attr strip + compact; LOD1 color-only unlit MeshBasic (woodDark/handleMat alias wood; body boxes merged); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -494,7 +528,8 @@ export function createToolbox() {
   // unused material slots do not multiply draws. v0.39: weld coincident
   // vertices after concat. v0.40: strip unused uv/normal on color-only
   // MeshBasic after weld (and on unmerged singles in the same helper).
-  // Pivots stay separate.
+  // v0.41: compact a lingering Uint32 index to Uint16 when verts fit.
+  // Pivots stay separate. Fastener is packed above, not merged here.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);
   mergeSameMaterialMeshes(latchL0);

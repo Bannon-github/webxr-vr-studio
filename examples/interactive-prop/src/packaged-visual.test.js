@@ -278,6 +278,9 @@ test("packaged ingest merges same-material MeshBasic children inside each lod* g
   assert.equal(fastener.parent, root, "fastener stays on the packaged root");
   assert.equal(fastener.material, fastenerMat);
   assert.ok(fastener.geometry, "fastener geometry is not disposed");
+  assert.equal(fastener.geometry.getAttribute("uv"), undefined, "root fastener MeshBasic strips unused uv (v0.41)");
+  assert.equal(fastener.geometry.getAttribute("normal"), undefined, "root fastener MeshBasic strips unused normal (v0.41)");
+  assert.equal(fastener.geometry.index.array.BYTES_PER_ELEMENT, 2, "root fastener index is Uint16");
   assert.equal(colliderGrab.visible, false);
   assert.equal(colliderGrab.parent, root);
   assert.ok(body.children.includes(bodyLod0));
@@ -296,6 +299,8 @@ test("packaged ingest merges same-material MeshBasic children inside each lod* g
   assert.ok(stats[0].attrBytes < 2992, "measurable attrByte drop vs weld-with-channels");
   assert.ok(stats[1].draws > 0);
   assert.equal(lidOnly.geometry.getAttribute("uv"), undefined, "unmerged color-only packaged mesh also strips unused uv");
+  assert.equal(lidOnly.geometry.index.array.BYTES_PER_ELEMENT, 2, "unmerged packaged lid index stays Uint16");
+  assert.equal(afterBody[0].geometry.index.array.BYTES_PER_ELEMENT, 2, "welded packaged body index is Uint16");
 });
 
 test("packaged merge skips colliders and fastener even when they share a material", () => {
@@ -320,6 +325,7 @@ test("packaged merge skips colliders and fastener even when they share a materia
   assert.equal(fastener.parent, root);
   assert.equal(fastener.material, shared);
   assert.ok(fastener.isMesh);
+  assert.equal(fastener.geometry.getAttribute("uv"), undefined, "skipped fastener still gets unused-attr strip");
 });
 
 test("single-mesh packaged lod groups are no-ops", () => {
@@ -352,6 +358,7 @@ test("no lod groups skips merge and still fails soft", () => {
   assert.equal(extraA.geometry.uuid === extraB.geometry.uuid, false);
   assert.equal(visualMeshes(body).length, before, "without lod* groups, same-material meshes stay unmerged");
   assert.equal(fastener.visible, true);
+  assert.equal(fastener.geometry.getAttribute("uv"), undefined, "authored fastener still strips without lod groups");
 });
 
 test("mergeSameMaterialMeshes is the shared helper (direct call matches ingest)", () => {
@@ -395,4 +402,21 @@ test("weldCoincidentVertices hashes position and keeps other attribute channels"
   assert.ok(welded.getAttribute("normal"));
   assert.ok(welded.getAttribute("uv"));
   assert.equal(geo.getAttribute("position").count, 24, "source geometry is not rewritten in place when verts drop");
+});
+
+test("merge compact converts concat Uint32 when weld early-returns", () => {
+  const g = new THREE.Group();
+  g.name = "lod0";
+  const mat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const a = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+  const b = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), mat);
+  b.position.set(10, 0, 0);
+  g.add(a, b);
+  mergeSameMaterialMeshes(g);
+  const merged = visualMeshes(g)[0];
+  assert.equal(merged.geometry.getAttribute("position").count, 8, "two offset planes stay 8 unique verts (weld no-op)");
+  assert.equal(merged.geometry.index.count / 3, 4, "two planes stay 4 tris");
+  assert.ok(merged.geometry.index.array instanceof Uint16Array, "concat Uint32 compacted to Uint16");
+  assert.equal(merged.geometry.index.array.byteLength, 24, "12 indices × 2 B");
+  assert.equal(merged.geometry.getAttribute("uv"), undefined);
 });
