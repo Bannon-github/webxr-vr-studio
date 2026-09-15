@@ -58,10 +58,16 @@
  * not under `lid` / `latch` / `tool` pivots. Fastener stays live
  * (`applyFastenerVisual` writes rotation/position). Colliders stay
  * live. Does not change draws / tris / verts / attrBytes.
+ *
+ * v0.46: after that freeze, `disableColorOnlyVisualRaycast` assigns
+ * a no-op `mesh.raycast` on packed color-only unlit MeshBasic visual
+ * meshes (LOD0/1/2 body + lid/latch/tool + fastener). Colliders keep
+ * default `Mesh.prototype.raycast`. Pick path stays collider AABB.
  */
 
 import {
   attachToolboxLod,
+  disableColorOnlyVisualRaycast,
   freezeStaticColorOnlyWorldMatrices,
   mergeSameMaterialMeshes,
   packColorOnlyGeometry,
@@ -223,6 +229,7 @@ export function ingestPackagedRoot(root, sidecar) {
     );
   }
   freezeStaticColorOnlyWorldMatrices(root);
+  disableColorOnlyVisualRaycast(root);
   return root;
 }
 
