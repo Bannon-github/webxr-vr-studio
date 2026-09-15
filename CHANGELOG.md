@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.47.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.45.0** L3 packaging/perf UPGRADE: after one `updateMatrixWorld(true)`, freeze `matrixAutoUpdate` on static packed color-only MeshBasic body LOD leaves. Measured 3 frozen / 10 live (lid/latch/tool/fastener stay updating). Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216 unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.46.0] — 2026-09-15
 
 ### Changed
