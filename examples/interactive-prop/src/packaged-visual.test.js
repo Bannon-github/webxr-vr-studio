@@ -435,7 +435,7 @@ test("packaged ingest hooks onUpload CPU-array release on color-only MeshBasic, 
   const lidOnly = visualMeshes(groups[0][1])[0];
   assert.ok(bodyMerged.geometry.getAttribute("position").array, "pre-upload arrays present for lod.stats");
   assert.equal(bodyMerged.geometry.getAttribute("position").usage, THREE.StaticDrawUsage);
-  assert.equal(root.userData.lod.stats[0].attrBytes, 1392, "pre-upload packaged mock envelope");
+  assert.equal(root.userData.lod.stats[0].attrBytes, 1440, "default fixture: 4 packed boxes × 360 B pre-upload");
   simulateGpuUpload(bodyMerged.geometry);
   simulateGpuUpload(lidOnly.geometry);
   simulateGpuUpload(fastener.geometry);
