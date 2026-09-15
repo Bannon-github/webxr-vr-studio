@@ -44,6 +44,7 @@ const {
   getToolboxLodStats,
   isColorOnlyUnlitBasic,
   packColorOnlyGeometry,
+  quantizePositionToFloat16,
   releaseCpuArraysOnGpuUpload,
   setToolboxLod,
   shareColorOnlyUnlitBasic,
@@ -251,14 +252,15 @@ test("LOD draws stay merged; unused uv/normal strip cuts attrBytes (tris/verts s
   // (Uint32 index on concatenated meshes). v0.39 welds coincident
   // corners: 230 / 100 / 48. v0.40 strips unused uv/normal on
   // color-only MeshBasic (position-only + index). v0.41 compact is a
-  // no-op on these LODs — weld already wrote Uint16 — so attrBytes
-  // stay at the v0.40 envelope. Tris stay index-length/3.
-  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 4200 });
-  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1776 });
-  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 720 });
-  assert.ok(stats[0].attrBytes < 8800, "LOD0 attrBytes drop vs v0.39 weld-with-uv-normal");
-  assert.ok(stats[1].attrBytes < 3776, "LOD1 attrBytes drop vs v0.39 weld-with-uv-normal");
-  assert.ok(stats[2].attrBytes < 1680, "LOD2 attrBytes drop vs BoxGeometry uv+normal");
+  // no-op on these LODs — weld already wrote Uint16. v0.44 quantizes
+  // Float32 position to Float16 (230×6 + 720×2 = 2820, etc.). Tris
+  // stay index-length/3.
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.ok(stats[0].attrBytes < 4200, "LOD0 attrBytes drop vs v0.43 Float32 position");
+  assert.ok(stats[1].attrBytes < 1776, "LOD1 attrBytes drop vs v0.43 Float32 position");
+  assert.ok(stats[2].attrBytes < 720, "LOD2 attrBytes drop vs v0.43 Float32 position");
   assert.equal(stats[0].verts, 230, "LOD0 unique verts stay at the v0.39 weld count");
   assert.equal(stats[1].verts, 100, "LOD1 unique verts stay at the v0.39 weld count");
   assert.equal(stats[2].verts, 48, "LOD2 has no concat so no weld");
@@ -273,7 +275,7 @@ test("LOD draws stay merged; unused uv/normal strip cuts attrBytes (tris/verts s
   assert.equal(visualMeshes(bodyL0)[0].geometry.getAttribute("position").count, 48, "bodyL0 8 boxes weld 192 → 48 unique verts");
   assert.equal(visualMeshes(bodyL0)[0].geometry.getAttribute("normal"), undefined, "color-only MeshBasic drops unused normal");
   assert.equal(visualMeshes(bodyL0)[0].geometry.getAttribute("uv"), undefined, "color-only MeshBasic drops unused uv");
-  assert.ok(visualMeshes(bodyL0)[0].geometry.getAttribute("position"), "position stays");
+  assert.ok(visualMeshes(bodyL0)[0].geometry.getAttribute("position").isFloat16BufferAttribute, "color-only position is Float16");
   assert.equal(visualMeshes(lidL0).length, 2, "lidL0 keeps wood + brass (different materials / lidMesh name)");
   assert.equal(visualMeshes(latchL0).length, 1, "latchL0 stays one brass mesh");
   assert.equal(visualMeshes(toolL0).length, 2, "toolL0 steel shaft+tip merge; grip stays wood");
@@ -291,12 +293,12 @@ test("LOD draws stay merged; unused uv/normal strip cuts attrBytes (tris/verts s
   assert.equal(fastenerMesh.material, crate.userData.materials.lod0.brass);
   assert.equal(fastenerMesh.geometry.getAttribute("uv"), undefined, "fastener stays outside merge but still strips unused uv (v0.41)");
   assert.equal(fastenerMesh.geometry.getAttribute("normal"), undefined, "fastener still strips unused normal (v0.41)");
-  assert.ok(fastenerMesh.geometry.getAttribute("position"), "fastener keeps position");
+  assert.ok(fastenerMesh.geometry.getAttribute("position").isFloat16BufferAttribute, "fastener position is Float16");
   assert.ok(fastenerMesh.geometry.index, "fastener keeps its index");
   assert.equal(fastenerMesh.geometry.index.array.BYTES_PER_ELEMENT, 2, "fastener index is Uint16");
   const fastenerAttrBytes =
     fastenerMesh.geometry.getAttribute("position").array.byteLength + fastenerMesh.geometry.index.array.byteLength;
-  assert.equal(fastenerAttrBytes, 360, "fastener BoxGeometry 24×12 B position + 72 B Uint16 index (was 840 with uv+normal)");
+  assert.equal(fastenerAttrBytes, 216, "fastener BoxGeometry 24×6 B Float16 position + 72 B Uint16 index (was 360 Float32)");
   assert.ok(lidMesh.geometry.getAttribute("position"));
   assert.equal(lidMesh.geometry.getAttribute("uv"), undefined, "unmerged color-only lid still strips unused uv");
   assert.equal(lidMesh.geometry.index.array.BYTES_PER_ELEMENT, 2, "unmerged lid index stays Uint16");
@@ -362,6 +364,49 @@ test("compactIndexToUint16 copies a forced Uint32 index when verts fit", () => {
   compactIndexToUint16(already);
   assert.equal(already.index.uuid, beforeUuid, "already-Uint16 is a no-op");
   assert.equal(already.index.array.BYTES_PER_ELEMENT, 2);
+});
+
+test("quantizePositionToFloat16 encodes via setXYZ; skips mapped/lit; recomputes bounds", () => {
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const std = new THREE.MeshStandardMaterial();
+
+  const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  stripUnusedColorOnlyAttributes(geo, colorOnly);
+  compactIndexToUint16(geo);
+  const src = geo.getAttribute("position");
+  assert.equal(src.array.BYTES_PER_ELEMENT, 4, "BoxGeometry position starts Float32");
+  const x0 = src.getX(0);
+  const y0 = src.getY(0);
+  const z0 = src.getZ(0);
+  assert.equal(geo.boundingBox, null);
+  quantizePositionToFloat16(geo, colorOnly);
+  const pos = geo.getAttribute("position");
+  assert.equal(pos.isFloat16BufferAttribute, true);
+  assert.ok(pos.array instanceof Uint16Array, "r170 Float16BufferAttribute stores Uint16 half-float bits");
+  assert.equal(pos.array.byteLength, 24 * 3 * 2, "24 verts × 3 × 2 B");
+  assert.equal(pos.count, 24, "vertex count unchanged");
+  assert.equal(cpuAttrBytes(geo), 216, "144 B Float16 position + 72 B Uint16 index");
+  assert.ok(geo.boundingBox, "bounds recomputed after quantize");
+  assert.ok(geo.boundingSphere);
+  assert.ok(Math.abs(pos.getX(0) - x0) < 1e-3, "half-float getX stays close to Float32");
+  assert.ok(Math.abs(pos.getY(0) - y0) < 1e-3);
+  assert.ok(Math.abs(pos.getZ(0) - z0) < 1e-3);
+
+  const keptMapped = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  quantizePositionToFloat16(keptMapped, mapped);
+  assert.equal(keptMapped.getAttribute("position").isFloat16BufferAttribute, undefined, "mapped MeshBasic stays Float32");
+  assert.ok(keptMapped.getAttribute("position").array instanceof Float32Array);
+  const keptStd = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  quantizePositionToFloat16(keptStd, std);
+  assert.equal(keptStd.getAttribute("position").isFloat16BufferAttribute, undefined, "MeshStandard stays Float32");
+
+  const already = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  stripUnusedColorOnlyAttributes(already, colorOnly);
+  quantizePositionToFloat16(already, colorOnly);
+  const beforeUuid = already.getAttribute("position").uuid;
+  quantizePositionToFloat16(already, colorOnly);
+  assert.equal(already.getAttribute("position").uuid, beforeUuid, "already-Float16 is a no-op");
 });
 
 function simulateGpuUpload(geometry) {
@@ -431,7 +476,7 @@ test("releaseCpuArraysOnGpuUpload nulls CPU arrays only on color-only MeshBasic 
   assert.ok(keptStd.getAttribute("position").array, "MeshStandard keeps CPU arrays");
 });
 
-test("packColorOnlyGeometry is strip + compact + upload-release (shared procedural/packaged path)", () => {
+test("packColorOnlyGeometry is strip + compact + Float16 + upload-release (shared procedural/packaged path)", () => {
   const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
   const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
   const src = geo.index.array;
@@ -441,22 +486,23 @@ test("packColorOnlyGeometry is strip + compact + upload-release (shared procedur
   packColorOnlyGeometry(geo, colorOnly);
   assert.equal(geo.getAttribute("uv"), undefined);
   assert.ok(geo.index.array instanceof Uint16Array);
-  assert.equal(cpuAttrBytes(geo), 360, "pre-upload envelope after strip+compact");
+  assert.equal(geo.getAttribute("position").isFloat16BufferAttribute, true);
+  assert.equal(cpuAttrBytes(geo), 216, "pre-upload envelope after strip+compact+Float16");
   simulateGpuUpload(geo);
   assert.equal(geo.getAttribute("position").array, null);
   assert.equal(geo.index.array, null);
 });
 
-test("procedural LOD/fastener release CPU arrays after simulated upload; colliders keep them; pre-upload envelope stays v0.42", () => {
+test("procedural LOD/fastener release CPU arrays after simulated upload; colliders keep them; pre-upload envelope is v0.44 Float16", () => {
   const crate = createToolbox();
   const stats = getToolboxLodStats(crate);
   // Measurement rule: userData.lod.stats.attrBytes is the pre-upload CPU
   // envelope (arrays still present). After GPU upload, CPU .array is
   // nulled on color-only MeshBasic visuals so live cpuAttrBytes → 0;
   // draws / tris / verts stay (BufferAttribute.count is independent).
-  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 4200 });
-  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1776 });
-  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 720 });
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
 
   const visuals = crateVisualMeshes(crate);
   assert.equal(visuals.length, 6 + 4 + 2 + 1, "LOD0 6 + LOD1 4 + LOD2 2 + fastener 1");
@@ -464,16 +510,20 @@ test("procedural LOD/fastener release CPU arrays after simulated upload; collide
   for (const mesh of visuals) {
     const pos = mesh.geometry.getAttribute("position");
     assert.ok(pos.array, "visual CPU array present before upload");
+    assert.equal(pos.isFloat16BufferAttribute, true, "packed visual position is Float16");
     assert.equal(pos.usage, THREE.StaticDrawUsage);
     assert.equal(mesh.geometry.index.usage, THREE.StaticDrawUsage);
     preUploadBytes += cpuAttrBytes(mesh.geometry);
   }
-  assert.equal(preUploadBytes, 4200 + 1776 + 720 + 360, "LOD + fastener pre-upload CPU attrBytes");
+  assert.equal(preUploadBytes, 2820 + 1176 + 432 + 216, "LOD + fastener pre-upload CPU attrBytes");
 
   const colliders = crate.userData.colliders;
   assert.equal(colliders.length, 5);
   for (const c of colliders) {
-    assert.ok(c.geometry.getAttribute("position").array, "collider CPU arrays stay at create");
+    const pos = c.geometry.getAttribute("position");
+    assert.ok(pos.array, "collider CPU arrays stay at create");
+    assert.equal(pos.isFloat16BufferAttribute, undefined, "collider position stays Float32");
+    assert.ok(pos.array instanceof Float32Array);
   }
 
   for (const mesh of visuals) simulateGpuUpload(mesh.geometry);

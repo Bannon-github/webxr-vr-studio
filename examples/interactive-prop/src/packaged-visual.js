@@ -44,6 +44,12 @@
  * plus an authored root fastener) set `StaticDrawUsage` and
  * `onUpload` so the first GPU upload releases CPU `.array`. Collider
  * hulls are not packed. Mapped / lit materials are not released.
+ *
+ * v0.44: after Uint16 compact and **before** that `onUpload` hook,
+ * `packColorOnlyGeometry` quantizes Float32 `position` to Three r170
+ * `Float16BufferAttribute` (WebGL2 `HALF_FLOAT`) on those same
+ * color-only unlit MeshBasic geos. Mapped / lit / morph /
+ * interleaved stay Float32. Collider hulls are not packed.
  */
 
 import {
