@@ -58,6 +58,7 @@ Applies when the user hovers, grabs, or drives a multi-step activity. Full path:
 - [ ] Packaged GLB ingest merges same-material meshes within each discovered `lod0` / `lod1` / `lod2` group (same helper as procedural v0.37; direct mesh children; skip colliders / fastener / multi-material; do not merge across LOD levels); missing names still fail soft (`crate-toolbox` v0.38; unit/mock 3→1 draws, tris unchanged; no material rewrite)
 - [ ] After same-material concat, weld coincident vertices (position hash 1e-4 m; keep UV/normal channels). Prefer DCC pre-weld; runtime weld is a safety net (`crate-toolbox` v0.39; unique verts 440 → 230 / 192 → 100; tris and draws unchanged; unit/mock 72 → 8)
 - [ ] After weld, strip unused `uv` / `normal` (and other unused channels) from color-only unlit MeshBasic (no map / no lighting). Prefer omitting them in DCC; runtime strip is a safety net (`crate-toolbox` v0.40; attrBytes 8800 → 4200 / 3776 → 1776 / 1680 → 720; draws / tris / unique verts unchanged)
+- [ ] After unused-attr strip, compact a lingering Uint32 index to Uint16 when `position.count` ≤ 65535 (concat always builds Uint32; weld only rewrites Uint16 when verts drop). Fastener stays outside LOD merge but gets the same strip + compact (`crate-toolbox` v0.41; LOD attrBytes stay 4200 / 1776 / 720; fastener 840 → 360)
 - [ ] Scale 1 unit = 1 m; seated reach or ray-use for every required step
 - [ ] Throw / physics never applies impulse to the camera rig
 - [ ] State change is visual + audio and/or haptic; not audio-only
