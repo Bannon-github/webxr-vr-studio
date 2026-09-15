@@ -333,6 +333,22 @@ export function mergeSameMaterialMeshes(lodGroup) {
   return lodGroup;
 }
 
+/**
+ * One color-only unlit MeshBasic per midtone hex. v0.37 already
+ * aliases woodDark/handleMat to wood *within* a LOD; v0.42 uses
+ * this cache so LOD0/1/2 wood (and LOD0/1 brass) share one instance
+ * when `L3_LODn_*_COLOR` matches. Does not invent materials or
+ * rewrite mapped/lit types. Load-time only.
+ */
+export function shareColorOnlyUnlitBasic(hex, cache) {
+  let mat = cache.get(hex);
+  if (!mat) {
+    mat = mappedBasic(hex, null, { map: false });
+    cache.set(hex, mat);
+  }
+  return mat;
+}
+
 function makeCollider(name, w, h, d, x, y, z) {
   const mat = new THREE.MeshBasicMaterial({
     color: 0x22ff66,
@@ -360,27 +376,23 @@ export function createToolbox() {
   root.userData.kind = "entity";
 
   const l2 = getCrateL2Maps();
-  // LOD0: three color-only unlit MeshBasic materials (no albedo map).
-  // Wood / dark / handle cards share one instance at the wood albedo
-  // midtone (v0.37; they were duplicate MeshBasics of the same hex in
-  // v0.35). Latch / fastener use brass; shaft / tip use steel.
-  // No roughness/metalness — those uniforms do not apply to MeshBasic.
-  const wood = mappedBasic(L3_LOD0_WOOD_COLOR, null, { map: false });
+  // Color-only unlit MeshBasic (no albedo map). v0.37 aliases
+  // woodDark/handleMat to the wood instance *within* a LOD. v0.42
+  // aliases *across* LODs when the midtone hex matches: one wood
+  // for LOD0/1/2, one brass for LOD0/1 (+ fastener), one steel
+  // (LOD0-only). No roughness/metalness — those uniforms do not
+  // apply to MeshBasic.
+  const colorOnlyByHex = new Map();
+  const wood = shareColorOnlyUnlitBasic(L3_LOD0_WOOD_COLOR, colorOnlyByHex);
   const woodDark = wood;
-  const brass = mappedBasic(L3_LOD0_BRASS_COLOR, null, { map: false });
-  const steel = mappedBasic(L3_LOD0_STEEL_COLOR, null, { map: false });
+  const brass = shareColorOnlyUnlitBasic(L3_LOD0_BRASS_COLOR, colorOnlyByHex);
+  const steel = shareColorOnlyUnlitBasic(L3_LOD0_STEEL_COLOR, colorOnlyByHex);
   const handleMat = wood;
-  // LOD1 mid crate / lid / latch / tool stub: color-only unlit MeshBasic
-  // (no albedo map). Wood / dark / handle cards share one instance at
-  // the wood albedo midtone (v0.37). Latch uses brass. No
-  // roughness/metalness — those uniforms do not apply to MeshBasic.
-  const woodMid = mappedBasic(L3_LOD1_WOOD_COLOR, null, { map: false });
+  const woodMid = shareColorOnlyUnlitBasic(L3_LOD1_WOOD_COLOR, colorOnlyByHex);
   const woodDarkMid = woodMid;
-  const brassMid = mappedBasic(L3_LOD1_BRASS_COLOR, null, { map: false });
+  const brassMid = shareColorOnlyUnlitBasic(L3_LOD1_BRASS_COLOR, colorOnlyByHex);
   const handleMatMid = woodMid;
-  // LOD2 far crate + lid: color-only unlit MeshBasic (no albedo map).
-  // Flat wood midtone — unchanged vs v0.29.
-  const woodFar = mappedBasic(L3_LOD2_WOOD_COLOR, null, { map: false });
+  const woodFar = shareColorOnlyUnlitBasic(L3_LOD2_WOOD_COLOR, colorOnlyByHex);
 
   const body = new THREE.Group();
   body.name = "body";
@@ -512,7 +524,8 @@ export function createToolbox() {
     lod0Color: { wood: L3_LOD0_WOOD_COLOR, brass: L3_LOD0_BRASS_COLOR, steel: L3_LOD0_STEEL_COLOR },
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
-    note: "procedural color-only stand-in; LOD0 color-only unlit MeshBasic (no map; wood/brass/steel midtones; woodDark/handleMat alias the wood instance); same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41); fastener (not an LOD mesh) gets the same unused-attr strip + compact; LOD1 color-only unlit MeshBasic (woodDark/handleMat alias wood; body boxes merged); LOD2 color-only unlit MeshBasic (no map; wood midtone)",
+    uniqueMaterials: colorOnlyByHex.size,
+    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41); fastener (not an LOD mesh) gets the same unused-attr strip + compact",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -529,6 +542,8 @@ export function createToolbox() {
   // vertices after concat. v0.40: strip unused uv/normal on color-only
   // MeshBasic after weld (and on unmerged singles in the same helper).
   // v0.41: compact a lingering Uint32 index to Uint16 when verts fit.
+  // v0.42: wood/brass MeshBasic instances are already shared across
+  // LODs above (hex cache); merge still does not cross pivots.
   // Pivots stay separate. Fastener is packed above, not merged here.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);
@@ -566,6 +581,30 @@ export function collectLodVisualMaterials(entity, level) {
       mats.push(o.material);
     });
   }
+  return mats;
+}
+
+/**
+ * Unique visual materials on LOD0/1/2 plus the fastener (colliders
+ * skipped). Used to count shared MeshBasic instances across LODs.
+ */
+export function collectCrateVisualMaterials(entity) {
+  const mats = [];
+  const seen = new Set();
+  const add = (mat) => {
+    if (!mat || seen.has(mat)) return;
+    if (Array.isArray(mat)) {
+      for (const m of mat) add(m);
+      return;
+    }
+    seen.add(mat);
+    mats.push(mat);
+  };
+  for (const level of [0, 1, 2]) {
+    for (const mat of collectLodVisualMaterials(entity, level)) add(mat);
+  }
+  const fastener = entity.userData.fastener?.mesh;
+  if (fastener?.isMesh && !fastener.userData.collider) add(fastener.material);
   return mats;
 }
 

@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.44.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.42.0** L3 packaging/perf UPGRADE: share identical color-only unlit MeshBasic instances across LOD levels when the midtone hex matches (procedural; unique instances 6 → 3). Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 4200 / 1776 / 720 unchanged. Packaged hex-dedupe skipped. Headset ms / FFR still unmeasured.
+
 ## [0.43.0] — 2026-09-15
 
 ### Changed
