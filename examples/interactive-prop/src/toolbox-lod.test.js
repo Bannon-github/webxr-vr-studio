@@ -38,6 +38,7 @@ installCanvasStub();
 
 const {
   collectLodVisualMaterials,
+  compactIndexToUint16,
   createToolbox,
   getToolboxLodStats,
   isColorOnlyUnlitBasic,
@@ -211,7 +212,9 @@ test("LOD draws stay merged; unused uv/normal strip cuts attrBytes (tris/verts s
   // v0.38 concat-without-weld envelope: 440 / 192 / 48 unique verts
   // (Uint32 index on concatenated meshes). v0.39 welds coincident
   // corners: 230 / 100 / 48. v0.40 strips unused uv/normal on
-  // color-only MeshBasic (position-only + index). Tris stay index-length/3.
+  // color-only MeshBasic (position-only + index). v0.41 compact is a
+  // no-op on these LODs — weld already wrote Uint16 — so attrBytes
+  // stay at the v0.40 envelope. Tris stay index-length/3.
   assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 4200 });
   assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1776 });
   assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 720 });
@@ -248,9 +251,17 @@ test("LOD draws stay merged; unused uv/normal strip cuts attrBytes (tris/verts s
   assert.ok(fastenerMesh?.isMesh, "fastenerMesh is not an LOD mesh and stays named");
   assert.equal(fastenerMesh.parent.name, "toolbox", "fastener stays on the toolbox root");
   assert.equal(fastenerMesh.material, crate.userData.materials.lod0.brass);
-  assert.ok(fastenerMesh.geometry.getAttribute("uv"), "fastener is outside the merge helper and keeps authored attrs");
+  assert.equal(fastenerMesh.geometry.getAttribute("uv"), undefined, "fastener stays outside merge but still strips unused uv (v0.41)");
+  assert.equal(fastenerMesh.geometry.getAttribute("normal"), undefined, "fastener still strips unused normal (v0.41)");
+  assert.ok(fastenerMesh.geometry.getAttribute("position"), "fastener keeps position");
+  assert.ok(fastenerMesh.geometry.index, "fastener keeps its index");
+  assert.equal(fastenerMesh.geometry.index.array.BYTES_PER_ELEMENT, 2, "fastener index is Uint16");
+  const fastenerAttrBytes =
+    fastenerMesh.geometry.getAttribute("position").array.byteLength + fastenerMesh.geometry.index.array.byteLength;
+  assert.equal(fastenerAttrBytes, 360, "fastener BoxGeometry 24×12 B position + 72 B Uint16 index (was 840 with uv+normal)");
   assert.ok(lidMesh.geometry.getAttribute("position"));
   assert.equal(lidMesh.geometry.getAttribute("uv"), undefined, "unmerged color-only lid still strips unused uv");
+  assert.equal(lidMesh.geometry.index.array.BYTES_PER_ELEMENT, 2, "unmerged lid index stays Uint16");
 });
 
 test("stripUnusedColorOnlyAttributes drops uv/normal only on color-only MeshBasic", () => {
@@ -285,4 +296,32 @@ test("stripUnusedColorOnlyAttributes drops uv/normal only on color-only MeshBasi
   stripUnusedColorOnlyAttributes(kept, std);
   assert.ok(kept.getAttribute("uv"), "MeshStandard keeps uv");
   assert.ok(kept.getAttribute("normal"), "MeshStandard keeps normal");
+});
+
+test("compactIndexToUint16 copies a forced Uint32 index when verts fit", () => {
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  stripUnusedColorOnlyAttributes(geo, colorOnly);
+  const posCount = geo.getAttribute("position").count;
+  const triCount = geo.index.count / 3;
+  assert.ok(posCount <= 65535);
+  const src = geo.index.array;
+  assert.equal(src.BYTES_PER_ELEMENT, 2, "BoxGeometry starts Uint16");
+  const forced = new Uint32Array(src.length);
+  forced.set(src);
+  geo.setIndex(new THREE.BufferAttribute(forced, 1));
+  assert.equal(geo.index.array.BYTES_PER_ELEMENT, 4);
+  const beforeBytes = geo.index.array.byteLength;
+  compactIndexToUint16(geo);
+  assert.ok(geo.index.array instanceof Uint16Array);
+  assert.equal(geo.index.array.BYTES_PER_ELEMENT, 2);
+  assert.equal(geo.index.array.byteLength, beforeBytes / 2, "index byte length halves");
+  assert.equal(geo.index.count / 3, triCount, "triangle count unchanged");
+  assert.equal(geo.getAttribute("position").count, posCount, "vertex count unchanged");
+
+  const already = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const beforeUuid = already.index.uuid;
+  compactIndexToUint16(already);
+  assert.equal(already.index.uuid, beforeUuid, "already-Uint16 is a no-op");
+  assert.equal(already.index.array.BYTES_PER_ELEMENT, 2);
 });

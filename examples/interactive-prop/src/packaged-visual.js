@@ -25,9 +25,21 @@
  * Author may omit those channels in DCC; runtime strip is a safety
  * net. Mapped / lit materials keep their attributes. Materials are
  * still not rewritten.
+ *
+ * v0.41: after that strip, compact a lingering Uint32 index to
+ * Uint16 when `position.count` ≤ 65535 (concat always builds Uint32;
+ * weld only rewrites to Uint16 when it actually reduces verts). A
+ * root-level `fastener` / `fastenerMesh` MeshBasic — still outside
+ * the LOD merge skip set — gets the same unused-attr strip + compact.
+ * Do not invent a fastener if none is authored.
  */
 
-import { attachToolboxLod, mergeSameMaterialMeshes } from "./toolbox.js";
+import {
+  attachToolboxLod,
+  compactIndexToUint16,
+  mergeSameMaterialMeshes,
+  stripUnusedColorOnlyAttributes,
+} from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
   "collider_grab",
@@ -148,6 +160,10 @@ export function ingestPackagedRoot(root, sidecar) {
   });
 
   const fastener = findNamed(root, "fastenerMesh") || findNamed(root, "fastener");
+  if (fastener?.isMesh && fastener.geometry) {
+    stripUnusedColorOnlyAttributes(fastener.geometry, fastener.material);
+    compactIndexToUint16(fastener.geometry);
+  }
   root.userData.parts = { body, lidPivot, latchPivot, tool, fastener };
   root.userData.highlightables = {
     body,

@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.43.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.41.0** L3 packaging/perf UPGRADE: compact lingering Uint32 indices to Uint16 after unused-attr strip (procedural + packaged helper); fastener (outside LOD merge) gets the same strip + compact. LOD attrBytes stay 4200 / 1776 / 720 (already Uint16); fastener 840 → 360. Headset ms / FFR still unmeasured.
+
 ## [0.42.0] — 2026-09-14
 
 ### Changed
