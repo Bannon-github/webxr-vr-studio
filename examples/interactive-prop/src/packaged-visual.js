@@ -50,10 +50,19 @@
  * `Float16BufferAttribute` (WebGL2 `HALF_FLOAT`) on those same
  * color-only unlit MeshBasic geos. Mapped / lit / morph /
  * interleaved stay Float32. Collider hulls are not packed.
+ *
+ * v0.45: after the entity is fully built and LODs attached (or
+ * fail-soft with no lod groups), `freezeStaticColorOnlyWorldMatrices`
+ * bakes one `updateMatrixWorld(true)` then sets `matrixAutoUpdate =
+ * false` on static packed color-only MeshBasic visual leaves that are
+ * not under `lid` / `latch` / `tool` pivots. Fastener stays live
+ * (`applyFastenerVisual` writes rotation/position). Colliders stay
+ * live. Does not change draws / tris / verts / attrBytes.
  */
 
 import {
   attachToolboxLod,
+  freezeStaticColorOnlyWorldMatrices,
   mergeSameMaterialMeshes,
   packColorOnlyGeometry,
 } from "./toolbox.js";
@@ -213,6 +222,7 @@ export function ingestPackagedRoot(root, sidecar) {
       "[crate-toolbox] packaged GLB has no lod0/lod1/lod2 groups — all visuals stay visible (author lod0/lod1/lod2 to switch)"
     );
   }
+  freezeStaticColorOnlyWorldMatrices(root);
   return root;
 }
 
