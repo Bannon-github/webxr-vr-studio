@@ -32,6 +32,12 @@
  * root-level `fastener` / `fastenerMesh` MeshBasic — still outside
  * the LOD merge skip set — gets the same unused-attr strip + compact.
  * Do not invent a fastener if none is authored.
+ *
+ * v0.42: procedural create shares color-only MeshBasic instances
+ * across LODs when midtone hex matches. Packaged ingest does **not**
+ * hex-dedupe materials (same-hex MeshBasics can still differ in
+ * side / opacity / transparent; multi-material slots must stay
+ * intact). Author shared glTF material slots in DCC instead.
  */
 
 import {

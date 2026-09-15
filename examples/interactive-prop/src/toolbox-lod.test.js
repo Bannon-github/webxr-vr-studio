@@ -37,12 +37,14 @@ function installCanvasStub() {
 installCanvasStub();
 
 const {
+  collectCrateVisualMaterials,
   collectLodVisualMaterials,
   compactIndexToUint16,
   createToolbox,
   getToolboxLodStats,
   isColorOnlyUnlitBasic,
   setToolboxLod,
+  shareColorOnlyUnlitBasic,
   stripUnusedColorOnlyAttributes,
   weldCoincidentVertices,
 } = await import("./toolbox.js");
@@ -155,7 +157,7 @@ test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only Mesh
     assert.ok(!mat.metalnessMap, "LOD2 has no ORM metalnessMap");
     assert.equal(mat.roughness, undefined, "LOD2 MeshBasic has no roughness");
     assert.equal(mat.metalness, undefined, "LOD2 MeshBasic has no metalness");
-    assert.notEqual(mat, lod1Named.wood, "LOD2 must not reuse the LOD1 mapped MeshBasic");
+    assert.equal(mat, lod1Named.wood, "LOD2 reuses the shared wood MeshBasic when midtones match (v0.42)");
   }
   for (const mat of lod0) {
     assert.equal(mat.isMeshBasicMaterial, true, "LOD0 stays MeshBasic after LOD2 collect");
@@ -192,6 +194,40 @@ test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only Mesh
   assert.equal(fastener.material.metalness, undefined, "fastener MeshBasic has no metalness");
   assert.equal(fastener.material.map, null, "fastener shares LOD0 color-only brass MeshBasic");
   assert.equal(fastener.material.color.getHex(), L3_LOD0_BRASS_COLOR);
+
+  assert.equal(lod0Named.wood, lod1Named.wood, "LOD0 wood === LOD1 wood (same MeshBasic instance)");
+  assert.equal(lod1Named.wood, crate.userData.materials.lod2.wood, "LOD1 wood === LOD2 wood");
+  assert.equal(lod0Named.brass, lod1Named.brass, "LOD0 brass === LOD1 brass");
+  assert.equal(fastener.material, lod1Named.brass, "fastener shares the same brass instance as LOD1 latch");
+  assert.notEqual(lod0Named.steel, lod0Named.wood, "steel stays its own instance");
+  assert.notEqual(lod0Named.steel, lod0Named.brass, "steel is not brass");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3, "unique procedural MeshBasic instances: wood + brass + steel");
+  const crateMats = collectCrateVisualMaterials(crate);
+  assert.equal(crateMats.length, 3, "bound visual materials collapse to 3 instances (colliders skipped)");
+  assert.ok(crateMats.includes(lod0Named.wood));
+  assert.ok(crateMats.includes(lod0Named.brass));
+  assert.ok(crateMats.includes(lod0Named.steel));
+});
+
+test("shareColorOnlyUnlitBasic reuses one MeshBasic per midtone hex", () => {
+  const cache = new Map();
+  const a = shareColorOnlyUnlitBasic(L3_LOD0_WOOD_COLOR, cache);
+  const b = shareColorOnlyUnlitBasic(L3_LOD1_WOOD_COLOR, cache);
+  const c = shareColorOnlyUnlitBasic(L3_LOD2_WOOD_COLOR, cache);
+  const brassA = shareColorOnlyUnlitBasic(L3_LOD0_BRASS_COLOR, cache);
+  const brassB = shareColorOnlyUnlitBasic(L3_LOD1_BRASS_COLOR, cache);
+  const steel = shareColorOnlyUnlitBasic(L3_LOD0_STEEL_COLOR, cache);
+  assert.equal(L3_LOD0_WOOD_COLOR, L3_LOD1_WOOD_COLOR);
+  assert.equal(L3_LOD1_WOOD_COLOR, L3_LOD2_WOOD_COLOR);
+  assert.equal(L3_LOD0_BRASS_COLOR, L3_LOD1_BRASS_COLOR);
+  assert.equal(a, b);
+  assert.equal(b, c);
+  assert.equal(brassA, brassB);
+  assert.notEqual(a, brassA);
+  assert.notEqual(a, steel);
+  assert.equal(cache.size, 3);
+  assert.equal(a.isMeshBasicMaterial, true);
+  assert.equal(a.map, null);
 });
 
 test("setToolboxLod is visibility-only (no material swap on switch)", () => {
