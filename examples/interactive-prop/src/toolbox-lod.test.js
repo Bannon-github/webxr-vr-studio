@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as THREE from "three";
 import {
   L2_TEXTURE_SIZE,
   L3_LOD_ALBEDO_SIZE,
@@ -39,7 +40,9 @@ const {
   collectLodVisualMaterials,
   createToolbox,
   getToolboxLodStats,
+  isColorOnlyUnlitBasic,
   setToolboxLod,
+  stripUnusedColorOnlyAttributes,
   weldCoincidentVertices,
 } = await import("./toolbox.js");
 
@@ -202,17 +205,21 @@ test("setToolboxLod is visibility-only (no material swap on switch)", () => {
   assert.equal(crate.userData.lod.groups[0][0].visible, false);
 });
 
-test("LOD draws stay merged; coincident weld cuts unique verts (tris stay at the v0.13 envelope)", () => {
+test("LOD draws stay merged; unused uv/normal strip cuts attrBytes (tris/verts stay at the v0.39 envelope)", () => {
   const crate = createToolbox();
   const stats = getToolboxLodStats(crate);
   // v0.38 concat-without-weld envelope: 440 / 192 / 48 unique verts
   // (Uint32 index on concatenated meshes). v0.39 welds coincident
-  // corners: 230 / 100 / 48. Tris stay index-length/3.
-  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 8800 });
-  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 3776 });
-  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 1680 });
-  assert.ok(stats[0].verts < 440, "LOD0 unique verts drop vs concat-without-weld");
-  assert.ok(stats[1].verts < 192, "LOD1 unique verts drop vs concat-without-weld");
+  // corners: 230 / 100 / 48. v0.40 strips unused uv/normal on
+  // color-only MeshBasic (position-only + index). Tris stay index-length/3.
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 4200 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1776 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 720 });
+  assert.ok(stats[0].attrBytes < 8800, "LOD0 attrBytes drop vs v0.39 weld-with-uv-normal");
+  assert.ok(stats[1].attrBytes < 3776, "LOD1 attrBytes drop vs v0.39 weld-with-uv-normal");
+  assert.ok(stats[2].attrBytes < 1680, "LOD2 attrBytes drop vs BoxGeometry uv+normal");
+  assert.equal(stats[0].verts, 230, "LOD0 unique verts stay at the v0.39 weld count");
+  assert.equal(stats[1].verts, 100, "LOD1 unique verts stay at the v0.39 weld count");
   assert.equal(stats[2].verts, 48, "LOD2 has no concat so no weld");
 
   const bodyL0 = crate.userData.lod.groups[0][0];
@@ -223,8 +230,9 @@ test("LOD draws stay merged; coincident weld cuts unique verts (tris stay at the
   const visualMeshes = (g) => g.children.filter((o) => o.isMesh && !o.userData.collider);
   assert.equal(visualMeshes(bodyL0).length, 1, "bodyL0 wood boxes merge to one mesh");
   assert.equal(visualMeshes(bodyL0)[0].geometry.getAttribute("position").count, 48, "bodyL0 8 boxes weld 192 → 48 unique verts");
-  assert.ok(visualMeshes(bodyL0)[0].geometry.getAttribute("normal"));
-  assert.ok(visualMeshes(bodyL0)[0].geometry.getAttribute("uv"));
+  assert.equal(visualMeshes(bodyL0)[0].geometry.getAttribute("normal"), undefined, "color-only MeshBasic drops unused normal");
+  assert.equal(visualMeshes(bodyL0)[0].geometry.getAttribute("uv"), undefined, "color-only MeshBasic drops unused uv");
+  assert.ok(visualMeshes(bodyL0)[0].geometry.getAttribute("position"), "position stays");
   assert.equal(visualMeshes(lidL0).length, 2, "lidL0 keeps wood + brass (different materials / lidMesh name)");
   assert.equal(visualMeshes(latchL0).length, 1, "latchL0 stays one brass mesh");
   assert.equal(visualMeshes(toolL0).length, 2, "toolL0 steel shaft+tip merge; grip stays wood");
@@ -240,4 +248,41 @@ test("LOD draws stay merged; coincident weld cuts unique verts (tris stay at the
   assert.ok(fastenerMesh?.isMesh, "fastenerMesh is not an LOD mesh and stays named");
   assert.equal(fastenerMesh.parent.name, "toolbox", "fastener stays on the toolbox root");
   assert.equal(fastenerMesh.material, crate.userData.materials.lod0.brass);
+  assert.ok(fastenerMesh.geometry.getAttribute("uv"), "fastener is outside the merge helper and keeps authored attrs");
+  assert.ok(lidMesh.geometry.getAttribute("position"));
+  assert.equal(lidMesh.geometry.getAttribute("uv"), undefined, "unmerged color-only lid still strips unused uv");
+});
+
+test("stripUnusedColorOnlyAttributes drops uv/normal only on color-only MeshBasic", () => {
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const std = new THREE.MeshStandardMaterial();
+  assert.equal(isColorOnlyUnlitBasic(colorOnly), true);
+  assert.equal(isColorOnlyUnlitBasic(mapped), false);
+  assert.equal(isColorOnlyUnlitBasic(std), false);
+
+  const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const before =
+    geo.getAttribute("position").array.byteLength +
+    geo.getAttribute("normal").array.byteLength +
+    geo.getAttribute("uv").array.byteLength +
+    geo.index.array.byteLength;
+  stripUnusedColorOnlyAttributes(geo, colorOnly);
+  assert.equal(geo.getAttribute("normal"), undefined);
+  assert.equal(geo.getAttribute("uv"), undefined);
+  assert.ok(geo.getAttribute("position"));
+  const after = geo.getAttribute("position").array.byteLength + geo.index.array.byteLength;
+  assert.ok(after < before, "measurable attribute-byte delta");
+  assert.equal(after, 360, "BoxGeometry 24 verts × 12 B position + 72 B Uint16 index");
+
+  const kept = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  stripUnusedColorOnlyAttributes(kept, mapped);
+  assert.ok(kept.getAttribute("uv"), "mapped MeshBasic keeps uv");
+  assert.ok(kept.getAttribute("normal"), "mapped MeshBasic keeps normal");
+  stripUnusedColorOnlyAttributes(kept, std);
+  assert.ok(kept.getAttribute("uv"), "MeshStandard keeps uv");
+  assert.ok(kept.getAttribute("normal"), "MeshStandard keeps normal");
 });

@@ -19,6 +19,12 @@
  * v0.39: that helper welds coincident vertices after concat (same
  * path for procedural and packaged). Author still prefers pre-welded
  * batches in DCC; runtime weld is a safety net.
+ *
+ * v0.40: after weld (and on unmerged color-only MeshBasic singles in
+ * the same helper), unused `uv` / `normal` attributes are stripped.
+ * Author may omit those channels in DCC; runtime strip is a safety
+ * net. Mapped / lit materials keep their attributes. Materials are
+ * still not rewritten.
  */
 
 import { attachToolboxLod, mergeSameMaterialMeshes } from "./toolbox.js";
