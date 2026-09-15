@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.46.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.44.0** L3 packaging/perf UPGRADE: quantize Float32 `position` to Three r170 `Float16BufferAttribute` (WebGL2 `HALF_FLOAT`) on color-only unlit MeshBasic LOD/fastener geometries after Uint16 compact and before `onUpload` CPU-array release. Pre-upload draws 6 / 4 / 2, tris 240 / 96 / 24 unchanged; attrBytes 4200 → 2820 / 1776 → 1176 / 720 → 432; fastener 360 → 216. Post-upload CPU attrBytes → 0. Colliders stay Float32. Headset ms / FFR still unmeasured.
+
 ## [0.45.0] — 2026-09-15
 
 ### Changed

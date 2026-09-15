@@ -268,7 +268,7 @@ test("packaged ingest merges same-material MeshBasic children inside each lod* g
   assert.equal(afterBody[0].geometry.getAttribute("position").count, 8, "unit/mock: 3 coincident boxes weld 72 → 8 unique verts");
   assert.equal(afterBody[0].geometry.getAttribute("normal"), undefined, "color-only MeshBasic drops unused normal after weld");
   assert.equal(afterBody[0].geometry.getAttribute("uv"), undefined, "color-only MeshBasic drops unused uv after weld");
-  assert.ok(afterBody[0].geometry.getAttribute("position"), "position stays");
+  assert.ok(afterBody[0].geometry.getAttribute("position").isFloat16BufferAttribute, "merged color-only position is Float16");
   assert.equal(visualMeshes(lidLod0).length, 1);
   assert.equal(lidLod0.children[0], lidOnly, "single-mesh lod groups stay the same mesh (attrs may strip)");
   assert.equal(latchLod0.children[0], latchOnly);
@@ -295,8 +295,9 @@ test("packaged ingest merges same-material MeshBasic children inside each lod* g
   assert.equal(stats[0].verts, 80, "unit/mock unique verts: welded body 8 + 3 unmerged boxes 24");
   // v0.39 weld-with-uv-normal: 8×32+216 + 3×(24×32+72) = 472 + 2520 = 2992
   // v0.40 position-only: 8×12+216 + 3×(24×12+72) = 312 + 1080 = 1392
-  assert.equal(stats[0].attrBytes, 1392, "unit/mock attrBytes after unused uv/normal strip");
-  assert.ok(stats[0].attrBytes < 2992, "measurable attrByte drop vs weld-with-channels");
+  // v0.44 Float16 position: 8×6+216 + 3×(24×6+72) = 264 + 648 = 912
+  assert.equal(stats[0].attrBytes, 912, "unit/mock attrBytes after Float16 position quantize");
+  assert.ok(stats[0].attrBytes < 1392, "measurable attrByte drop vs v0.43 Float32 position");
   assert.ok(stats[1].draws > 0);
   assert.equal(lidOnly.geometry.getAttribute("uv"), undefined, "unmerged color-only packaged mesh also strips unused uv");
   assert.equal(lidOnly.geometry.index.array.BYTES_PER_ELEMENT, 2, "unmerged packaged lid index stays Uint16");
@@ -383,6 +384,7 @@ test("mergeSameMaterialMeshes is the shared helper (direct call matches ingest)"
   assert.equal(merged.geometry.getAttribute("position").count, 8, "two coincident boxes weld 48 → 8 unique verts");
   assert.equal(merged.geometry.getAttribute("uv"), undefined, "color-only merge strips unused uv");
   assert.equal(merged.geometry.getAttribute("normal"), undefined, "color-only merge strips unused normal");
+  assert.equal(merged.geometry.getAttribute("position").isFloat16BufferAttribute, true, "color-only merge quantizes position to Float16");
   assert.equal(meshes.includes(lonely), true);
   assert.equal(lonely.geometry.getAttribute("uv"), undefined, "unmerged color-only lonely also strips");
   assert.equal(meshes.includes(multi), true);
@@ -419,6 +421,8 @@ test("merge compact converts concat Uint32 when weld early-returns", () => {
   assert.ok(merged.geometry.index.array instanceof Uint16Array, "concat Uint32 compacted to Uint16");
   assert.equal(merged.geometry.index.array.byteLength, 24, "12 indices × 2 B");
   assert.equal(merged.geometry.getAttribute("uv"), undefined);
+  assert.equal(merged.geometry.getAttribute("position").isFloat16BufferAttribute, true);
+  assert.equal(merged.geometry.getAttribute("position").array.byteLength, 8 * 3 * 2, "8 verts × Float16 xyz");
 });
 
 function simulateGpuUpload(geometry) {
@@ -433,9 +437,10 @@ test("packaged ingest hooks onUpload CPU-array release on color-only MeshBasic, 
   ingestPackagedRoot(root, sidecar);
   const bodyMerged = visualMeshes(groups[0][0])[0];
   const lidOnly = visualMeshes(groups[0][1])[0];
+  assert.ok(bodyMerged.geometry.getAttribute("position").isFloat16BufferAttribute, "packaged lod mesh position is Float16");
   assert.ok(bodyMerged.geometry.getAttribute("position").array, "pre-upload arrays present for lod.stats");
   assert.equal(bodyMerged.geometry.getAttribute("position").usage, THREE.StaticDrawUsage);
-  assert.equal(root.userData.lod.stats[0].attrBytes, 1440, "default fixture: 4 packed boxes × 360 B pre-upload");
+  assert.equal(root.userData.lod.stats[0].attrBytes, 864, "default fixture: 4 packed boxes × 216 B Float16 pre-upload");
   simulateGpuUpload(bodyMerged.geometry);
   simulateGpuUpload(lidOnly.geometry);
   simulateGpuUpload(fastener.geometry);
@@ -447,4 +452,5 @@ test("packaged ingest hooks onUpload CPU-array release on color-only MeshBasic, 
   const colliderGrab = root.getObjectByName("collider_grab");
   simulateGpuUpload(colliderGrab.geometry);
   assert.ok(colliderGrab.geometry.getAttribute("position").array, "collider CPU arrays are not released");
+  assert.equal(colliderGrab.geometry.getAttribute("position").isFloat16BufferAttribute, undefined, "collider position stays Float32");
 });

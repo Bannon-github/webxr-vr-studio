@@ -177,6 +177,47 @@ export function compactIndexToUint16(geometry) {
 }
 
 /**
+ * Quantize `position` from Float32 to Float16 on color-only unlit MeshBasic.
+ * Three r170 `Float16BufferAttribute` stores IEEE-754 binary16 bits in a
+ * `Uint16Array`; `WebGLAttributes.createBuffer` then uploads as
+ * `gl.HALF_FLOAT` when `isFloat16BufferAttribute` is set (WebGL2).
+ *
+ * **Verified r170 constructor trap (do not pass Float32Array through):**
+ * `new Float16BufferAttribute(array, itemSize)` does
+ * `super(new Uint16Array(array), …)` — that copies via ToUint16 truncation,
+ * not `DataUtils.toHalfFloat`. Sub-1.0 crate positions would become 0.
+ * Encode with `setXYZ` (r170 override calls `toHalfFloat`) or pass an
+ * already-encoded `Uint16Array`.
+ *
+ * Recomputes bounding box/sphere from quantized `getX`/`getY`/`getZ`
+ * (`Box3.setFromBufferAttribute` → `Vector3.fromBufferAttribute`) so
+ * frustum culls match GPU verts **before** `onUpload` nulls `.array`.
+ * Mapped / lit / morph / interleaved / non-Float32 positions are left
+ * intact. Load-time only — not per-frame.
+ */
+export function quantizePositionToFloat16(geometry, material) {
+  if (!geometry || !isColorOnlyUnlitBasic(material)) return geometry;
+  if (Object.keys(geometry.morphAttributes || {}).length) return geometry;
+  const pos = geometry.getAttribute("position");
+  if (!pos || pos.isInterleavedBufferAttribute) return geometry;
+  if (pos.isFloat16BufferAttribute) {
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
+  if (!(pos.array instanceof Float32Array) || pos.itemSize !== 3) return geometry;
+
+  const quantized = new THREE.Float16BufferAttribute(pos.count * pos.itemSize, pos.itemSize, pos.normalized);
+  for (let i = 0; i < pos.count; i++) {
+    quantized.setXYZ(i, pos.getX(i), pos.getY(i), pos.getZ(i));
+  }
+  geometry.setAttribute("position", quantized);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+/**
  * After GPU upload, drop CPU typed arrays on color-only unlit MeshBasic
  * geometries (Three r170 `BufferAttribute.onUpload` / `onUploadCallback`).
  * r170 `WebGLAttributes.createBuffer` copies `.array` into `bufferData`
@@ -221,13 +262,15 @@ export function releaseCpuArraysOnGpuUpload(geometry, material) {
 }
 
 /**
- * Strip unused color-only attrs, compact a wasteful 32-bit index, then
- * hook GPU-upload CPU-array release on color-only unlit MeshBasic.
- * Shared by procedural create (v0.37–v0.43) and packaged ingest.
+ * Strip unused color-only attrs, compact a wasteful 32-bit index, quantize
+ * Float32 `position` to Float16, then hook GPU-upload CPU-array release
+ * on color-only unlit MeshBasic. Shared by procedural create (v0.37–v0.44)
+ * and packaged ingest.
  */
 export function packColorOnlyGeometry(geometry, material) {
   stripUnusedColorOnlyAttributes(geometry, material);
   compactIndexToUint16(geometry);
+  quantizePositionToFloat16(geometry, material);
   releaseCpuArraysOnGpuUpload(geometry, material);
   return geometry;
 }
@@ -324,18 +367,20 @@ function skipLodMergeChild(child) {
  * geometry, then welds coincident vertices (v0.39), then strips
  * unused `uv` / `normal` (and other unused channels) when the
  * material is color-only unlit MeshBasic (v0.40), then compact a
- * 32-bit index to Uint16 when verts fit (v0.41), then hook
- * post-GPU-upload CPU array release on those packed geos (v0.43).
- * A named source keeps its name on the survivor. Colliders and the
- * fastener (`fastener` / `fastenerMesh`) are skipped. Direct mesh
- * children only — nested Groups (pivots) stay. Load-time only —
- * not per-frame. Shared by procedural create (v0.37) and packaged
+ * 32-bit index to Uint16 when verts fit (v0.41), then quantize
+ * Float32 `position` to Float16 (v0.44), then hook post-GPU-upload
+ * CPU array release on those packed geos (v0.43). A named source
+ * keeps its name on the survivor. Colliders and the fastener
+ * (`fastener` / `fastenerMesh`) are skipped. Direct mesh children
+ * only — nested Groups (pivots) stay. Load-time only — not
+ * per-frame. Shared by procedural create (v0.37) and packaged
  * ingest (v0.38); weld is the v0.39 upgrade on the same helper;
  * unused-attr strip is the v0.40 upgrade; Uint16 index compact is
  * the v0.41 upgrade; CPU-array release-on-upload is the v0.43
- * upgrade. Single-mesh groups still skip concat/weld but still
- * strip unused attrs, compact the index, and hook upload-release
- * on color-only MeshBasic.
+ * upgrade; Float16 position quantize is the v0.44 upgrade.
+ * Single-mesh groups still skip concat/weld but still strip unused
+ * attrs, compact the index, quantize position, and hook
+ * upload-release on color-only MeshBasic.
  */
 export function mergeSameMaterialMeshes(lodGroup) {
   if (!lodGroup) return lodGroup;
@@ -524,8 +569,8 @@ export function createToolbox() {
 
   // L5 work target: front fastener. Extra 12 tris / 1 draw, not an LOD mesh.
   // Stays outside mergeSameMaterialMeshes (skip set); still gets the
-  // color-only unused-attr strip + Uint16 compact (v0.41) + post-upload
-  // CPU array release (v0.43).
+  // color-only unused-attr strip + Uint16 compact (v0.41) + Float16
+  // position quantize (v0.44) + post-upload CPU array release (v0.43).
   const fastener = boxMesh(0.028, 0.028, 0.02, brass, -0.12, 0.07, 0.131);
   fastener.name = "fastenerMesh";
   packColorOnlyGeometry(fastener.geometry, fastener.material);
@@ -578,7 +623,7 @@ export function createToolbox() {
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
     uniqueMaterials: colorOnlyByHex.size,
-    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + upload-release. Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
+    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -599,6 +644,8 @@ export function createToolbox() {
   // LODs above (hex cache); merge still does not cross pivots.
   // v0.43: packColorOnlyGeometry also hooks post-upload CPU-array
   // release on those color-only MeshBasic geos (not colliders).
+  // v0.44: after Uint16 compact and before that upload hook, quantize
+  // Float32 position to Float16 on those same color-only geos.
   // Pivots stay separate. Fastener is packed above, not merged here.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);
