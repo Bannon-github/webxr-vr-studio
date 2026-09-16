@@ -90,6 +90,14 @@
  * rejection. Does not hex-dedupe or invent meshes. Mapped / lit
  * stay at authored / r170 Mesh defaults. Collider meshes stay
  * untouched. Does not disable culling or invent a custom strategy.
+ *
+ * v0.51: the same `pinColorOnlyVisualMaterialFlags` helper also
+ * pins `blending = NormalBlending`, `premultipliedAlpha = false`,
+ * and `alphaTest = 0` (plus `dithering = false` /
+ * `alphaToCoverage = false`) on those color-only MeshBasics.
+ * Accidental DCC / GLB CustomBlending / AdditiveBlending /
+ * premultiply / alphaTest would force blend or discard paths.
+ * Mapped / lit / colliders stay untouched.
  */
 
 import {
