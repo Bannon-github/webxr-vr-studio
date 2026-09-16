@@ -6,6 +6,7 @@ How a productive WebXR VR app studio operates week to week.
 
 | Ritual | When | Outcome |
 | --- | --- | --- |
+| Title interrogation + store-gate | **Before** any new app scaffold | Filled [brief](briefs/_template/) + [horizon-store](../docs/shipping/horizon-store/) result ([ADR 0006](adr/0006-store-gate-before-build.md)) |
 | Comfort review | Before merging loco/camera PRs | Tier classification + tester sign-off |
 | Perf budget check | Mid-sprint + release | Quest 3 ms vs **90 Hz** ([quest-3-target](../docs/shipping/quest-3-target.md)) |
 | Matrix update | Every release candidate | docs/shipping table filled |
@@ -23,12 +24,14 @@ How a productive WebXR VR app studio operates week to week.
 
 ## Branch / ship flow
 
-1. Spike in examples/ or feature branch
+0. **New title only:** [interrogation](app-interrogation.md) → `studio/briefs/<appId>/` → store-gate. No scaffold until that passes. Existing example/object PRs skip this step.
+1. Spike in examples/ or feature branch (path locked by the brief: WebXR here, native elsewhere)
 2. Document user-facing comfort impact in PR template
 3. Emulator smoke + at least one headset smoke for XR-touching PRs
 4. Merge behind flag if locomotion or FOV changes
 5. RC: soak + matrix + quality-bar.md gate
 6. Tag release; update CHANGELOG.md
+7. Store submission (if in brief): re-fetch [VRCs](https://developers.meta.com/horizon/resources/publish-quest-req/) the week you upload; studio gate ≠ Meta review
 
 ## Incident priorities
 
@@ -42,3 +45,4 @@ P2: visual polish, secondary device gaps
 - Three.js unless ADR 0001 superseded
 - GLB + KTX2 content path; behavior sidecar per [ADR 0004](adr/0004-asset-interaction-architecture.md)
 - gh for PR / release notes
+- New titles: brief + [horizon-store](../docs/shipping/horizon-store/) before codegen ([ADR 0006](adr/0006-store-gate-before-build.md))
