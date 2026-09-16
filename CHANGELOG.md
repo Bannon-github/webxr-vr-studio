@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.51.0] — 2026-09-16
+
+### Changed
+
+- `crate-toolbox` **v0.49.0** L3 packaging/perf UPGRADE: after the v0.48 opaque FrontSide pin, also pin `castShadow = false` and `receiveShadow = false` on packed color-only unlit MeshBasic visual meshes (13 shadow-off). Mapped / lit / colliders stay authored / r170 Mesh defaults. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10 unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.50.0] — 2026-09-16
 
 ### Changed
