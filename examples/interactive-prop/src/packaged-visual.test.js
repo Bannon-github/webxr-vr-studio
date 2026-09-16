@@ -88,6 +88,11 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.side, THREE.FrontSide, `${label} pins FrontSide`);
 }
 
+function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
+  assert.equal(mesh.castShadow, false, `${label} pins castShadow false`);
+  assert.equal(mesh.receiveShadow, false, `${label} pins receiveShadow false`);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -612,4 +617,61 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.toneMapped, true);
   assert.equal(colliderGrab.material.transparent, false, "fail-soft collider stays r170 transparent default");
   assert.equal(colliderGrab.material.side, THREE.FrontSide, "fail-soft collider stays r170 FrontSide default");
+});
+
+test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assert.equal(fresh.castShadow, false, "r170 Mesh defaults castShadow false");
+  assert.equal(fresh.receiveShadow, false, "r170 Mesh defaults receiveShadow false");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  mappedMesh.castShadow = true;
+  mappedMesh.receiveShadow = true;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccShadowOn", wrong);
+  wrongMesh.castShadow = true;
+  wrongMesh.receiveShadow = true;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.castShadow = true;
+  colliderGrabBefore.receiveShadow = true;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitShadowFlags(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitShadowFlags(wrongMesh, "packaged DCC shadow-on color-only Mesh");
+  assert.equal(mappedMesh.castShadow, true, "mapped MeshBasic stays authored castShadow");
+  assert.equal(mappedMesh.receiveShadow, true, "mapped MeshBasic stays authored receiveShadow");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.castShadow, true, "collider Mesh stays authored castShadow");
+  assert.equal(colliderGrab.receiveShadow, true, "collider Mesh stays authored receiveShadow");
+});
+
+test("packaged ingest without lod groups still pins color-only Mesh shadow flags", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitShadowFlags(visualMeshes(body)[0], "fail-soft body");
+  assertQuestSafeUnlitShadowFlags(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitShadowFlags(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitShadowFlags(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitShadowFlags(fastener, "fail-soft fastener");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.castShadow, false);
+  assert.equal(colliderGrab.receiveShadow, false);
 });

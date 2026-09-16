@@ -75,6 +75,13 @@
  * `depthTest = true`, `side = FrontSide`) on those color-only
  * MeshBasics. Accidental DoubleSide / transparent from DCC is
  * fenced at load time. Mapped / lit / colliders stay untouched.
+ *
+ * v0.49: after that material pin, `pinColorOnlyVisualShadowFlags`
+ * sets `castShadow = false` and `receiveShadow = false` on packed
+ * color-only unlit MeshBasic visual meshes (same
+ * `isColorOnlyUnlitBasic` gate). Does not hex-dedupe or invent
+ * meshes. Mapped / lit stay at authored / r170 Mesh defaults.
+ * Collider meshes stay untouched. Does not enable shadows elsewhere.
  */
 
 import {
@@ -84,6 +91,7 @@ import {
   mergeSameMaterialMeshes,
   packColorOnlyGeometry,
   pinColorOnlyVisualMaterialFlags,
+  pinColorOnlyVisualShadowFlags,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -244,6 +252,7 @@ export function ingestPackagedRoot(root, sidecar) {
   freezeStaticColorOnlyWorldMatrices(root);
   disableColorOnlyVisualRaycast(root);
   pinColorOnlyVisualMaterialFlags(root);
+  pinColorOnlyVisualShadowFlags(root);
   return root;
 }
 
