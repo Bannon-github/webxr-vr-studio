@@ -63,6 +63,25 @@ const {
   weldCoincidentVertices,
 } = await import("./toolbox.js");
 
+function assertR170MeshBasicOpaqueFrontSideDefaults(mat, label = "r170 MeshBasicMaterial") {
+  assert.equal(mat.transparent, false, `${label} defaults transparent false`);
+  assert.equal(mat.opacity, 1, `${label} defaults opacity 1`);
+  assert.equal(mat.depthWrite, true, `${label} defaults depthWrite true`);
+  assert.equal(mat.depthTest, true, `${label} defaults depthTest true`);
+  assert.equal(mat.side, THREE.FrontSide, `${label} defaults FrontSide`);
+  assert.equal(THREE.FrontSide, 0, "r170 FrontSide is 0");
+}
+
+function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
+  assert.equal(mat.fog, false, `${label} pins fog false`);
+  assert.equal(mat.toneMapped, false, `${label} pins toneMapped false`);
+  assert.equal(mat.transparent, false, `${label} pins transparent false`);
+  assert.equal(mat.opacity, 1, `${label} pins opacity 1`);
+  assert.equal(mat.depthWrite, true, `${label} pins depthWrite true`);
+  assert.equal(mat.depthTest, true, `${label} pins depthTest true`);
+  assert.equal(mat.side, THREE.FrontSide, `${label} pins FrontSide`);
+}
+
 test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
   const crate = createToolbox();
   const maps = getCrateL2Maps();
@@ -244,10 +263,9 @@ test("shareColorOnlyUnlitBasic reuses one MeshBasic per midtone hex", () => {
   assert.equal(a.map, null);
   assert.equal(a.fog, false, "shared wood pins fog false at share time");
   assert.equal(a.toneMapped, false, "shared wood pins toneMapped false at share time");
-  assert.equal(brassA.fog, false);
-  assert.equal(brassA.toneMapped, false);
-  assert.equal(steel.fog, false);
-  assert.equal(steel.toneMapped, false);
+  assertQuestSafeUnlitFlags(a, "shared wood");
+  assertQuestSafeUnlitFlags(brassA, "shared brass");
+  assertQuestSafeUnlitFlags(steel, "shared steel");
 });
 
 test("setToolboxLod is visibility-only (no material swap on switch)", () => {
@@ -847,10 +865,11 @@ test("disableColorOnlyVisualRaycast skips mapped MeshBasic, morph, and colliders
   assert.equal(collider.raycast, THREE.Mesh.prototype.raycast, "collider keeps default raycast");
 });
 
-test("v0.47 pins fog/toneMapped false on unique color-only MeshBasics; envelope stays v0.46", () => {
+test("v0.48 pins fog/toneMapped false and opaque FrontSide on unique color-only MeshBasics; envelope stays v0.47", () => {
   const fresh = new THREE.MeshBasicMaterial();
   assert.equal(fresh.fog, true, "r170 MeshBasicMaterial defaults fog true");
   assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
+  assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
 
   const crate = createToolbox();
   const stats = getToolboxLodStats(crate);
@@ -864,16 +883,12 @@ test("v0.47 pins fog/toneMapped false on unique color-only MeshBasics; envelope 
   assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
   for (const mat of mats) {
     assert.equal(isColorOnlyUnlitBasic(mat), true);
-    assert.equal(mat.fog, false, "color-only MeshBasic pins fog false");
-    assert.equal(mat.toneMapped, false, "color-only MeshBasic pins toneMapped false");
+    assertQuestSafeUnlitFlags(mat);
   }
   const named = crate.userData.materials.lod0;
-  assert.equal(named.wood.fog, false);
-  assert.equal(named.wood.toneMapped, false);
-  assert.equal(named.brass.fog, false);
-  assert.equal(named.brass.toneMapped, false);
-  assert.equal(named.steel.fog, false);
-  assert.equal(named.steel.toneMapped, false);
+  assertQuestSafeUnlitFlags(named.wood, "wood");
+  assertQuestSafeUnlitFlags(named.brass, "brass");
+  assertQuestSafeUnlitFlags(named.steel, "steel");
   assert.equal(named.wood, crate.userData.materials.lod1.wood);
   assert.equal(named.brass, crate.userData.materials.lod1.brass);
 
@@ -888,6 +903,9 @@ test("v0.47 pins fog/toneMapped false on unique color-only MeshBasics; envelope 
   for (const c of crate.userData.colliders) {
     assert.equal(c.material.fog, true, "collider MeshBasic keeps r170 fog default");
     assert.equal(c.material.toneMapped, true, "collider MeshBasic keeps r170 toneMapped default");
+    assert.equal(c.material.transparent, true, "collider MeshBasic keeps authored transparent");
+    assert.equal(c.material.opacity, 0.55, "collider MeshBasic keeps authored opacity");
+    assert.equal(c.material.depthTest, false, "collider MeshBasic keeps authored depthTest");
     assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
   }
 });
@@ -918,26 +936,59 @@ test("L4/L5 activity smoke still passes after MeshBasic flag pin", () => {
   assert.equal(drive.ok, true);
   assert.equal(drive.turns, 1);
   assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
-  assert.equal(fastener.material.fog, false, "L5 drive does not restore fog");
-  assert.equal(fastener.material.toneMapped, false, "L5 drive does not restore toneMapped");
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
   assert.equal(fastener.raycast, noopColorOnlyVisualRaycast);
+});
+
+test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that still passes isColorOnlyUnlitBasic", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.fog, true, "r170 MeshBasicMaterial defaults fog true");
+  assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
+  assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
+
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.DoubleSide,
+  });
+  assert.equal(isColorOnlyUnlitBasic(wrong), true, "transparent DoubleSide color-only still passes the gate");
+  assert.equal(wrong.transparent, true);
+  assert.equal(wrong.opacity, 0.5);
+  assert.equal(wrong.depthWrite, false);
+  assert.equal(wrong.depthTest, false);
+  assert.equal(wrong.side, THREE.DoubleSide);
+  pinColorOnlyUnlitBasicFlags(wrong);
+  assertQuestSafeUnlitFlags(wrong, "deliberately wrong color-only MeshBasic");
 });
 
 test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped, lit, morph, colliders, shared blocked", () => {
   const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
-  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
-  const std = new THREE.MeshStandardMaterial();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    transparent: true,
+    opacity: 0.5,
+    side: THREE.DoubleSide,
+  });
+  const std = new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.5, side: THREE.DoubleSide });
   assert.equal(colorOnly.fog, true);
   assert.equal(colorOnly.toneMapped, true);
   pinColorOnlyUnlitBasicFlags(colorOnly);
   pinColorOnlyUnlitBasicFlags(mapped);
   pinColorOnlyUnlitBasicFlags(std);
-  assert.equal(colorOnly.fog, false);
-  assert.equal(colorOnly.toneMapped, false);
+  assertQuestSafeUnlitFlags(colorOnly);
   assert.equal(mapped.fog, true, "mapped MeshBasic stays r170 fog default");
   assert.equal(mapped.toneMapped, true, "mapped MeshBasic stays r170 toneMapped default");
+  assert.equal(mapped.transparent, true, "mapped MeshBasic stays authored transparent");
+  assert.equal(mapped.opacity, 0.5, "mapped MeshBasic stays authored opacity");
+  assert.equal(mapped.side, THREE.DoubleSide, "mapped MeshBasic stays authored DoubleSide");
   assert.equal(std.fog, true, "MeshStandard stays r170 fog default");
   assert.equal(std.toneMapped, true, "MeshStandard stays r170 toneMapped default");
+  assert.equal(std.transparent, true, "MeshStandard stays authored transparent");
+  assert.equal(std.side, THREE.DoubleSide, "MeshStandard stays authored DoubleSide");
 
   const root = new THREE.Group();
   const body = new THREE.Group();
@@ -966,14 +1017,19 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   body.add(mappedMesh, colorMesh, morph, sharedVisual);
   root.add(body, collider, sharedCollider);
   pinColorOnlyVisualMaterialFlags(root);
-  assert.equal(colorMesh.material.fog, false);
-  assert.equal(colorMesh.material.toneMapped, false);
+  assertQuestSafeUnlitFlags(colorMesh.material, "entity helper color-only");
   assert.equal(mapped.fog, true, "mapped MeshBasic stays default via entity helper");
   assert.equal(mapped.toneMapped, true);
+  assert.equal(mapped.transparent, true, "mapped MeshBasic stays authored transparent via entity helper");
+  assert.equal(mapped.side, THREE.DoubleSide, "mapped MeshBasic stays authored DoubleSide via entity helper");
   assert.equal(morph.material.fog, true, "morph color-only MeshBasic is skipped");
   assert.equal(morph.material.toneMapped, true);
+  assert.equal(morph.material.transparent, false, "morph color-only MeshBasic keeps r170 transparent default");
+  assert.equal(morph.material.side, THREE.FrontSide, "morph color-only MeshBasic keeps r170 FrontSide default");
   assert.equal(collider.material.fog, true, "collider MeshBasic stays default");
   assert.equal(collider.material.toneMapped, true);
   assert.equal(sharedVisual.material.fog, true, "shared collider material stays default");
   assert.equal(sharedVisual.material.toneMapped, true, "shared collider material stays default");
+  assert.equal(sharedVisual.material.transparent, false, "shared collider material stays unpinned");
+  assert.equal(sharedVisual.material.side, THREE.FrontSide, "shared collider material stays unpinned FrontSide");
 });
