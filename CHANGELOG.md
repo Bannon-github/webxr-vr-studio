@@ -2,13 +2,210 @@
 
 All notable changes to this knowledge base are documented here.
 
-## [0.17.0] — 2026-09-11
+## [0.50.0] — 2026-09-16
 
 ### Added
 
 - [Horizon Store gate](docs/shipping/horizon-store/) — agent-pluggable requirements checklist, disqualification patterns, and WebXR vs native path split (Quest 3; Meta VRC/policy cites; verify-on-fetch TODOs; not an approval guarantee)
 - [App interrogation](studio/app-interrogation.md) + [brief template/schema](studio/briefs/_template/) — ordered question stream → filled brief
 - [ADR 0006](studio/adr/0006-store-gate-before-build.md) — no app scaffold until brief + store-gate pass
+## [0.49.0] — 2026-09-16
+
+### Changed
+
+- `crate-toolbox` **v0.47.0** L3 packaging/perf UPGRADE: after the v0.46 visual raycast disable, pin `fog = false` and `toneMapped = false` on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances). Mapped / lit / colliders stay r170 defaults. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10 unchanged. Headset ms / FFR still unmeasured.
+
+## [0.48.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.46.0** L3 packaging/perf UPGRADE: after the v0.45 static matrix freeze, disable `Mesh.raycast` on packed color-only unlit MeshBasic visuals (body + lid/latch/tool + fastener; named no-op). Colliders keep `Mesh.prototype.raycast`. Measured 13 raycast-off / 5 collider default. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, frozen 3 / live 10 unchanged. Headset ms / FFR still unmeasured.
+
+## [0.47.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.45.0** L3 packaging/perf UPGRADE: after one `updateMatrixWorld(true)`, freeze `matrixAutoUpdate` on static packed color-only MeshBasic body LOD leaves. Measured 3 frozen / 10 live (lid/latch/tool/fastener stay updating). Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216 unchanged. Headset ms / FFR still unmeasured.
+
+## [0.46.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.44.0** L3 packaging/perf UPGRADE: quantize Float32 `position` to Three r170 `Float16BufferAttribute` (WebGL2 `HALF_FLOAT`) on color-only unlit MeshBasic LOD/fastener geometries after Uint16 compact and before `onUpload` CPU-array release. Pre-upload draws 6 / 4 / 2, tris 240 / 96 / 24 unchanged; attrBytes 4200 → 2820 / 1776 → 1176 / 720 → 432; fastener 360 → 216. Post-upload CPU attrBytes → 0. Colliders stay Float32. Headset ms / FFR still unmeasured.
+
+## [0.45.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.43.0** L3 packaging/perf UPGRADE: after GPU upload, release CPU typed arrays on color-only unlit MeshBasic LOD/fastener geometries (`StaticDrawUsage` + Three r170 `onUpload`). Pre-upload draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 4200 / 1776 / 720 unchanged; post-upload CPU attrBytes → 0. Colliders keep arrays. Headset ms / FFR still unmeasured.
+
+## [0.44.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.42.0** L3 packaging/perf UPGRADE: share identical color-only unlit MeshBasic instances across LOD levels when the midtone hex matches (procedural; unique instances 6 → 3). Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 4200 / 1776 / 720 unchanged. Packaged hex-dedupe skipped. Headset ms / FFR still unmeasured.
+
+## [0.43.0] — 2026-09-15
+
+### Changed
+
+- `crate-toolbox` **v0.41.0** L3 packaging/perf UPGRADE: compact lingering Uint32 indices to Uint16 after unused-attr strip (procedural + packaged helper); fastener (outside LOD merge) gets the same strip + compact. LOD attrBytes stay 4200 / 1776 / 720 (already Uint16); fastener 840 → 360. Headset ms / FFR still unmeasured.
+
+## [0.42.0] — 2026-09-14
+
+### Changed
+
+- `crate-toolbox` **v0.40.0** L3 packaging/perf UPGRADE: strip unused `uv` / `normal` after same-material concat + coincident weld on color-only unlit MeshBasic (procedural + packaged helper). Attribute bytes 8800 → 4200 (LOD0), 3776 → 1776 (LOD1), 1680 → 720 (LOD2); draws 6 / 4 / 2 and tris 240 / 96 / 24 unchanged. Headset ms / FFR still unmeasured.
+
+## [0.41.0] — 2026-09-14
+
+### Changed
+
+- `crate-toolbox` **v0.39.0** L3 packaging/perf UPGRADE: weld coincident vertices after same-material concat (procedural + packaged helper). Unique verts 440 → 230 (LOD0) and 192 → 100 (LOD1); tris 240 / 96 / 24 and draws 6 / 4 / 2 unchanged. Headset ms / FFR still unmeasured.
+
+## [0.40.0] — 2026-09-14
+
+### Changed
+
+- `crate-toolbox` **v0.38.0** L3 packaging/perf UPGRADE: packaged GLB ingest applies the same load-time same-material mesh merge as procedural v0.37, within each discovered `lod0`/`lod1`/`lod2` group. Unit/mock 3 MeshBasic → 1 (tris unchanged). Procedural draws stay 6/4/2. Headset ms / FFR still unmeasured.
+
+## [0.39.0] — 2026-09-14
+
+### Changed
+
+- `crate-toolbox` **v0.37.0** L3 packaging/perf UPGRADE: procedural LOD0/LOD1 same-material mesh merge within each static lodGroup (wood/woodDark/handleMat share one MeshBasic). Measured draws 14 → 6 (LOD0) and 8 → 4 (LOD1); tris unchanged. Packaged v0.36 LOD visibility left intact. Headset ms / FFR still unmeasured.
+
+## [0.38.0] — 2026-09-14
+
+### Changed
+
+- `crate-toolbox` **v0.36.0** L3 packaging/perf UPGRADE: packaged GLB ingest wires `lod0` / `lod1` / `lod2` (or `userData.lodLevel`) into `userData.lod` and shows only one level. Missing names fail soft (no fake LODs). Procedural path unchanged. Headset ms / FFR still unmeasured.
+
+## [0.37.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.35.0** L3 packaging/perf UPGRADE: procedural LOD0 hero meshes drop the 256² albedo `map` and use color-only unlit `MeshBasicMaterial` (wood/handle `0x633318`, brass `0xBE7E31`, steel `0xC1C3C9`). LOD1 stays color-only MeshBasic (v0.30); LOD2 stays color-only MeshBasic (v0.29). Unique canvases 3 → 0. Same draws / tris as v0.34. Headset ms / FFR still unmeasured.
+
+## [0.36.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.34.0** L3 packaging/perf UPGRADE: procedural LOD0 hero meshes switch from albedo-only MeshStandard to unlit `MeshBasicMaterial` with the same 256² wood / brass / steel albedo maps (no roughness/metalness). LOD1 stays color-only MeshBasic (v0.30); LOD2 stays color-only MeshBasic (v0.29). Unique canvases stay 3. Same draws / tris as v0.33. Headset ms / FFR still unmeasured.
+
+## [0.35.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.33.0** L3 packaging/perf UPGRADE: procedural LOD0 MeshStandard drops packed ORM and becomes albedo-only (256² albedo; constant wood/brass/steel ORM-midtone roughness/metalness). LOD1 stays color-only MeshBasic (v0.30); LOD2 stays color-only MeshBasic (v0.29). Unique canvases 6 → 3. Same draws / tris as v0.32. Headset ms / FFR still unmeasured.
+
+## [0.34.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.32.0** L3 packaging/perf UPGRADE: procedural LOD0 MeshStandard drops `normalMap` while keeping 256² albedo + ORM. LOD1 stays color-only MeshBasic (v0.30); LOD2 stays color-only MeshBasic (v0.29). Unique canvases 9 → 6. Same draws / tris as v0.31. Headset ms / FFR still unmeasured.
+
+## [0.33.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.31.0** L3 packaging/perf UPGRADE: procedural LOD0 hero maps drop from 512² → 256² while staying MeshStandard with albedo + ORM + `normalMap` at full modest `normalScale`. LOD1 stays color-only MeshBasic (v0.30); LOD2 stays color-only MeshBasic (v0.29). Unique canvases stay 9. Same draws / tris as v0.30. Headset ms / FFR still unmeasured.
+
+## [0.32.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.30.0** L3 packaging/perf UPGRADE: LOD1 mid body / lid / latch / tool stub drop the albedo `map` and use color-only unlit `MeshBasicMaterial` (wood midtone `0x633318`, brass midtone `0xBE7E31`). LOD0 stays 512² albedo+ORM+normal MeshStandard; LOD2 stays color-only MeshBasic (v0.29). Unique canvases 11 → 9. Same draws / tris as v0.29. Headset ms / FFR still unmeasured.
+
+## [0.31.0] — 2026-09-13
+
+### Changed
+
+- `crate-toolbox` **v0.29.0** L3 packaging/perf UPGRADE: LOD2 far body + lid drop the albedo `map` and use color-only unlit `MeshBasicMaterial` (wood midtone `0x633318`). LOD0 stays 512² albedo+ORM+normal MeshStandard; LOD1 stays 256² MeshBasic (v0.28). Unique canvases stay 11. Same draws / tris as v0.28. Headset ms / FFR still unmeasured.
+
+## [0.30.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.28.0** L3 packaging/perf UPGRADE: LOD1 body / lid / latch / tool stub switch from albedo-only `MeshStandardMaterial` to unlit `MeshBasicMaterial` with the same 256² wood / brass albedos (no roughness/metalness uniforms). LOD0 stays 512² albedo+ORM+normal MeshStandard; LOD2 stays 256² MeshBasic (v0.27). Unique canvases stay 11. Same draws / tris as v0.27. Headset ms / FFR still unmeasured.
+
+## [0.29.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.27.0** L3 packaging/perf UPGRADE: LOD2 far body + lid switch from albedo-only `MeshStandardMaterial` to unlit `MeshBasicMaterial` with the same 256² wood albedo (no roughness/metalness uniforms). LOD0 stays 512² albedo+ORM+normal MeshStandard; LOD1 stays 256² albedo-only MeshStandard (v0.26). Unique canvases stay 11. Same draws / tris as v0.26. Headset ms / FFR still unmeasured.
+
+## [0.28.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.26.0** L3 packaging/perf UPGRADE: LOD1 and LOD2 procedural materials bind half-resolution (256²) albedo maps instead of the shared 512² L2 albedos. LOD0 stays 512² albedo+ORM+normal at full modest `normalScale`; mid/far stay albedo-only (v0.25 constants). Unique canvases 9 → 11 (extra 256² wood/brass albedos). Same draws / tris as v0.25. Headset ms / FFR still unmeasured.
+
+## [0.27.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.25.0** L3 packaging/perf UPGRADE: LOD1 visual materials omit packed ORM (`roughnessMap`/`metalnessMap`) and use constant wood-ORM-midtone roughness 220/255 + metalness 8/255 (wood/handle) and brass-ORM-midtone roughness 95/255 + metalness 230/255 (latch). LOD0 stays albedo+ORM+normal at full modest `normalScale`; LOD2 stays albedo-only (v0.23). Same draws / tris / 9 canvases as v0.24. Headset ms / FFR still unmeasured.
+
+## [0.26.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.24.0** L3 packaging/perf UPGRADE: LOD1 visual materials omit `normalMap` (keep albedo + packed ORM). LOD0 stays albedo+ORM+normal at full modest `normalScale`; LOD2 stays albedo-only (v0.23). Same draws / tris / 9 canvases as v0.23. Headset ms / FFR still unmeasured.
+
+## [0.25.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.23.0** L3 packaging/perf UPGRADE: LOD2 visual materials omit packed ORM (`roughnessMap`/`metalnessMap`) and use constant wood-ORM-midtone roughness 220/255 + metalness 8/255 (albedo-only far crate + lid). LOD0/1 keep albedo+ORM+normal (LOD1 half `normalScale`). Same draws / tris / 9 canvases as v0.22. Headset ms / FFR still unmeasured.
+
+## [0.24.0] — 2026-09-12
+
+### Changed
+
+- `crate-toolbox` **v0.22.0** Quest 3 shipping/perf gate: present-path XR framebuffer scale factor clamp to 1 in `examples/interactive-prop` (`sessionstart` after 90/72 + FFR + v0.15 pixel-ratio clamp + v0.16 MSAA-off verify + v0.17 NoToneMapping + v0.18 IBL off + v0.19 directional off + v0.20 ambient-only fill + v0.21 anisotropy clamp; save last-set / lookdev default, `setFramebufferScaleFactor(1)`; r170 has no getter and cannot rebuild the current layer while presenting — also set 1 at renderer setup; restore lookdev scale on `sessionend`). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
+## [0.23.0] — 2026-09-11
+
+### Changed
+
+- `crate-toolbox` **v0.21.0** Quest 3 shipping/perf gate: present-path texture anisotropy clamp to 1 in `examples/interactive-prop` (`sessionstart` after 90/72 + FFR + v0.15 pixel-ratio clamp + v0.16 MSAA-off verify + v0.17 NoToneMapping + v0.18 IBL off + v0.19 directional off + v0.20 ambient-only fill; walk toolbox / scene maps, save `.anisotropy`, write 1; restore lookdev anisotropy on `sessionend`). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
+## [0.22.0] — 2026-09-11
+
+### Changed
+
+- `crate-toolbox` **v0.20.0** Quest 3 shipping/perf gate: present-path ambient-only fill (HemisphereLight off + one `AmbientLight` at intensity 0.4) in `examples/interactive-prop` (`sessionstart` after 90/72 + FFR + v0.15 pixel-ratio clamp + v0.16 MSAA-off verify + v0.17 NoToneMapping + v0.18 IBL off + v0.19 directional off; hemi `visible = false` + intensity 0; restore lookdev hemi and disable/detach the present-only ambient on `sessionend`). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
+## [0.21.0] — 2026-09-11
+
+### Changed
+
+- `crate-toolbox` **v0.19.0** Quest 3 shipping/perf gate: present-path directional / punctual light off (hemisphere-only) in `examples/interactive-prop` (`sessionstart` after 90/72 + FFR + v0.15 pixel-ratio clamp + v0.16 MSAA-off verify + v0.17 NoToneMapping + v0.18 IBL off; `sun.visible = false` + intensity 0; restore lookdev visible + intensity on `sessionend`). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
+## [0.20.0] — 2026-09-11
+
+### Changed
+
+- `crate-toolbox` **v0.18.0** Quest 3 shipping/perf gate: present-path IBL / `scene.environment` off in `examples/interactive-prop` (`sessionstart` after 90/72 + FFR + v0.15 pixel-ratio clamp + v0.16 MSAA-off verify + v0.17 NoToneMapping; null `scene.environment` + intensity 0; restore the saved PMREM + lookdev intensity on `sessionend`, do not dispose). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
+## [0.19.0] — 2026-09-11
+
+### Changed
+
+- `crate-toolbox` **v0.17.0** Quest 3 shipping/perf gate: present-path `NoToneMapping` in `examples/interactive-prop` (`sessionstart` after 90/72 + FFR + v0.15 pixel-ratio clamp + v0.16 MSAA-off verify; restore lookdev `ACESFilmicToneMapping` + prior `toneMappingExposure` on `sessionend`). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
+## [0.18.0] — 2026-09-11
+
+### Changed
+
+- `crate-toolbox` **v0.16.0** Quest 3 shipping/perf gate: present-path WebGL antialias / MSAA off in `examples/interactive-prop` (constructor `antialias: false` so Three r170 `XRWebGLLayer` inherits MSAA off; session helpers verify after 90/72 + FFR + v0.15 pixel-ratio clamp). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
+
+## [0.17.0] — 2026-09-11
+
+### Changed
+
+- `crate-toolbox` **v0.15.0** Quest 3 shipping/perf gate: present-path WebGL pixel-ratio clamp in `examples/interactive-prop` (`setPixelRatio(1)` on `sessionstart` after 90/72 + FFR 0.75; restore saved desktop ratio + `setSize` on `sessionend`). Same L0–L5. Draws / tris unchanged. Headset ms / FFR still unmeasured.
 
 ## [0.16.0] — 2026-09-10
 

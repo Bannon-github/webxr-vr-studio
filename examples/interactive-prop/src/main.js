@@ -57,6 +57,27 @@ import {
   sampleQuest3Diagnostics,
   toggleQuest3Diagnostics,
 } from "./quest3-diagnostics.js";
+import {
+  applyPresentPixelRatioClamp,
+  resolveDesktopPixelRatio,
+} from "./present-pixel-ratio.js";
+import {
+  applyPresentAntialias,
+  resolveQuest3PresentAntialias,
+} from "./present-antialias.js";
+import { applyPresentToneMapping } from "./present-tone-mapping.js";
+import { applyPresentEnvironment } from "./present-environment.js";
+import { applyPresentDirectionalLight } from "./present-directional-light.js";
+import {
+  applyPresentAmbientFill,
+  QUEST3_XR_AMBIENT_COLOR,
+  QUEST3_XR_AMBIENT_INTENSITY,
+} from "./present-ambient-fill.js";
+import { applyPresentAnisotropy } from "./present-anisotropy.js";
+import {
+  applyPresentFramebufferScale,
+  QUEST3_XR_FRAMEBUFFER_SCALE,
+} from "./present-framebuffer-scale.js";
 import behaviorTemplate from "./behavior.json";
 import { tryLoadPackagedToolbox } from "./packaged-visual.js";
 
@@ -76,13 +97,25 @@ const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerH
 camera.position.set(0, 1.5, 0.85);
 camera.lookAt(0, 1.0, -0.55);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// Present-path constructor: Three r170 copies this into XRWebGLLayer.
+// Cannot flip on a live context — see present-antialias.js.
+const renderer = new THREE.WebGLRenderer({
+  antialias: resolveQuest3PresentAntialias(),
+  alpha: false,
+});
+renderer.setPixelRatio(resolveDesktopPixelRatio(window.devicePixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.xr.enabled = true;
+// Present-path XR eye-buffer scale (v0.22). Three r170 snapshots this in
+// setSession *before* sessionstart (and warns if set while presenting).
+// Set 1 here so the current layer inherits the clamp. Session helpers
+// still save/apply/restore; r170 has no getter.
+if (typeof renderer.xr.setFramebufferScaleFactor === "function") {
+  renderer.xr.setFramebufferScaleFactor(QUEST3_XR_FRAMEBUFFER_SCALE);
+}
 document.body.appendChild(renderer.domElement);
 
 const sessionInit = { optionalFeatures: ["hand-tracking", "local-floor"] };
@@ -92,7 +125,8 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 pmrem.dispose();
 
-scene.add(new THREE.HemisphereLight(0xf0e6d4, 0x2a1c12, 0.55));
+const hemi = new THREE.HemisphereLight(0xf0e6d4, 0x2a1c12, 0.55);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff4e0, 0.9);
 sun.position.set(2.2, 4.4, 1.4);
 scene.add(sun);
@@ -159,7 +193,7 @@ function refreshLodStatus() {
   lodStatus.textContent = `${lod.mode} / ${lod.current} · ${stats.tris} tris · ${stats.draws} draws`;
 }
 refreshLodStatus();
-console.info("[crate-toolbox] LOD geometry stats (not Quest frame time)", toolbox.userData.lod.stats);
+console.info("[crate-toolbox] LOD geometry stats (not Quest frame time)", toolbox.userData.lod?.stats);
 
 const quest3Panel = document.getElementById("quest3-diag");
 initQuest3Diagnostics({
@@ -563,10 +597,10 @@ window.addEventListener("keydown", (e) => {
       setAction("nack — crate must be open to return");
     }
   }
-  if (e.key === "0") {
+  if (e.key === "0" && toolbox.userData.lod) {
     toolbox.userData.lod.mode = "auto";
   }
-  if (e.key === "1" || e.key === "2" || e.key === "3") {
+  if ((e.key === "1" || e.key === "2" || e.key === "3") && toolbox.userData.lod) {
     toolbox.userData.lod.mode = "force";
     setToolboxLod(toolbox, Number(e.key) - 1);
   }
@@ -583,7 +617,32 @@ window.addEventListener("resize", () => {
  * Quest 3 Browser defaults: 90 Hz if the UA lists it (else 72), FFR medium-high.
  * Real APIs only — XRSession.supportedFrameRates / updateTargetFrameRate (MDN),
  * XRWebGLLayer.fixedFoveation via Three WebXRManager.setFoveation.
- * Do not require 120 / 207 / 240 Hz.
+ * Pixel-ratio clamp (1 while presenting), present-path antialias/MSAA off,
+ * present-path NoToneMapping, present-path IBL/environment off,
+ * present-path directional/punctual off, present-path ambient-only
+ * fill (hemisphere off + one AmbientLight), present-path texture
+ * anisotropy clamp to 1, then present-path XR framebuffer scale
+ * clamp to 1 are applied after this on sessionstart.
+ * Antialias is constructor-time (Three copies getContextAttributes into
+ * XRWebGLLayer); helpers verify only. Tone mapping is a live renderer
+ * property (save ACES + exposure, set NoToneMapping). IBL: r170
+ * environmentIntensity is a post-sample multiply, so sessionstart nulls
+ * scene.environment (do not dispose the PMREM) and writes intensity 0;
+ * restore both on sessionend. Directional: r170 still counts a visible
+ * sun with intensity 0 toward NUM_DIR_LIGHTS, so sessionstart hides it
+ * (visible=false + intensity 0). Ambient fill: r170 still counts a
+ * visible HemisphereLight with intensity 0 toward NUM_HEMI_LIGHTS, so
+ * sessionstart hides it (visible=false + intensity 0) and enables one
+ * reused AmbientLight at intensity 0.4; restore hemi and disable/detach
+ * ambient on sessionend. Anisotropy: lookdev / packaged GLB may use GPU
+ * max; sessionstart clamps bound maps to 1 and sessionend restores the
+ * saved values (not per-frame; do not re-upload). Framebuffer scale:
+ * r170 has setFramebufferScaleFactor only (no getter; private default
+ * 1). sessionstart (after v0.15–v0.21) saves last-set / lookdev 1 and
+ * writes 1; a set while presenting does not rebuild the current layer.
+ * Construction-time set above is what the current session inherits.
+ * sessionend restores the saved lookdev scale first. Do not require
+ * 120 / 207 / 240 Hz.
  */
 function applyQuest3SessionDefaults(session) {
   if (!session) return;
@@ -611,11 +670,121 @@ function applyQuest3SessionDefaults(session) {
 }
 
 let xrSession = null;
+let savedDesktopPixelRatio = null;
+let savedDesktopAntialias = null;
+let savedDesktopToneMapping = null;
+let savedDesktopToneMappingExposure = null;
+let savedDesktopEnvironment = null;
+let savedDesktopEnvironmentIntensity = null;
+let savedDesktopDirectionalVisible = null;
+let savedDesktopDirectionalIntensity = null;
+let presentAmbient = null;
+let savedDesktopHemisphereVisible = null;
+let savedDesktopHemisphereIntensity = null;
+let presentAnisotropyHandle = null;
+let savedDesktopFramebufferScale = null;
 renderer.xr.addEventListener("sessionstart", () => {
   resumeAudio();
   const session = renderer.xr.getSession();
   xrSession = session;
   applyQuest3SessionDefaults(session);
+  // Present-path clamp only (not per-frame). Save desktop/2D ratio first.
+  const clamp = applyPresentPixelRatioClamp(renderer, { presenting: true });
+  savedDesktopPixelRatio = clamp.savedRatio;
+  // After pixel-ratio: verify MSAA-off policy (context is immutable).
+  const aa = applyPresentAntialias(renderer, { presenting: true });
+  savedDesktopAntialias = aa.savedAntialias;
+  console.info(
+    "[interactive-prop] present antialias",
+    aa.antialias,
+    "applied",
+    aa.applied,
+    "contextImmutable",
+    aa.contextImmutable
+  );
+  // After antialias: cheaper present-path NoToneMapping (not per-frame).
+  const tm = applyPresentToneMapping(renderer, { presenting: true });
+  savedDesktopToneMapping = tm.savedToneMapping;
+  savedDesktopToneMappingExposure = tm.savedExposure;
+  console.info(
+    "[interactive-prop] present toneMapping",
+    tm.toneMapping,
+    "exposure",
+    tm.exposure
+  );
+  // After tone mapping: drop present-path IBL sampling (not per-frame).
+  const env = applyPresentEnvironment(scene, { presenting: true });
+  savedDesktopEnvironment = env.savedEnvironment;
+  savedDesktopEnvironmentIntensity = env.savedIntensity;
+  console.info(
+    "[interactive-prop] present environment",
+    env.environment,
+    "intensity",
+    env.intensity,
+    "envMapCleared",
+    env.envMapCleared
+  );
+  // After IBL: drop present-path directional / punctual (not per-frame).
+  const dir = applyPresentDirectionalLight(sun, { presenting: true });
+  savedDesktopDirectionalVisible = dir.savedVisible;
+  savedDesktopDirectionalIntensity = dir.savedIntensity;
+  console.info(
+    "[interactive-prop] present directional visible",
+    dir.visible,
+    "intensity",
+    dir.intensity
+  );
+  // After directional: cheaper present-path ambient-only fill (not per-frame).
+  const fill = applyPresentAmbientFill(hemi, presentAmbient, {
+    presenting: true,
+    scene,
+    createAmbient: () => new THREE.AmbientLight(QUEST3_XR_AMBIENT_COLOR, QUEST3_XR_AMBIENT_INTENSITY),
+  });
+  presentAmbient = fill.ambient;
+  savedDesktopHemisphereVisible = fill.savedVisible;
+  savedDesktopHemisphereIntensity = fill.savedIntensity;
+  console.info(
+    "[interactive-prop] present ambient fill hemi visible",
+    fill.hemiVisible,
+    "hemi intensity",
+    fill.hemiIntensity,
+    "ambient visible",
+    fill.ambientVisible,
+    "ambient intensity",
+    fill.ambientIntensity
+  );
+  // After ambient fill: clamp present-path texture AF to 1 (not per-frame).
+  const aniso = applyPresentAnisotropy({
+    presenting: true,
+    roots: [toolbox, scene],
+    handle: presentAnisotropyHandle,
+  });
+  presentAnisotropyHandle = aniso.handle;
+  console.info(
+    "[interactive-prop] present anisotropy",
+    aniso.anisotropy,
+    "textures",
+    aniso.count
+  );
+  // After anisotropy: clamp present-path XR framebuffer scale to 1
+  // (not per-frame). r170 has no getter; a set while presenting does
+  // not rebuild the current eye buffer.
+  const fb = applyPresentFramebufferScale(renderer, {
+    presenting: true,
+    savedScale: savedDesktopFramebufferScale,
+    lastSetScale: savedDesktopFramebufferScale ?? QUEST3_XR_FRAMEBUFFER_SCALE,
+  });
+  savedDesktopFramebufferScale = fb.savedScale;
+  console.info(
+    "[interactive-prop] present framebufferScale",
+    fb.scale,
+    "saved",
+    fb.savedScale,
+    "presentingLocked",
+    fb.presentingLocked,
+    "getterAvailable",
+    fb.getterAvailable
+  );
   session?.addEventListener("inputsourceschange", onInputSourcesChange);
   session?.addEventListener("visibilitychange", onSessionVisibilityChange);
 });
@@ -626,6 +795,57 @@ renderer.xr.addEventListener("sessionend", () => {
     xrSession = null;
   }
   releaseAllHolds();
+  // Last applied on sessionstart — restore first (reverse-safe).
+  applyPresentFramebufferScale(renderer, {
+    presenting: false,
+    savedScale: savedDesktopFramebufferScale,
+  });
+  savedDesktopFramebufferScale = null;
+  applyPresentAnisotropy({
+    presenting: false,
+    handle: presentAnisotropyHandle,
+  });
+  presentAnisotropyHandle = null;
+  applyPresentPixelRatioClamp(renderer, {
+    presenting: false,
+    savedRatio: savedDesktopPixelRatio,
+    windowSize: { width: window.innerWidth, height: window.innerHeight },
+  });
+  savedDesktopPixelRatio = null;
+  applyPresentAntialias(renderer, {
+    presenting: false,
+    savedAntialias: savedDesktopAntialias,
+  });
+  savedDesktopAntialias = null;
+  applyPresentToneMapping(renderer, {
+    presenting: false,
+    savedToneMapping: savedDesktopToneMapping,
+    savedExposure: savedDesktopToneMappingExposure,
+  });
+  savedDesktopToneMapping = null;
+  savedDesktopToneMappingExposure = null;
+  applyPresentEnvironment(scene, {
+    presenting: false,
+    savedEnvironment: savedDesktopEnvironment,
+    savedIntensity: savedDesktopEnvironmentIntensity,
+  });
+  savedDesktopEnvironment = null;
+  savedDesktopEnvironmentIntensity = null;
+  applyPresentDirectionalLight(sun, {
+    presenting: false,
+    savedVisible: savedDesktopDirectionalVisible,
+    savedIntensity: savedDesktopDirectionalIntensity,
+  });
+  savedDesktopDirectionalVisible = null;
+  savedDesktopDirectionalIntensity = null;
+  applyPresentAmbientFill(hemi, presentAmbient, {
+    presenting: false,
+    savedVisible: savedDesktopHemisphereVisible,
+    savedIntensity: savedDesktopHemisphereIntensity,
+    scene,
+  });
+  savedDesktopHemisphereVisible = null;
+  savedDesktopHemisphereIntensity = null;
   recordQuest3SessionEnd();
 });
 document.addEventListener("visibilitychange", onDocumentVisibilityChange);

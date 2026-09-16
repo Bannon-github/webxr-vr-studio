@@ -1,0 +1,45 @@
+{
+  "id": "crate-toolbox",
+  "version": "0.26.0",
+  "displayName": "Crate toolbox",
+  "targetDevice": "quest3",
+  "layersComplete": ["L0", "L1", "L2", "L3", "L4", "L5"],
+  "layerTarget": "L5",
+  "interactions": [
+    "hover",
+    "hover-hand",
+    "grab",
+    "use-latch",
+    "use-lid",
+    "relatch-cancel",
+    "grab-tool",
+    "drive-fastener",
+    "return-tool"
+  ],
+  "deps": ["examples/interactive-prop"],
+  "perf": {
+    "frameHz": 90,
+    "frameHzFallback": 72,
+    "lod0Tris": 240,
+    "lod1Tris": 96,
+    "lod2Tris": 24,
+    "lod0Draws": 14,
+    "lod1Draws": 8,
+    "lod2Draws": 2,
+    "fastenerTris": 12,
+    "fastenerDraws": 1,
+    "drawCallsEstimate": 15,
+    "lodSwitchMeters": { "lod1": 2.4, "lod2": 4.5 },
+    "textureMax": 1024,
+    "texturePref": 512,
+    "lodAlbedoSize": 256,
+    "collider": "box hulls (grab/latch/lid/tool/fastener), not hero LOD meshes",
+    "notes": "v0.26 L3 packaging/perf UPGRADE: procedural LOD1 and LOD2 bind half-resolution (256²) albedo maps instead of the shared 512² L2 albedos. LOD0 stays full photoreal at 512² (albedo + ORM + normalMap at modest full normalScale). Mid/far stay albedo-only as in v0.25 (no normalMap, no packed ORM). Wood/handle use constant wood-ORM-midtone roughness 220/255 and metalness 8/255; brass latch uses brass-ORM-midtone roughness 95/255 and metalness 230/255. Unique canvases 11 (9 at 512² + wood/brass 256² albedo). Fastener is not an LOD mesh and stays on shared LOD0 brass. Runtime prefers a packaged GLB when present and does not strip or downsample maps at ingest — author LOD1/LOD2 albedo at ≤256² (and omit normalTexture + ORM) per docs/performance/ktx2-quest3-packaging.md. v0.25 LOD1 albedo-only, v0.24 LOD1 no-normals, v0.23 LOD2 ORM drop, v0.22 framebuffer scale, v0.21 anisotropy clamp, v0.20 ambient-only fill, v0.19 directional off, v0.18 IBL off, v0.17 NoToneMapping, v0.16 MSAA off, v0.15 pixel-ratio clamp, v0.14 LOD1 normalScale, v0.13 LOD2 no-normals, v0.12 normals, v0.11 visibility-loss release, v0.10 tracking-loss / null-pose release, v0.9 hand hover-before-pinch, and v0.8 allocation scrub kept (no per-frame new THREE.* when P overlay is off). Runtime probes /packaged/crate-toolbox.glb and falls back to procedural canvases. No GLB in this revision. LOD draws unchanged (14/8/2 + fastener 1). Quest 3 frame time / FFR still unmeasured."
+  },
+  "source": {
+    "kind": "procedural",
+    "runtime": "examples/interactive-prop",
+    "behavior": "behavior.json"
+  },
+  "variants": []
+}

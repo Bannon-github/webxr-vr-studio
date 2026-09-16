@@ -1,0 +1,25 @@
+# crate-toolbox v0.46.0
+
+L3 packaging/perf UPGRADE on the same `objectId`. No GLB. Not a new layer.
+
+- After v0.45 froze static body world-matrix auto-update, **`disableColorOnlyVisualRaycast` assigns a named no-op `mesh.raycast` (`noopColorOnlyVisualRaycast`) on packed color-only unlit MeshBasic visual meshes** (LOD0/1/2 body + lid/latch/tool + fastener). Procedural create and packaged ingest share the helper and call it after `freezeStaticColorOnlyWorldMatrices`. Does **not** merge meshes across `body` / `lidPivot` / `latchPivot` / `tool`, fold the fastener into an LOD batch (`fastener` / `fastenerMesh` stay outside `LOD_MERGE_SKIP_NAMES`), rewrite material type, invent a GLB, change matrix freeze, or change L4/L5 interaction. Named meshes `lidMesh` / `latchMesh` / `fastenerMesh` kept. The v0.37–v0.45 merge → weld → unused-attr strip → Uint16 compact → shared MeshBasic → Float16 → upload-release → matrix-freeze pipeline stays intact.
+- **Verified r170 API (do not assume):** `new Mesh().raycast === Mesh.prototype.raycast`. Assigning `mesh.raycast = noopColorOnlyVisualRaycast` is enough. Do **not** set `mesh.raycast = null` — Three throws if called. The empty named function returns without pushing intersections.
+- **Verified pick path (ADR 0004 / photoreal-realtime / `interaction.js`):** `collectPickables` gathers `userData.colliders` only; `firstHit` slab-tests collider AABB via `userData.size`. No `intersectObjects` on the crate path. Hover/grab do not need visual mesh triangle raycast. This pulse is a CPU fence if anything still walks hero/LOD/fastener triangles.
+- **Scope vs v0.45 matrix freeze:** freeze hits only static body leaves (3 frozen / 10 live). Raycast disable hits **all 13** color-only visual MeshBasics including lid/latch/tool/fastener. Pivots still animate; L5 still writes fastener transforms. Colliders keep `Mesh.prototype.raycast`.
+- **Gate (same as pack pipeline):** only color-only unlit MeshBasic. Skip `userData.collider` / `collider_*` names. Skip mapped / lit. Skip morph / interleaved geos (conservative).
+- **Measurement rule:** `userData.lod.stats.attrBytes` is the **pre-upload** CPU envelope (arrays still present at `attachToolboxLod`). After simulated / real GPU upload, live CPU attrBytes on those visuals → **0**; `BufferAttribute.count` (draws / tris / verts) stays. This pulse does not change that envelope.
+- **Measured** `userData.lod.stats` (Three.js index counts + `position.count` + attribute/index byte length via `countGroupStats`; colliders skipped; unit tests, **not** headset) plus `mesh.raycast` identity on the 13 visual MeshBasics:
+
+  | Level | Draws | Tris (index/3) | Unique verts (v0.39 weld) | attrBytes (pre-upload v0.44 Float16) | Unique MeshBasic | raycast |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | LOD0 | **6** | **240** | **230** | **2820** | wood + brass + steel | no-op (body + lid/latch/tool) |
+  | LOD1 | **4** | **96** | **100** | **1176** | same wood + same brass | no-op (body + lid/latch/tool) |
+  | LOD2 | **2** | **24** | **48** | **432** | same wood | no-op (body + lid) |
+  | Fastener (not LOD) | 1 | 12 | 24 | **216** | same brass | **no-op** (visual MeshBasic) |
+  | `drawCallsEstimate` (LOD0 + fastener) | **7** | | | | | |
+
+  Visual MeshBasic raycast-off **13**. Visual MeshBasic default raycast **0**. Colliders keep `Mesh.prototype.raycast` **5**. Frozen MeshBasic stay **3** (body LOD0/1/2). Live MeshBasic stay **10** (lid/latch/tool LOD meshes + fastener). Unique procedural MeshBasic instances stay **3**. `userData.l2.uniqueMaterials` **3**. Draws / tris / unique verts / attrBytes / matrix freeze unchanged vs v0.45. After simulated upload, CPU attrBytes on those 13 visual geos → 0.
+- **Unit/mock evidence** (not headset): visual MeshBasics `raycast === noopColorOnlyVisualRaycast`; no-op pushes zero intersections; colliders `=== Mesh.prototype.raycast`; L4 `tryUse` closed→unlatched→open and L5 `tryDriveFastener` still mutate pivot / fastener transforms; `firstHit` / `collectPickables` still hit a collider AABB (use-target preference can choose latch vs grab). Packaged ingest of a mock `lod*` fixture disables body + lid/latch/tool + fastener raycast; fail-soft (no lod groups) still disables those visuals. Mapped / morph MeshBasic keep default raycast.
+- Named meshes required by tests stay: `lidMesh`, `latchMesh`, `fastenerMesh`. Unique canvases stay **0**. Color-only unlit MeshBasic on LOD0 / LOD1 / LOD2. `setToolboxLod` is still visibility-only. Geometry, collider names, and L4/L5 activity are the v0.4.0–v0.45.0 set. Session present-path chain (v0.15–v0.22) and v0.8 allocation scrub stay as they were. The v0.46 `behavior.json` sidecar is frozen next to this manifest (`source.behavior`) so the revision resolves without reading a later current sidecar.
+- **KTX2 / Basis** remains the packaging step when a DCC GLB lands. No GLB in this revision.
+- Quest 3 frame time / FFR still **unmeasured**. Do not treat this pulse as a 90 Hz pass. 90 Hz / 72 fallback are **requested**, not measured. Skipping triangle raycast on packed visuals is the intended delta; headset ms still **TODO**.

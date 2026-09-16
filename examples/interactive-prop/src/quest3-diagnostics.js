@@ -147,7 +147,7 @@ function paintBudgetOnce() {
   const l2 = getToolbox()?.userData?.l2;
   const pack = getToolbox()?.userData?.packaging;
   const tex = l2
-    ? `${l2.textureSize}² ${l2.maps} ×${l2.uniqueTextures} (authoring est.)`
+    ? `LOD0 color-only ${l2.lodMaterialClass?.[0] ?? "MeshBasic"} · LOD1 color-only ${l2.lodMaterialClass?.[1] ?? "MeshBasic"} / LOD2 color-only ${l2.lodMaterialClass?.[2] ?? "MeshBasic"} ×${l2.uniqueTextures} (authoring est.)`
     : "tex ≤1024²";
   const src = pack?.source ? ` · visual ${pack.source}` : "";
   const line = s0

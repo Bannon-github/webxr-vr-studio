@@ -1,0 +1,24 @@
+# crate-toolbox v0.45.0
+
+L3 packaging/perf UPGRADE on the same `objectId`. No GLB. Not a new layer.
+
+- After v0.44 quantized color-only positions to Float16, **`freezeStaticColorOnlyWorldMatrices` bakes one `entity.updateMatrixWorld(true)` then sets `matrixAutoUpdate = false` on static packed color-only unlit MeshBasic visual leaves that are not descendants of `lid` / `latch` / `tool` pivots**. Procedural create and packaged ingest share the helper. Does **not** merge meshes across `body` / `lidPivot` / `latchPivot` / `tool`, fold the fastener into an LOD batch (`fastener` / `fastenerMesh` stay outside `LOD_MERGE_SKIP_NAMES`), rewrite material type, invent a GLB, or change L4/L5 interaction. Named meshes `lidMesh` / `latchMesh` / `fastenerMesh` kept. The v0.37–v0.44 merge → weld → unused-attr strip → Uint16 compact → shared MeshBasic → Float16 → upload-release pipeline stays intact.
+- **Verified r170 API (do not assume):** `Object3D.matrixAutoUpdate` (default true via `DEFAULT_MATRIX_AUTO_UPDATE`); `updateMatrixWorld(force)` still composes `matrixWorld = parent.matrixWorld * matrix` when force / needsUpdate even if local auto-update is off. Do **not** set `matrixWorldAutoUpdate` false — crate grab still needs world matrices to follow the root. `firstHit` calls `updateWorldMatrix(true, false)` on colliders, which also respects `matrixAutoUpdate` for the local matrix — colliders stay live.
+- **Fastener (verified in-repo, not a hunch):** `applyFastenerVisual` writes `mesh.rotation.z` and `mesh.position.z` on the fastener MeshBasic itself. Freeze would stall L5 drive. Safe default applied: fastener stays `matrixAutoUpdate = true`. Lid / latch / tool meshes stay live because they sit under animated pivots (`lidPivot.name === "lid"`, `latchPivot.name === "latch"`, `tool.name === "tool"`).
+- **Raycast / LOD safety (verified in-repo):** `firstHit` / `collectPickables` use collider AABB slabs (`userData.size`), not visual `BufferGeometry` arrays. `setToolboxLod` is visibility-only. Collider hulls are **not** frozen. Frozen body leaves still follow root motion via parent world compose.
+- **Measurement rule:** `userData.lod.stats.attrBytes` is the **pre-upload** CPU envelope (arrays still present at `attachToolboxLod`). After simulated / real GPU upload, live CPU attrBytes on those visuals → **0**; `BufferAttribute.count` (draws / tris / verts) stays. This pulse does not change that envelope.
+- **Measured** `userData.lod.stats` (Three.js index counts + `position.count` + attribute/index byte length via `countGroupStats`; colliders skipped; unit tests, **not** headset) plus `matrixAutoUpdate` counts on the 13 visual MeshBasics:
+
+  | Level | Draws | Tris (index/3) | Unique verts (v0.39 weld) | attrBytes (pre-upload v0.44 Float16) | Unique MeshBasic | matrixAutoUpdate |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | LOD0 | **6** | **240** | **230** | **2820** | wood + brass + steel | body frozen; lid/latch/tool live |
+  | LOD1 | **4** | **96** | **100** | **1176** | same wood + same brass | body frozen; lid/latch/tool live |
+  | LOD2 | **2** | **24** | **48** | **432** | same wood | body frozen; lid live |
+  | Fastener (not LOD) | 1 | 12 | 24 | **216** | same brass | **live** (L5 visual) |
+  | `drawCallsEstimate` (LOD0 + fastener) | **7** | | | | | |
+
+  Frozen MeshBasic **3** (body LOD0/1/2). Live MeshBasic **10** (lid/latch/tool LOD meshes + fastener). Unique procedural MeshBasic instances stay **3**. `userData.l2.uniqueMaterials` **3**. Draws / tris / unique verts / attrBytes unchanged vs v0.44. After simulated upload, CPU attrBytes on those 13 visual geos → 0.
+- **Unit/mock evidence** (not headset): body LOD leaves `matrixAutoUpdate === false`; `lidMesh` / `latchMesh` / tool meshes / fastener `=== true`; colliders `=== true`; L4 `tryUse` closed→unlatched→open and L5 `tryDriveFastener` still mutate pivot / fastener transforms. Packaged ingest of a mock `lod*` fixture freezes only body leaves; fail-soft (no lod groups) still freezes the static body MeshBasic. Mapped MeshBasic stays live.
+- Named meshes required by tests stay: `lidMesh`, `latchMesh`, `fastenerMesh`. Unique canvases stay **0**. Color-only unlit MeshBasic on LOD0 / LOD1 / LOD2. `setToolboxLod` is still visibility-only. Geometry, collider names, and L4/L5 activity are the v0.4.0–v0.44.0 set. Session present-path chain (v0.15–v0.22) and v0.8 allocation scrub stay as they were. The v0.45 `behavior.json` sidecar is frozen next to this manifest (`source.behavior`) so the revision resolves without reading a later current sidecar.
+- **KTX2 / Basis** remains the packaging step when a DCC GLB lands. No GLB in this revision.
+- Quest 3 frame time / FFR still **unmeasured**. Do not treat this pulse as a 90 Hz pass. Fewer per-frame local-matrix updates on static body meshes is the intended delta; headset ms still **TODO**.

@@ -1,6 +1,15 @@
 import * as THREE from "three";
 import behaviorTemplate from "./behavior.json" with { type: "json" };
-import { getCrateL2Maps, L3_LOD1_NORMAL_SCALE_MUL, mappedStandard } from "./pbr-maps.js";
+import {
+  L3_LOD0_BRASS_COLOR,
+  L3_LOD0_STEEL_COLOR,
+  L3_LOD0_WOOD_COLOR,
+  L3_LOD1_BRASS_COLOR,
+  L3_LOD1_WOOD_COLOR,
+  L3_LOD2_WOOD_COLOR,
+  getCrateL2Maps,
+  mappedBasic,
+} from "./pbr-maps.js";
 
 /**
  * Procedural crate that follows ADR 0004: visual meshes, collider_* hulls,
@@ -31,9 +40,21 @@ function lodGroup(level) {
   return g;
 }
 
+function geometryAttrBytes(geo) {
+  let bytes = 0;
+  for (const name of Object.keys(geo.attributes)) {
+    const arr = geo.getAttribute(name)?.array;
+    if (arr) bytes += arr.byteLength;
+  }
+  if (geo.index?.array) bytes += geo.index.array.byteLength;
+  return bytes;
+}
+
 function countGroupStats(group) {
   let tris = 0;
   let draws = 0;
+  let verts = 0;
+  let attrBytes = 0;
   group.traverse((o) => {
     if (!o.isMesh || o.userData.collider) return;
     const geo = o.geometry;
@@ -42,9 +63,565 @@ function countGroupStats(group) {
     const pos = geo.getAttribute("position");
     if (idx) tris += idx.count / 3;
     else if (pos) tris += pos.count / 3;
+    if (pos) verts += pos.count;
+    attrBytes += geometryAttrBytes(geo);
     draws += 1;
   });
-  return { tris, draws };
+  return { tris, draws, verts, attrBytes };
+}
+
+/**
+ * Concatenate BufferGeometries that share the same attributes.
+ * Does not weld (call `weldCoincidentVertices` after) and does not
+ * copy BoxGeometry per-face groups (those would multiply GPU draws
+ * under a single material). Load-time only.
+ */
+function concatGeometries(geometries) {
+  if (!geometries.length) return null;
+  const first = geometries[0];
+  const names = Object.keys(first.attributes);
+  for (const g of geometries) {
+    if (Object.keys(g.attributes).length !== names.length) return null;
+    for (const name of names) {
+      const a = g.getAttribute(name);
+      const b = first.getAttribute(name);
+      if (!a || a.itemSize !== b.itemSize) return null;
+    }
+    if (Boolean(g.index) !== Boolean(first.index)) return null;
+  }
+
+  const merged = new THREE.BufferGeometry();
+  for (const name of names) {
+    const proto = first.getAttribute(name);
+    let length = 0;
+    for (const g of geometries) length += g.getAttribute(name).array.length;
+    const data = new proto.array.constructor(length);
+    let offset = 0;
+    for (const g of geometries) {
+      const arr = g.getAttribute(name).array;
+      data.set(arr, offset);
+      offset += arr.length;
+    }
+    merged.setAttribute(name, new THREE.BufferAttribute(data, proto.itemSize, proto.normalized));
+  }
+
+  if (first.index) {
+    let total = 0;
+    for (const g of geometries) total += g.index.count;
+    const index = new Uint32Array(total);
+    let offset = 0;
+    let vertexOffset = 0;
+    for (const g of geometries) {
+      const src = g.index.array;
+      for (let i = 0; i < src.length; i++) index[offset + i] = src[i] + vertexOffset;
+      offset += src.length;
+      vertexOffset += g.getAttribute("position").count;
+    }
+    merged.setIndex(new THREE.BufferAttribute(index, 1));
+  }
+  return merged;
+}
+
+/**
+ * Color-only unlit MeshBasic: no maps and no envMap (envMap samples
+ * normals). Those materials do not read `uv` / `normal` / `tangent`.
+ * Load-time only.
+ */
+export function isColorOnlyUnlitBasic(material) {
+  if (!material || Array.isArray(material) || !material.isMeshBasicMaterial) return false;
+  if (material.map || material.lightMap || material.aoMap) return false;
+  if (material.specularMap || material.alphaMap || material.envMap) return false;
+  return true;
+}
+
+/** Channels MeshBasic ignores when `isColorOnlyUnlitBasic` is true. */
+export const COLOR_ONLY_UNUSED_ATTRS = Object.freeze(["normal", "uv", "uv1", "uv2", "uv3", "tangent"]);
+
+/**
+ * Drop unused BufferGeometry attributes on color-only unlit MeshBasic.
+ * Keeps `position` (and `color` when `vertexColors` is set). Mapped or
+ * lit materials are left intact. Mutates in place. Load-time only —
+ * author may omit these in DCC; this is a safety net after merge/weld.
+ */
+export function stripUnusedColorOnlyAttributes(geometry, material) {
+  if (!geometry || !isColorOnlyUnlitBasic(material)) return geometry;
+  for (const name of COLOR_ONLY_UNUSED_ATTRS) {
+    if (geometry.getAttribute(name)) geometry.deleteAttribute(name);
+  }
+  if (!material.vertexColors && geometry.getAttribute("color")) {
+    geometry.deleteAttribute("color");
+  }
+  return geometry;
+}
+
+/**
+ * Copy a >16-bit index into Uint16 when `position.count` fits.
+ * No-op when there is no index, verts exceed 65535, or the index is
+ * already ≤2 bytes/element. Does not change triangle or vertex count.
+ * Load-time only — a safety net when concat leaves Uint32 and weld
+ * early-returns (`next === vertexCount`), or a packaged mesh arrives
+ * with a 32-bit index.
+ */
+export function compactIndexToUint16(geometry) {
+  if (!geometry) return geometry;
+  const index = geometry.getIndex();
+  if (!index?.array) return geometry;
+  const pos = geometry.getAttribute("position");
+  if (!pos || pos.count > 65535) return geometry;
+  const src = index.array;
+  if (!(src.BYTES_PER_ELEMENT > 2)) return geometry;
+  const compact = new Uint16Array(src.length);
+  compact.set(src);
+  geometry.setIndex(new THREE.BufferAttribute(compact, 1));
+  return geometry;
+}
+
+/**
+ * Quantize `position` from Float32 to Float16 on color-only unlit MeshBasic.
+ * Three r170 `Float16BufferAttribute` stores IEEE-754 binary16 bits in a
+ * `Uint16Array`; `WebGLAttributes.createBuffer` then uploads as
+ * `gl.HALF_FLOAT` when `isFloat16BufferAttribute` is set (WebGL2).
+ *
+ * **Verified r170 constructor trap (do not pass Float32Array through):**
+ * `new Float16BufferAttribute(array, itemSize)` does
+ * `super(new Uint16Array(array), …)` — that copies via ToUint16 truncation,
+ * not `DataUtils.toHalfFloat`. Sub-1.0 crate positions would become 0.
+ * Encode with `setXYZ` (r170 override calls `toHalfFloat`) or pass an
+ * already-encoded `Uint16Array`.
+ *
+ * Recomputes bounding box/sphere from quantized `getX`/`getY`/`getZ`
+ * (`Box3.setFromBufferAttribute` → `Vector3.fromBufferAttribute`) so
+ * frustum culls match GPU verts **before** `onUpload` nulls `.array`.
+ * Mapped / lit / morph / interleaved / non-Float32 positions are left
+ * intact. Load-time only — not per-frame.
+ */
+export function quantizePositionToFloat16(geometry, material) {
+  if (!geometry || !isColorOnlyUnlitBasic(material)) return geometry;
+  if (Object.keys(geometry.morphAttributes || {}).length) return geometry;
+  const pos = geometry.getAttribute("position");
+  if (!pos || pos.isInterleavedBufferAttribute) return geometry;
+  if (pos.isFloat16BufferAttribute) {
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    return geometry;
+  }
+  if (!(pos.array instanceof Float32Array) || pos.itemSize !== 3) return geometry;
+
+  const quantized = new THREE.Float16BufferAttribute(pos.count * pos.itemSize, pos.itemSize, pos.normalized);
+  for (let i = 0; i < pos.count; i++) {
+    quantized.setXYZ(i, pos.getX(i), pos.getY(i), pos.getZ(i));
+  }
+  geometry.setAttribute("position", quantized);
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+/**
+ * After GPU upload, drop CPU typed arrays on color-only unlit MeshBasic
+ * geometries (Three r170 `BufferAttribute.onUpload` / `onUploadCallback`).
+ * r170 `WebGLAttributes.createBuffer` copies `.array` into `bufferData`
+ * *before* the callback, then keeps that local for type detection — nulling
+ * `.array` in the hook is safe. Sets `.usage` to `StaticDrawUsage` (already
+ * the r170 default; explicit so packed geos stay static). Computes bounding
+ * volumes first so later frustum culls do not need `.array`.
+ *
+ * Apply only to color-only MeshBasic. Mapped / lit / morph / interleaved
+ * geometries are left intact. Colliders are not passed here — the pick
+ * path uses collider AABB `userData.size`, not visual BufferGeometry
+ * arrays, but collider wireframes may still need CPU arrays for debug
+ * bounds. Load-time only — not per-frame.
+ */
+export function releaseCpuArraysOnGpuUpload(geometry, material) {
+  if (!geometry || !isColorOnlyUnlitBasic(material)) return geometry;
+  if (Object.keys(geometry.morphAttributes || {}).length) return geometry;
+  const names = Object.keys(geometry.attributes);
+  for (const name of names) {
+    if (geometry.getAttribute(name)?.isInterleavedBufferAttribute) return geometry;
+  }
+  const index = geometry.getIndex();
+  if (index?.isInterleavedBufferAttribute) return geometry;
+
+  if (geometry.boundingBox === null) geometry.computeBoundingBox();
+  if (geometry.boundingSphere === null) geometry.computeBoundingSphere();
+
+  const releaseArray = function releaseCpuArray() {
+    this.array = null;
+  };
+  for (const name of names) {
+    const attr = geometry.getAttribute(name);
+    if (!attr?.isBufferAttribute) continue;
+    attr.setUsage(THREE.StaticDrawUsage);
+    attr.onUpload(releaseArray);
+  }
+  if (index?.isBufferAttribute) {
+    index.setUsage(THREE.StaticDrawUsage);
+    index.onUpload(releaseArray);
+  }
+  return geometry;
+}
+
+/**
+ * Strip unused color-only attrs, compact a wasteful 32-bit index, quantize
+ * Float32 `position` to Float16, then hook GPU-upload CPU-array release
+ * on color-only unlit MeshBasic. Shared by procedural create (v0.37–v0.44)
+ * and packaged ingest. v0.45 matrix freeze, v0.46 visual raycast
+ * disable, and v0.47 MeshBasic fog/toneMapped pin are post-attach
+ * Object3D / material-state steps, not geometry pack steps.
+ */
+export function packColorOnlyGeometry(geometry, material) {
+  stripUnusedColorOnlyAttributes(geometry, material);
+  compactIndexToUint16(geometry);
+  quantizePositionToFloat16(geometry, material);
+  releaseCpuArraysOnGpuUpload(geometry, material);
+  return geometry;
+}
+
+/**
+ * Scene names for L4/L5 animated pivots. Procedural create uses
+ * `lid` / `latch` / `tool` (`lidPivot` / `latchPivot` are the JS
+ * bindings). Packaged ingest also accepts `lidPivot` / `latchPivot`.
+ */
+export const ANIMATED_TOOLBOX_PIVOT_NAMES = Object.freeze(["lid", "lidPivot", "latch", "latchPivot", "tool"]);
+
+const ANIMATED_PIVOT_NAME_SET = new Set(ANIMATED_TOOLBOX_PIVOT_NAMES);
+const FASTENER_MESH_NAMES = new Set(["fastener", "fastenerMesh"]);
+
+function isFastenerVisual(object, entity) {
+  if (!object) return false;
+  if (entity?.userData?.fastener?.mesh === object) return true;
+  return FASTENER_MESH_NAMES.has(object.name);
+}
+
+/** True when `object` is an animated pivot or a descendant of one. */
+export function isUnderAnimatedToolboxPivot(object, entity) {
+  const parts = entity?.userData?.parts;
+  const pivots = [];
+  if (parts?.lidPivot) pivots.push(parts.lidPivot);
+  if (parts?.latchPivot) pivots.push(parts.latchPivot);
+  if (parts?.tool) pivots.push(parts.tool);
+  let node = object;
+  while (node) {
+    if (pivots.includes(node)) return true;
+    if (ANIMATED_PIVOT_NAME_SET.has(node.name)) return true;
+    node = node.parent;
+  }
+  return false;
+}
+
+/**
+ * After the entity is fully built and LODs attached, bake world
+ * matrices once then freeze local-matrix auto-update on **static**
+ * packed color-only unlit MeshBasic visual leaves.
+ *
+ * **Verified r170 API:** `Object3D.matrixAutoUpdate` (default true via
+ * `DEFAULT_MATRIX_AUTO_UPDATE`); `updateMatrixWorld(force)` still
+ * composes `matrixWorld = parent.matrixWorld * matrix` when force /
+ * needsUpdate even if local auto-update is off. Do **not** set
+ * `matrixWorldAutoUpdate` false — crate grab still needs world
+ * matrices to follow the root.
+ *
+ * Skip colliders (pick AABB uses `updateWorldMatrix` + `userData.size`).
+ * Skip meshes under lid/latch/tool pivots (L4 hinge / L5 extract).
+ * Skip fastener: `applyFastenerVisual` writes `rotation.z` / `position.z`
+ * on the mesh itself — freeze would stall L5 drive. Mapped / lit
+ * materials stay live. Load-time only — not per-frame.
+ */
+export function freezeStaticColorOnlyWorldMatrices(entity) {
+  if (!entity) return entity;
+  entity.updateMatrixWorld(true);
+  entity.traverse((o) => {
+    if (!o.isMesh || o.userData.collider) return;
+    if (o.name && o.name.startsWith("collider_")) return;
+    if (!isColorOnlyUnlitBasic(o.material)) return;
+    if (isFastenerVisual(o, entity)) return;
+    if (isUnderAnimatedToolboxPivot(o, entity)) return;
+    o.matrixAutoUpdate = false;
+  });
+  return entity;
+}
+
+/**
+ * Shared no-op for `Mesh.raycast`. Three r170
+ * `Mesh.prototype.raycast(raycaster, intersects)` walks triangles and
+ * pushes hits. Assigning this empty function returns without pushing.
+ * Pick path (`firstHit` / `collectPickables`) uses collider AABB slabs
+ * (`userData.size`), not visual `Mesh.raycast` — this is a CPU fence
+ * if anything still calls triangle raycast on hero/LOD/fastener meshes.
+ */
+export function noopColorOnlyVisualRaycast(/* raycaster, intersects */) {}
+
+function colorOnlyGeometryBlocksPack(geometry) {
+  if (!geometry) return false;
+  if (Object.keys(geometry.morphAttributes || {}).length) return true;
+  for (const name of Object.keys(geometry.attributes || {})) {
+    if (geometry.getAttribute(name)?.isInterleavedBufferAttribute) return true;
+  }
+  if (geometry.getIndex()?.isInterleavedBufferAttribute) return true;
+  return false;
+}
+
+/**
+ * After procedural create + LOD attach (and on packaged ingest of
+ * packed color-only MeshBasic visuals), disable triangle raycast on
+ * every color-only unlit MeshBasic visual mesh: LOD0/1/2 body +
+ * lid/latch/tool meshes + fastener MeshBasic.
+ *
+ * **Verified r170 API:** `Mesh.prototype.raycast` is the default
+ * identity (`new Mesh().raycast === Mesh.prototype.raycast`).
+ * Assigning `mesh.raycast = noopColorOnlyVisualRaycast` is enough.
+ *
+ * **Verified pick path (ADR 0004 / photoreal-realtime):**
+ * `collectPickables` gathers `userData.colliders` only;
+ * `firstHit` slab-tests `userData.size`. No `intersectObjects`.
+ * Hover/grab do not need visual mesh raycast.
+ *
+ * Skip colliders even if they are MeshBasic debug hulls — leave
+ * default `Mesh.prototype.raycast` intact. Skip mapped / lit /
+ * morph / interleaved (same color-only unlit MeshBasic gate as the
+ * pack pipeline). Fastener is a visual MeshBasic — disable it too
+ * (L5 drive is transform writes, not mesh raycast). Load-time only.
+ */
+export function disableColorOnlyVisualRaycast(entity) {
+  if (!entity) return entity;
+  entity.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.userData.collider) return;
+    if (o.name && o.name.startsWith("collider_")) return;
+    if (!isColorOnlyUnlitBasic(o.material)) return;
+    if (colorOnlyGeometryBlocksPack(o.geometry)) return;
+    o.raycast = noopColorOnlyVisualRaycast;
+  });
+  return entity;
+}
+
+/**
+ * Pin Quest-safe MeshBasic flags on a color-only unlit MeshBasic.
+ *
+ * **Verified r170 API:** `new MeshBasicMaterial().fog === true` and
+ * `.toneMapped === true` (`Material` defaults; MeshBasic does not
+ * override them). Unlit midtone stand-ins should not pay fog
+ * varyings/uniforms or lookdev ACES wash. Present path already uses
+ * `NoToneMapping` while immersive (v0.17); lookdev still uses ACES
+ * — `toneMapped = false` keeps authored midtones stable. `fog =
+ * false` drops fog from the MeshBasic program when `scene.fog` is
+ * set later.
+ *
+ * Same `isColorOnlyUnlitBasic` gate as the pack pipeline. Does not
+ * invent materials or hex-dedupe. Load-time only — not per-frame.
+ */
+export function pinColorOnlyUnlitBasicFlags(material) {
+  if (!isColorOnlyUnlitBasic(material)) return material;
+  material.fog = false;
+  material.toneMapped = false;
+  return material;
+}
+
+/**
+ * After materials are shared (procedural) or color-only MeshBasics
+ * are detected (packaged ingest), pin fog/toneMapped on every unique
+ * packed color-only unlit MeshBasic visual material.
+ *
+ * Skip colliders (even MeshBasic debug hulls). Skip mapped / lit.
+ * Skip morph / interleaved (same pack-pipeline gate as raycast).
+ * Does not invent materials. Load-time only — not per-frame.
+ */
+export function pinColorOnlyVisualMaterialFlags(entity) {
+  if (!entity) return entity;
+  const blockedMaterials = new Set();
+  entity.traverse((o) => {
+    if (!o.isMesh) return;
+    if (!isColorOnlyUnlitBasic(o.material)) return;
+    if (!o.userData.collider && !(o.name && o.name.startsWith("collider_")) && !colorOnlyGeometryBlocksPack(o.geometry)) {
+      return;
+    }
+    blockedMaterials.add(o.material);
+  });
+  const seen = new Set();
+  entity.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.userData.collider) return;
+    if (o.name && o.name.startsWith("collider_")) return;
+    if (!isColorOnlyUnlitBasic(o.material)) return;
+    if (colorOnlyGeometryBlocksPack(o.geometry)) return;
+    if (blockedMaterials.has(o.material)) return;
+    if (seen.has(o.material)) return;
+    seen.add(o.material);
+    pinColorOnlyUnlitBasicFlags(o.material);
+  });
+  return entity;
+}
+
+/** Position-hash bin size in meters (Three.js `mergeVertices` default). */
+export const MERGE_WELD_TOLERANCE = 1e-4;
+
+const _weldGetters = ["getX", "getY", "getZ", "getW"];
+
+/**
+ * Weld vertices whose positions match within `tolerance` (Three.js
+ * mergeVertices-style truncation hash). UV / normal / other attribute
+ * *channels* stay — the surviving vertex keeps the first-seen values.
+ * Position is the weld key so shared corners between former sibling
+ * meshes become one vertex even when per-face UVs/normals differ
+ * (BoxGeometry). Does not drop triangles. Load-time only.
+ *
+ * Prefer DCC pre-weld for mapped UV islands; this is a safety net
+ * after same-material concat.
+ */
+export function weldCoincidentVertices(geometry, tolerance = MERGE_WELD_TOLERANCE) {
+  if (!geometry) return geometry;
+  const pos = geometry.getAttribute("position");
+  if (!pos || pos.count < 2) return geometry;
+  if (Object.keys(geometry.morphAttributes || {}).length) return geometry;
+  const names = Object.keys(geometry.attributes);
+  for (const name of names) {
+    if (geometry.getAttribute(name)?.isInterleavedBufferAttribute) return geometry;
+  }
+
+  const eps = Math.max(tolerance, Number.EPSILON);
+  const shiftMultiplier = Math.pow(10, Math.log10(1 / eps));
+  const vertexCount = pos.count;
+  const remap = new Uint32Array(vertexCount);
+  const hashToNew = new Map();
+  let next = 0;
+
+  for (let i = 0; i < vertexCount; i++) {
+    const hash = `${~~(pos.getX(i) * shiftMultiplier)},${~~(pos.getY(i) * shiftMultiplier)},${~~(pos.getZ(i) * shiftMultiplier)}`;
+    let dst = hashToNew.get(hash);
+    if (dst === undefined) {
+      dst = next++;
+      hashToNew.set(hash, dst);
+    }
+    remap[i] = dst;
+  }
+  if (next === vertexCount) return geometry;
+
+  const welded = new THREE.BufferGeometry();
+  const written = new Uint8Array(next);
+  for (const name of names) {
+    const attr = geometry.getAttribute(name);
+    const itemSize = attr.itemSize;
+    const data = new attr.array.constructor(next * itemSize);
+    const out = new THREE.BufferAttribute(data, itemSize, attr.normalized);
+    written.fill(0);
+    for (let i = 0; i < vertexCount; i++) {
+      const dst = remap[i];
+      if (written[dst]) continue;
+      written[dst] = 1;
+      for (let k = 0; k < itemSize; k++) {
+        out[_weldGetters[k]](dst, attr[_weldGetters[k]](i));
+      }
+    }
+    welded.setAttribute(name, out);
+  }
+
+  const srcIndex = geometry.getIndex();
+  const srcCount = srcIndex ? srcIndex.count : vertexCount;
+  const compact = next > 65535 ? new Uint32Array(srcCount) : new Uint16Array(srcCount);
+  if (srcIndex) {
+    for (let i = 0; i < srcCount; i++) compact[i] = remap[srcIndex.getX(i)];
+  } else {
+    for (let i = 0; i < vertexCount; i++) compact[i] = remap[i];
+  }
+  welded.setIndex(new THREE.BufferAttribute(compact, 1));
+  return welded;
+}
+
+const LOD_MERGE_SKIP_NAMES = new Set(["fastener", "fastenerMesh"]);
+
+function skipLodMergeChild(child) {
+  if (!child?.isMesh) return true;
+  if (child.userData?.collider) return true;
+  if (LOD_MERGE_SKIP_NAMES.has(child.name)) return true;
+  if (child.name && child.name.startsWith("collider_")) return true;
+  return false;
+}
+
+/**
+ * Merge visual meshes that share one material instance inside a single
+ * lodGroup. Does not cross body / lidPivot / latchPivot / tool — call
+ * once per group. Bakes each mesh's local matrix into the merged
+ * geometry, then welds coincident vertices (v0.39), then strips
+ * unused `uv` / `normal` (and other unused channels) when the
+ * material is color-only unlit MeshBasic (v0.40), then compact a
+ * 32-bit index to Uint16 when verts fit (v0.41), then quantize
+ * Float32 `position` to Float16 (v0.44), then hook post-GPU-upload
+ * CPU array release on those packed geos (v0.43). A named source
+ * keeps its name on the survivor. Colliders and the fastener
+ * (`fastener` / `fastenerMesh`) are skipped. Direct mesh children
+ * only — nested Groups (pivots) stay. Load-time only — not
+ * per-frame. Shared by procedural create (v0.37) and packaged
+ * ingest (v0.38); weld is the v0.39 upgrade on the same helper;
+ * unused-attr strip is the v0.40 upgrade; Uint16 index compact is
+ * the v0.41 upgrade; CPU-array release-on-upload is the v0.43
+ * upgrade; Float16 position quantize is the v0.44 upgrade.
+ * Single-mesh groups still skip concat/weld but still strip unused
+ * attrs, compact the index, quantize position, and hook
+ * upload-release on color-only MeshBasic.
+ */
+export function mergeSameMaterialMeshes(lodGroup) {
+  if (!lodGroup) return lodGroup;
+  const buckets = new Map();
+  for (const child of [...lodGroup.children]) {
+    if (skipLodMergeChild(child)) continue;
+    const mat = child.material;
+    if (!mat || Array.isArray(mat)) continue;
+    let list = buckets.get(mat);
+    if (!list) {
+      list = [];
+      buckets.set(mat, list);
+    }
+    list.push(child);
+  }
+  for (const [mat, meshes] of buckets) {
+    if (meshes.length < 2) {
+      for (const mesh of meshes) {
+        packColorOnlyGeometry(mesh.geometry, mat);
+      }
+      continue;
+    }
+    const baked = [];
+    for (const mesh of meshes) {
+      mesh.updateMatrix();
+      const geo = mesh.geometry.clone();
+      geo.applyMatrix4(mesh.matrix);
+      baked.push(geo);
+    }
+    const concatenated = concatGeometries(baked);
+    for (const geo of baked) geo.dispose();
+    if (!concatenated) continue;
+    const merged = weldCoincidentVertices(concatenated);
+    if (merged !== concatenated) concatenated.dispose();
+    packColorOnlyGeometry(merged, mat);
+    const survivor = new THREE.Mesh(merged, mat);
+    survivor.castShadow = false;
+    survivor.receiveShadow = false;
+    const named = meshes.find((m) => m.name);
+    if (named) survivor.name = named.name;
+    for (const mesh of meshes) {
+      lodGroup.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    lodGroup.add(survivor);
+  }
+  return lodGroup;
+}
+
+/**
+ * One color-only unlit MeshBasic per midtone hex. v0.37 already
+ * aliases woodDark/handleMat to wood *within* a LOD; v0.42 uses
+ * this cache so LOD0/1/2 wood (and LOD0/1 brass) share one instance
+ * when `L3_LODn_*_COLOR` matches. Does not invent materials or
+ * rewrite mapped/lit types. Load-time only.
+ */
+export function shareColorOnlyUnlitBasic(hex, cache) {
+  let mat = cache.get(hex);
+  if (!mat) {
+    mat = mappedBasic(hex, null, { map: false });
+    pinColorOnlyUnlitBasicFlags(mat);
+    cache.set(hex, mat);
+  }
+  return mat;
 }
 
 function makeCollider(name, w, h, d, x, y, z) {
@@ -74,20 +651,23 @@ export function createToolbox() {
   root.userData.kind = "entity";
 
   const l2 = getCrateL2Maps();
-  // LOD0 keeps the five v0.12 materials (512² albedo+ORM+normal, full scale).
-  const wood = mappedStandard(0xffffff, l2.wood);
-  const woodDark = mappedStandard(0x7a5840, l2.wood);
-  const brass = mappedStandard(0xffffff, l2.brass);
-  const steel = mappedStandard(0xffffff, l2.steel);
-  const handleMat = mappedStandard(0xe8b42a, l2.wood);
-  // LOD1 mid crate: same canvases, half normalScale (no extra draws/textures).
-  const mid = { normalScaleMul: L3_LOD1_NORMAL_SCALE_MUL };
-  const woodMid = mappedStandard(0xffffff, l2.wood, mid);
-  const woodDarkMid = mappedStandard(0x7a5840, l2.wood, mid);
-  const brassMid = mappedStandard(0xffffff, l2.brass, mid);
-  const handleMatMid = mappedStandard(0xe8b42a, l2.wood, mid);
-  // LOD2 far crate + lid: same albedo/ORM, no normalMap (L3 fragment-cost gate).
-  const woodFar = mappedStandard(0xffffff, l2.wood, { normalMap: false });
+  // Color-only unlit MeshBasic (no albedo map). v0.37 aliases
+  // woodDark/handleMat to the wood instance *within* a LOD. v0.42
+  // aliases *across* LODs when the midtone hex matches: one wood
+  // for LOD0/1/2, one brass for LOD0/1 (+ fastener), one steel
+  // (LOD0-only). No roughness/metalness — those uniforms do not
+  // apply to MeshBasic.
+  const colorOnlyByHex = new Map();
+  const wood = shareColorOnlyUnlitBasic(L3_LOD0_WOOD_COLOR, colorOnlyByHex);
+  const woodDark = wood;
+  const brass = shareColorOnlyUnlitBasic(L3_LOD0_BRASS_COLOR, colorOnlyByHex);
+  const steel = shareColorOnlyUnlitBasic(L3_LOD0_STEEL_COLOR, colorOnlyByHex);
+  const handleMat = wood;
+  const woodMid = shareColorOnlyUnlitBasic(L3_LOD1_WOOD_COLOR, colorOnlyByHex);
+  const woodDarkMid = woodMid;
+  const brassMid = shareColorOnlyUnlitBasic(L3_LOD1_BRASS_COLOR, colorOnlyByHex);
+  const handleMatMid = woodMid;
+  const woodFar = shareColorOnlyUnlitBasic(L3_LOD2_WOOD_COLOR, colorOnlyByHex);
 
   const body = new THREE.Group();
   body.name = "body";
@@ -166,8 +746,15 @@ export function createToolbox() {
   root.add(tool);
 
   // L5 work target: front fastener. Extra 12 tris / 1 draw, not an LOD mesh.
+  // Stays outside mergeSameMaterialMeshes (skip set); still gets the
+  // color-only unused-attr strip + Uint16 compact (v0.41) + Float16
+  // position quantize (v0.44) + post-upload CPU array release (v0.43).
+  // applyFastenerVisual mutates this mesh's rotation.z / position.z,
+  // so v0.45 must not freeze its matrixAutoUpdate. v0.46 still
+  // disables its Mesh.raycast (L5 is transform writes, not pick).
   const fastener = boxMesh(0.028, 0.028, 0.02, brass, -0.12, 0.07, 0.131);
   fastener.name = "fastenerMesh";
+  packColorOnlyGeometry(fastener.geometry, fastener.material);
   root.add(fastener);
 
   const colliderGrab = makeCollider("collider_grab", 0.38, 0.15, 0.24, 0, 0.075, 0);
@@ -201,11 +788,23 @@ export function createToolbox() {
   root.userData.fastener = { mesh: fastener, turns: 0, needed: 4, seated: false };
   root.userData.l2 = {
     textureSize: l2.size,
+    lodAlbedoSize: l2.lodAlbedoSize,
     uniqueTextures: l2.uniqueTextures,
-    maps: "albedo+ORM+normal",
-    lodNormalMaps: { 0: true, 1: true, 2: false },
-    lodNormalScaleMul: { 0: 1, 1: L3_LOD1_NORMAL_SCALE_MUL, 2: 0 },
-    note: "procedural canvas stand-in; LOD1 half normalScale; LOD2 omits normalMap",
+    maps: "none",
+    lodAlbedoMaps: { 0: 0, 1: 0, 2: 0 },
+    lodNormalMaps: { 0: false, 1: false, 2: false },
+    lodOrmMaps: { 0: false, 1: false, 2: false },
+    lodNormalScaleMul: { 0: 0, 1: 0, 2: 0 },
+    lodMaterialClass: {
+      0: "MeshBasicMaterial",
+      1: "MeshBasicMaterial",
+      2: "MeshBasicMaterial",
+    },
+    lod0Color: { wood: L3_LOD0_WOOD_COLOR, brass: L3_LOD0_BRASS_COLOR, steel: L3_LOD0_STEEL_COLOR },
+    lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
+    lod2Color: L3_LOD2_WOOD_COLOR,
+    uniqueMaterials: colorOnlyByHex.size,
+    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. v0.46 disables Mesh.raycast on packed color-only MeshBasic visuals (body + lid/latch/tool + fastener); colliders keep Mesh.prototype.raycast. v0.47 pins fog = false and toneMapped = false on packed color-only unlit MeshBasic materials (3 unique shared instances; mapped/lit/colliders stay r170 defaults). Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -213,28 +812,47 @@ export function createToolbox() {
     lod2: { wood: woodFar },
   };
   root.userData.packaging = {
-    source: "procedural-canvas",
+    source: "procedural-color-only",
     probedUrl: studio.source?.packagedUrl ?? "/packaged/crate-toolbox.glb",
     found: false,
   };
-  root.userData.lod = {
-    current: 0,
-    mode: "auto",
-    distances: { lod1: 2.4, lod2: 4.5, hysteresis: 0.2 },
-    groups: {
-      0: [bodyL0, lidL0, latchL0, toolL0],
-      1: [bodyL1, lidL1, latchL1, toolL1],
-      2: [bodyL2, lidL2, latchL2, toolL2],
-    },
-    stats: {
-      0: mergeStats([bodyL0, lidL0, latchL0, toolL0]),
-      1: mergeStats([bodyL1, lidL1, latchL1, toolL1]),
-      2: mergeStats([bodyL2, lidL2, latchL2, toolL2]),
-    },
-  };
-
+  // v0.37: merge same-material meshes inside each static lodGroup so
+  // unused material slots do not multiply draws. v0.39: weld coincident
+  // vertices after concat. v0.40: strip unused uv/normal on color-only
+  // MeshBasic after weld (and on unmerged singles in the same helper).
+  // v0.41: compact a lingering Uint32 index to Uint16 when verts fit.
+  // v0.42: wood/brass MeshBasic instances are already shared across
+  // LODs above (hex cache); merge still does not cross pivots.
+  // v0.43: packColorOnlyGeometry also hooks post-upload CPU-array
+  // release on those color-only MeshBasic geos (not colliders).
+  // v0.44: after Uint16 compact and before that upload hook, quantize
+  // Float32 position to Float16 on those same color-only geos.
+  // v0.45: after LODs attach, freeze matrixAutoUpdate on static
+  // color-only MeshBasic body leaves (not lid/latch/tool/fastener).
+  // v0.46: after that freeze, disable Mesh.raycast on packed
+  // color-only MeshBasic visuals (body + lid/latch/tool + fastener).
+  // v0.47: after that raycast disable (and after hex-share above),
+  // pin fog/toneMapped false on the shared color-only MeshBasics.
+  // Pivots stay separate. Fastener is packed above, not merged here.
+  mergeSameMaterialMeshes(bodyL0);
+  mergeSameMaterialMeshes(lidL0);
+  mergeSameMaterialMeshes(latchL0);
+  mergeSameMaterialMeshes(toolL0);
+  mergeSameMaterialMeshes(bodyL1);
+  mergeSameMaterialMeshes(lidL1);
+  mergeSameMaterialMeshes(latchL1);
+  mergeSameMaterialMeshes(toolL1);
+  mergeSameMaterialMeshes(bodyL2);
+  mergeSameMaterialMeshes(lidL2);
   applyActivityVisual(root, 1);
-  setToolboxLod(root, 0);
+  attachToolboxLod(root, {
+    0: [bodyL0, lidL0, latchL0, toolL0],
+    1: [bodyL1, lidL1, latchL1, toolL1],
+    2: [bodyL2, lidL2, latchL2, toolL2],
+  });
+  freezeStaticColorOnlyWorldMatrices(root);
+  disableColorOnlyVisualRaycast(root);
+  pinColorOnlyVisualMaterialFlags(root);
 
   return root;
 }
@@ -258,16 +876,75 @@ export function collectLodVisualMaterials(entity, level) {
   return mats;
 }
 
+/**
+ * Unique visual materials on LOD0/1/2 plus the fastener (colliders
+ * skipped). Used to count shared MeshBasic instances across LODs.
+ */
+export function collectCrateVisualMaterials(entity) {
+  const mats = [];
+  const seen = new Set();
+  const add = (mat) => {
+    if (!mat || seen.has(mat)) return;
+    if (Array.isArray(mat)) {
+      for (const m of mat) add(m);
+      return;
+    }
+    seen.add(mat);
+    mats.push(mat);
+  };
+  for (const level of [0, 1, 2]) {
+    for (const mat of collectLodVisualMaterials(entity, level)) add(mat);
+  }
+  const fastener = entity.userData.fastener?.mesh;
+  if (fastener?.isMesh && !fastener.userData.collider) add(fastener.material);
+  return mats;
+}
+
 function mergeStats(groups) {
   return groups.reduce(
     (acc, g) => {
       const s = countGroupStats(g);
       acc.tris += s.tris;
       acc.draws += s.draws;
+      acc.verts += s.verts;
+      acc.attrBytes += s.attrBytes;
       return acc;
     },
-    { tris: 0, draws: 0 }
+    { tris: 0, draws: 0, verts: 0, attrBytes: 0 }
   );
+}
+
+/** Studio L3 distance bands. Shared by procedural create and packaged ingest. */
+export const TOOLBOX_LOD_DISTANCES = Object.freeze({
+  lod1: 2.4,
+  lod2: 4.5,
+  hysteresis: 0.2,
+});
+
+/**
+ * Bind the same `userData.lod` shape procedural create uses, then show LOD0.
+ * Visibility-only — no material swap, no frame-loop allocation.
+ */
+export function attachToolboxLod(entity, groups) {
+  const g0 = groups?.[0] ?? groups?.["0"] ?? [];
+  const g1 = groups?.[1] ?? groups?.["1"] ?? [];
+  const g2 = groups?.[2] ?? groups?.["2"] ?? [];
+  entity.userData.lod = {
+    current: 0,
+    mode: "auto",
+    distances: {
+      lod1: TOOLBOX_LOD_DISTANCES.lod1,
+      lod2: TOOLBOX_LOD_DISTANCES.lod2,
+      hysteresis: TOOLBOX_LOD_DISTANCES.hysteresis,
+    },
+    groups: { 0: g0, 1: g1, 2: g2 },
+    stats: {
+      0: mergeStats(g0),
+      1: mergeStats(g1),
+      2: mergeStats(g2),
+    },
+  };
+  return setToolboxLod(entity, 0);
 }
 
 const _lodCam = new THREE.Vector3();

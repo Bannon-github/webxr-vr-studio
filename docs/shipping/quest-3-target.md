@@ -41,6 +41,14 @@ These are **studio defaults** for WebXR on Quest 3 — conservative versus Meta�
 | Textures | **≤ 2048² max; prefer ≤ 1024²** on props | Power-of-two. **KTX2 / Basis** (`KHR_texture_basisu`). **Mipmaps on.** No 4K handheld props. Recipe: [ktx2-quest3-packaging](../performance/ktx2-quest3-packaging.md). |
 | FFR | **Medium–high** when available | `XRWebGLLayer.fixedFoveation` in (0, 1]; studio start **0.5–1.0** ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/XRWebGLLayer/fixedFoveation), [Meta FFR](https://developers.meta.com/horizon/documentation/web/webxr-ffr/)). Three.js: `renderer.xr.setFoveation`. |
 | CPU / GC | **No allocations in the XR frame loop** | **Frame-loop allocation scrub:** hoist scratch vectors; no `new THREE.*`, per-frame pick arrays, or `intersectObjects` garbage on the present path. Overlay off must stay one boolean. See `crate-toolbox` v0.8. |
+| Present pixel ratio | **1** while XR presenting | Desktop lookdev may use `min(devicePixelRatio, 2)`. Clamp on `sessionstart`; restore + `setSize` on `sessionend`. Not per-frame. See `crate-toolbox` v0.15. |
+| Present antialias / MSAA | **Off** while XR presenting | Meta treats MSAA as expensive fill. Three r170 copies constructor `antialias` into `XRWebGLLayer` (immutable context attribute). Start the present-path renderer with `antialias: false`. See `crate-toolbox` v0.16. |
+| Present tone mapping | **`NoToneMapping`** while XR presenting | Three r170 applies `renderer.toneMapping` on the output fragment. ACESFilmic is extra ALU on Quest 3 TBDR. Save lookdev ACES + exposure on `sessionstart`; restore on `sessionend`. Not per-frame. See `crate-toolbox` v0.17. |
+| Present IBL / environment | **Off** while XR presenting | MeshStandardMaterials sample `scene.environment` every fragment (`USE_ENVMAP`). r170 `environmentIntensity` is a post-sample multiply — intensity 0 does not skip `textureCubeUV`. Null `scene.environment` on `sessionstart`; restore the saved PMREM (do not dispose) on `sessionend`. Not per-frame. See `crate-toolbox` v0.18. |
+| Present directional / punctual | **Off** while XR presenting | After IBL is nulled, MeshStandardMaterials still evaluate punctual lights (`NUM_DIR_LIGHTS`). r170 intensity 0 on a visible DirectionalLight does not drop that loop. Hide the lookdev sun (`visible = false` + intensity 0) on `sessionstart`; restore both on `sessionend`. Not per-frame. See `crate-toolbox` v0.19. |
+| Present ambient-only fill | **AmbientLight** while XR presenting (hemisphere off) | After directional is hidden, MeshStandardMaterials still evaluate hemisphere (`NUM_HEMI_LIGHTS`). r170 intensity 0 on a visible HemisphereLight does not drop that loop. Hide lookdev hemi (`visible = false` + intensity 0) and enable one reused `AmbientLight` (intensity **0.4**, color `0xf0e6d4`) on `sessionstart`; restore hemi and disable/detach ambient on `sessionend`. Not per-frame. See `crate-toolbox` v0.20. |
+| Present texture anisotropy | **1** while XR presenting | Lookdev / packaged GLB may use GPU max (often 16). Quest 3 TBDR AF is extra bandwidth at present-path pixel ratio 1 + FFR. Clamp bound maps to 1 on `sessionstart`; restore saved lookdev `.anisotropy` on `sessionend`. Not per-frame. See `crate-toolbox` v0.21. |
+| Present XR framebuffer scale | **1** while XR presenting | Distinct from v0.15 `setPixelRatio(1)`. Three r170 `renderer.xr.setFramebufferScaleFactor` scales the XR eye buffer vs the runtime recommended size. Default is often 1; raising it (HUD sharpness) is stretch-only and must be measured on-device. r170 has no getter and cannot rebuild the current layer while presenting — also set 1 before `setSession`. Restore lookdev scale on `sessionend`. Not per-frame. See `crate-toolbox` v0.22. |
 | Collision | **Simple hulls, not the hero mesh** | [ADR 0004](../../studio/adr/0004-asset-interaction-architecture.md) |
 
 **TODO:** confirm draw-call and triangle ceilings on-device for *this* product’s hero scene (Browser version + scene). The 100 / 750k figures are the gate we author to until a measured override is written on the release matrix.
@@ -58,6 +66,18 @@ if (hz && session.updateTargetFrameRate) {
   session.updateTargetFrameRate(hz); // Promise; ignore rejection
 }
 if (renderer.xr.setFoveation) renderer.xr.setFoveation(0.75);
+renderer.setPixelRatio(1); // v0.15 present-path clamp; restore on sessionend
+// v0.16: construct WebGLRenderer({ antialias: false }) so XRWebGLLayer inherits MSAA off.
+// Cannot flip antialias on a live context (no setAntialias).
+renderer.toneMapping = 0; // v0.17 NoToneMapping while presenting; restore ACES + exposure on sessionend
+scene.environment = null; // v0.18 IBL off while presenting; restore saved PMREM + intensity on sessionend
+sun.visible = false; // v0.19 directional off while presenting; restore on sessionend
+sun.intensity = 0;
+hemi.visible = false; // v0.20 ambient-only fill; r170 intensity 0 does not drop NUM_HEMI_LIGHTS
+hemi.intensity = 0;
+// one reused AmbientLight at 0.4 (0xf0e6d4); disable/detach on sessionend
+texture.anisotropy = 1; // v0.21 present-path AF clamp; restore lookdev anisotropy on sessionend
+if (renderer.xr.setFramebufferScaleFactor) renderer.xr.setFramebufferScaleFactor(1); // v0.22; set before setSession — r170 cannot rebuild the layer while presenting
 ```
 
 `supportedFrameRates` / `updateTargetFrameRate` may be missing on desktop emulators — skip, do not shim fake rates.
