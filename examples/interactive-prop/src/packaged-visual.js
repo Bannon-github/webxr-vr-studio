@@ -63,6 +63,12 @@
  * a no-op `mesh.raycast` on packed color-only unlit MeshBasic visual
  * meshes (LOD0/1/2 body + lid/latch/tool + fastener). Colliders keep
  * default `Mesh.prototype.raycast`. Pick path stays collider AABB.
+ *
+ * v0.47: after that raycast disable, `pinColorOnlyVisualMaterialFlags`
+ * sets `fog = false` and `toneMapped = false` on packed color-only
+ * unlit MeshBasic visual materials (same `isColorOnlyUnlitBasic`
+ * gate). Does not hex-dedupe or invent materials. Mapped / lit stay
+ * at r170 defaults. Collider MeshBasics stay untouched.
  */
 
 import {
@@ -71,6 +77,7 @@ import {
   freezeStaticColorOnlyWorldMatrices,
   mergeSameMaterialMeshes,
   packColorOnlyGeometry,
+  pinColorOnlyVisualMaterialFlags,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -230,6 +237,7 @@ export function ingestPackagedRoot(root, sidecar) {
   }
   freezeStaticColorOnlyWorldMatrices(root);
   disableColorOnlyVisualRaycast(root);
+  pinColorOnlyVisualMaterialFlags(root);
   return root;
 }
 

@@ -531,3 +531,48 @@ test("packaged ingest without lod groups still disables static body visual rayca
   assert.equal(fastener.raycast, noopColorOnlyVisualRaycast);
   assert.equal(root.getObjectByName("collider_grab").raycast, THREE.Mesh.prototype.raycast);
 });
+
+test("packaged ingest pins fog/toneMapped on color-only MeshBasics; mapped/lit stay default", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.fog, true, "r170 MeshBasicMaterial defaults fog true");
+  assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  groups[0][0].add(mappedMesh);
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assert.equal(mesh.material.fog, false, "packaged color-only MeshBasic pins fog false");
+    assert.equal(mesh.material.toneMapped, false, "packaged color-only MeshBasic pins toneMapped false");
+  }
+  assert.equal(mapped.fog, true, "mapped MeshBasic stays r170 fog default");
+  assert.equal(mapped.toneMapped, true, "mapped MeshBasic stays r170 toneMapped default");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.fog, true, "collider MeshBasic stays default fog");
+  assert.equal(colliderGrab.material.toneMapped, true, "collider MeshBasic stays default toneMapped");
+});
+
+test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(visualMeshes(body)[0].material.fog, false);
+  assert.equal(visualMeshes(body)[0].material.toneMapped, false);
+  assert.equal(visualMeshes(lid)[0].material.fog, false);
+  assert.equal(visualMeshes(latch)[0].material.fog, false);
+  assert.equal(visualMeshes(tool)[0].material.fog, false);
+  assert.equal(fastener.material.fog, false);
+  assert.equal(fastener.material.toneMapped, false);
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.fog, true);
+  assert.equal(colliderGrab.material.toneMapped, true);
+});
