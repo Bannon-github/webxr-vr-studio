@@ -265,8 +265,9 @@ export function releaseCpuArraysOnGpuUpload(geometry, material) {
  * Strip unused color-only attrs, compact a wasteful 32-bit index, quantize
  * Float32 `position` to Float16, then hook GPU-upload CPU-array release
  * on color-only unlit MeshBasic. Shared by procedural create (v0.37–v0.44)
- * and packaged ingest. v0.45 matrix freeze and v0.46 visual raycast
- * disable are post-attach Object3D steps, not geometry pack steps.
+ * and packaged ingest. v0.45 matrix freeze, v0.46 visual raycast
+ * disable, and v0.47 MeshBasic fog/toneMapped pin are post-attach
+ * Object3D / material-state steps, not geometry pack steps.
  */
 export function packColorOnlyGeometry(geometry, material) {
   stripUnusedColorOnlyAttributes(geometry, material);
@@ -390,6 +391,53 @@ export function disableColorOnlyVisualRaycast(entity) {
     if (!isColorOnlyUnlitBasic(o.material)) return;
     if (colorOnlyGeometryBlocksPack(o.geometry)) return;
     o.raycast = noopColorOnlyVisualRaycast;
+  });
+  return entity;
+}
+
+/**
+ * Pin Quest-safe MeshBasic flags on a color-only unlit MeshBasic.
+ *
+ * **Verified r170 API:** `new MeshBasicMaterial().fog === true` and
+ * `.toneMapped === true` (`Material` defaults; MeshBasic does not
+ * override them). Unlit midtone stand-ins should not pay fog
+ * varyings/uniforms or lookdev ACES wash. Present path already uses
+ * `NoToneMapping` while immersive (v0.17); lookdev still uses ACES
+ * — `toneMapped = false` keeps authored midtones stable. `fog =
+ * false` drops fog from the MeshBasic program when `scene.fog` is
+ * set later.
+ *
+ * Same `isColorOnlyUnlitBasic` gate as the pack pipeline. Does not
+ * invent materials or hex-dedupe. Load-time only — not per-frame.
+ */
+export function pinColorOnlyUnlitBasicFlags(material) {
+  if (!isColorOnlyUnlitBasic(material)) return material;
+  material.fog = false;
+  material.toneMapped = false;
+  return material;
+}
+
+/**
+ * After materials are shared (procedural) or color-only MeshBasics
+ * are detected (packaged ingest), pin fog/toneMapped on every unique
+ * packed color-only unlit MeshBasic visual material.
+ *
+ * Skip colliders (even MeshBasic debug hulls). Skip mapped / lit.
+ * Skip morph / interleaved (same pack-pipeline gate as raycast).
+ * Does not invent materials. Load-time only — not per-frame.
+ */
+export function pinColorOnlyVisualMaterialFlags(entity) {
+  if (!entity) return entity;
+  const seen = new Set();
+  entity.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.userData.collider) return;
+    if (o.name && o.name.startsWith("collider_")) return;
+    if (!isColorOnlyUnlitBasic(o.material)) return;
+    if (colorOnlyGeometryBlocksPack(o.geometry)) return;
+    if (seen.has(o.material)) return;
+    seen.add(o.material);
+    pinColorOnlyUnlitBasicFlags(o.material);
   });
   return entity;
 }
@@ -560,6 +608,7 @@ export function shareColorOnlyUnlitBasic(hex, cache) {
   let mat = cache.get(hex);
   if (!mat) {
     mat = mappedBasic(hex, null, { map: false });
+    pinColorOnlyUnlitBasicFlags(mat);
     cache.set(hex, mat);
   }
   return mat;
@@ -772,6 +821,8 @@ export function createToolbox() {
   // color-only MeshBasic body leaves (not lid/latch/tool/fastener).
   // v0.46: after that freeze, disable Mesh.raycast on packed
   // color-only MeshBasic visuals (body + lid/latch/tool + fastener).
+  // v0.47: after that raycast disable (and after hex-share above),
+  // pin fog/toneMapped false on the shared color-only MeshBasics.
   // Pivots stay separate. Fastener is packed above, not merged here.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);
@@ -791,6 +842,7 @@ export function createToolbox() {
   });
   freezeStaticColorOnlyWorldMatrices(root);
   disableColorOnlyVisualRaycast(root);
+  pinColorOnlyVisualMaterialFlags(root);
 
   return root;
 }

@@ -50,6 +50,8 @@ const {
   isUnderAnimatedToolboxPivot,
   noopColorOnlyVisualRaycast,
   packColorOnlyGeometry,
+  pinColorOnlyUnlitBasicFlags,
+  pinColorOnlyVisualMaterialFlags,
   quantizePositionToFloat16,
   releaseCpuArraysOnGpuUpload,
   resetToolbox,
@@ -240,6 +242,12 @@ test("shareColorOnlyUnlitBasic reuses one MeshBasic per midtone hex", () => {
   assert.equal(cache.size, 3);
   assert.equal(a.isMeshBasicMaterial, true);
   assert.equal(a.map, null);
+  assert.equal(a.fog, false, "shared wood pins fog false at share time");
+  assert.equal(a.toneMapped, false, "shared wood pins toneMapped false at share time");
+  assert.equal(brassA.fog, false);
+  assert.equal(brassA.toneMapped, false);
+  assert.equal(steel.fog, false);
+  assert.equal(steel.toneMapped, false);
 });
 
 test("setToolboxLod is visibility-only (no material swap on switch)", () => {
@@ -837,4 +845,128 @@ test("disableColorOnlyVisualRaycast skips mapped MeshBasic, morph, and colliders
   assert.equal(mapped.raycast, THREE.Mesh.prototype.raycast, "mapped MeshBasic keeps default raycast");
   assert.equal(morph.raycast, THREE.Mesh.prototype.raycast, "morph color-only MeshBasic is skipped");
   assert.equal(collider.raycast, THREE.Mesh.prototype.raycast, "collider keeps default raycast");
+});
+
+test("v0.47 pins fog/toneMapped false on unique color-only MeshBasics; envelope stays v0.46", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.fog, true, "r170 MeshBasicMaterial defaults fog true");
+  assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assert.equal(mat.fog, false, "color-only MeshBasic pins fog false");
+    assert.equal(mat.toneMapped, false, "color-only MeshBasic pins toneMapped false");
+  }
+  const named = crate.userData.materials.lod0;
+  assert.equal(named.wood.fog, false);
+  assert.equal(named.wood.toneMapped, false);
+  assert.equal(named.brass.fog, false);
+  assert.equal(named.brass.toneMapped, false);
+  assert.equal(named.steel.fog, false);
+  assert.equal(named.steel.toneMapped, false);
+  assert.equal(named.wood, crate.userData.materials.lod1.wood);
+  assert.equal(named.brass, crate.userData.materials.lod1.brass);
+
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+  assert.equal(crateVisualMeshes(crate).length, 13);
+
+  for (const c of crate.userData.colliders) {
+    assert.equal(c.material.fog, true, "collider MeshBasic keeps r170 fog default");
+    assert.equal(c.material.toneMapped, true, "collider MeshBasic keeps r170 toneMapped default");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+  }
+});
+
+test("L4/L5 activity smoke still passes after MeshBasic flag pin", () => {
+  const crate = createToolbox();
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const fastener = crate.userData.fastener.mesh;
+  assert.equal(activityState(crate), "closed");
+
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(fastener.material.fog, false, "L5 drive does not restore fog");
+  assert.equal(fastener.material.toneMapped, false, "L5 drive does not restore toneMapped");
+  assert.equal(fastener.raycast, noopColorOnlyVisualRaycast);
+});
+
+test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped, lit, morph, colliders", () => {
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const std = new THREE.MeshStandardMaterial();
+  assert.equal(colorOnly.fog, true);
+  assert.equal(colorOnly.toneMapped, true);
+  pinColorOnlyUnlitBasicFlags(colorOnly);
+  pinColorOnlyUnlitBasicFlags(mapped);
+  pinColorOnlyUnlitBasicFlags(std);
+  assert.equal(colorOnly.fog, false);
+  assert.equal(colorOnly.toneMapped, false);
+  assert.equal(mapped.fog, true, "mapped MeshBasic stays r170 fog default");
+  assert.equal(mapped.toneMapped, true, "mapped MeshBasic stays r170 toneMapped default");
+  assert.equal(std.fog, true, "MeshStandard stays r170 fog default");
+  assert.equal(std.toneMapped, true, "MeshStandard stays r170 toneMapped default");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mapped);
+  const colorMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  const morph = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xc1c3c9 })
+  );
+  morph.geometry.morphAttributes.position = [morph.geometry.getAttribute("position").clone()];
+  const collider = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  body.add(mappedMesh, colorMesh, morph);
+  root.add(body, collider);
+  pinColorOnlyVisualMaterialFlags(root);
+  assert.equal(colorMesh.material.fog, false);
+  assert.equal(colorMesh.material.toneMapped, false);
+  assert.equal(mapped.fog, true, "mapped MeshBasic stays default via entity helper");
+  assert.equal(mapped.toneMapped, true);
+  assert.equal(morph.material.fog, true, "morph color-only MeshBasic is skipped");
+  assert.equal(morph.material.toneMapped, true);
+  assert.equal(collider.material.fog, true, "collider MeshBasic stays default");
+  assert.equal(collider.material.toneMapped, true);
 });
