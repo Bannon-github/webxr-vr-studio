@@ -428,6 +428,15 @@ export function pinColorOnlyUnlitBasicFlags(material) {
  */
 export function pinColorOnlyVisualMaterialFlags(entity) {
   if (!entity) return entity;
+  const blockedMaterials = new Set();
+  entity.traverse((o) => {
+    if (!o.isMesh) return;
+    if (!isColorOnlyUnlitBasic(o.material)) return;
+    if (!o.userData.collider && !(o.name && o.name.startsWith("collider_")) && !colorOnlyGeometryBlocksPack(o.geometry)) {
+      return;
+    }
+    blockedMaterials.add(o.material);
+  });
   const seen = new Set();
   entity.traverse((o) => {
     if (!o.isMesh) return;
@@ -435,6 +444,7 @@ export function pinColorOnlyVisualMaterialFlags(entity) {
     if (o.name && o.name.startsWith("collider_")) return;
     if (!isColorOnlyUnlitBasic(o.material)) return;
     if (colorOnlyGeometryBlocksPack(o.geometry)) return;
+    if (blockedMaterials.has(o.material)) return;
     if (seen.has(o.material)) return;
     seen.add(o.material);
     pinColorOnlyUnlitBasicFlags(o.material);

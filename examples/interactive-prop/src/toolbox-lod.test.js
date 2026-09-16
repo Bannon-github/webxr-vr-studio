@@ -923,7 +923,7 @@ test("L4/L5 activity smoke still passes after MeshBasic flag pin", () => {
   assert.equal(fastener.raycast, noopColorOnlyVisualRaycast);
 });
 
-test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped, lit, morph, colliders", () => {
+test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped, lit, morph, colliders, shared blocked", () => {
   const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
   const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
   const std = new THREE.MeshStandardMaterial();
@@ -958,8 +958,13 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   );
   collider.name = "collider_grab";
   collider.userData.collider = true;
-  body.add(mappedMesh, colorMesh, morph);
-  root.add(body, collider);
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  body.add(mappedMesh, colorMesh, morph, sharedVisual);
+  root.add(body, collider, sharedCollider);
   pinColorOnlyVisualMaterialFlags(root);
   assert.equal(colorMesh.material.fog, false);
   assert.equal(colorMesh.material.toneMapped, false);
@@ -969,4 +974,6 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(morph.material.toneMapped, true);
   assert.equal(collider.material.fog, true, "collider MeshBasic stays default");
   assert.equal(collider.material.toneMapped, true);
+  assert.equal(sharedVisual.material.fog, true, "shared collider material stays default");
+  assert.equal(sharedVisual.material.toneMapped, true, "shared collider material stays default");
 });
