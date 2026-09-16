@@ -82,6 +82,14 @@
  * `isColorOnlyUnlitBasic` gate). Does not hex-dedupe or invent
  * meshes. Mapped / lit stay at authored / r170 Mesh defaults.
  * Collider meshes stay untouched. Does not enable shadows elsewhere.
+ *
+ * v0.50: after that shadow pin, `pinColorOnlyVisualFrustumCulled`
+ * sets `frustumCulled = true` on packed color-only unlit MeshBasic
+ * visual meshes (same `isColorOnlyUnlitBasic` gate). Accidental
+ * DCC / GLB `frustumCulled = false` would skip GPU frustum
+ * rejection. Does not hex-dedupe or invent meshes. Mapped / lit
+ * stay at authored / r170 Mesh defaults. Collider meshes stay
+ * untouched. Does not disable culling or invent a custom strategy.
  */
 
 import {
@@ -92,6 +100,7 @@ import {
   packColorOnlyGeometry,
   pinColorOnlyVisualMaterialFlags,
   pinColorOnlyVisualShadowFlags,
+  pinColorOnlyVisualFrustumCulled,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -253,6 +262,7 @@ export function ingestPackagedRoot(root, sidecar) {
   disableColorOnlyVisualRaycast(root);
   pinColorOnlyVisualMaterialFlags(root);
   pinColorOnlyVisualShadowFlags(root);
+  pinColorOnlyVisualFrustumCulled(root);
   return root;
 }
 

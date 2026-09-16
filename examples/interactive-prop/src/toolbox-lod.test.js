@@ -51,7 +51,9 @@ const {
   noopColorOnlyVisualRaycast,
   packColorOnlyGeometry,
   pinColorOnlyUnlitBasicFlags,
+  pinColorOnlyUnlitBasicFrustumCulled,
   pinColorOnlyUnlitBasicShadowFlags,
+  pinColorOnlyVisualFrustumCulled,
   pinColorOnlyVisualMaterialFlags,
   pinColorOnlyVisualShadowFlags,
   quantizePositionToFloat16,
@@ -87,6 +89,10 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
   assert.equal(mesh.castShadow, false, `${label} pins castShadow false`);
   assert.equal(mesh.receiveShadow, false, `${label} pins receiveShadow false`);
+}
+
+function assertQuestSafeUnlitFrustumCulled(mesh, label = "color-only MeshBasic mesh") {
+  assert.equal(mesh.frustumCulled, true, `${label} pins frustumCulled true`);
 }
 
 test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
@@ -752,6 +758,16 @@ function countVisualShadowFlags(crate) {
   return { off, on, total: off + on };
 }
 
+function countVisualFrustumCulled(crate) {
+  let on = 0;
+  let off = 0;
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.frustumCulled) on += 1;
+    else off += 1;
+  }
+  return { on, off, total: on + off };
+}
+
 test("v0.46 disables Mesh.raycast on packed color-only visuals; colliders keep default", () => {
   assert.equal(typeof THREE.Mesh.prototype.raycast, "function", "r170 Mesh.prototype.raycast exists");
   const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
@@ -1060,6 +1076,184 @@ test("pinColorOnlyUnlitBasicShadowFlags / pinColorOnlyVisualShadowFlags skip map
   assert.equal(sharedCollider.receiveShadow, true);
   assert.equal(std.castShadow, true, "MeshStandard stays authored via entity helper");
   assert.equal(std.receiveShadow, true);
+});
+
+test("v0.50 pins frustumCulled true on color-only visual meshes; envelope stays v0.49", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assert.equal(fresh.frustumCulled, true, "r170 Mesh defaults frustumCulled true");
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+  }
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFlags(mesh.material);
+  }
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count is 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitFrustumCulled(lidMesh, "lidMesh");
+  assertQuestSafeUnlitFrustumCulled(latchMesh, "latchMesh");
+  assertQuestSafeUnlitFrustumCulled(fastener, "fastenerMesh");
+
+  for (const c of crate.userData.colliders) {
+    assert.equal(c.frustumCulled, true, "collider Mesh keeps r170 frustumCulled default");
+    assert.equal(c.castShadow, false, "collider Mesh keeps r170 castShadow default");
+    assert.equal(c.receiveShadow, false, "collider Mesh keeps r170 receiveShadow default");
+    assert.equal(c.material.fog, true, "collider MeshBasic keeps r170 fog default");
+    assert.equal(c.material.toneMapped, true, "collider MeshBasic keeps r170 toneMapped default");
+    assert.equal(c.material.transparent, true, "collider MeshBasic keeps authored transparent");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+  }
+});
+
+test("L4/L5 activity smoke still passes after Mesh frustumCulled pin", () => {
+  const crate = createToolbox();
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const fastener = crate.userData.fastener.mesh;
+  assert.equal(activityState(crate), "closed");
+
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitShadowFlags(fastener, "fastener after L5 drive");
+  assertQuestSafeUnlitFrustumCulled(fastener, "fastener after L5 drive");
+  assert.equal(fastener.raycast, noopColorOnlyVisualRaycast);
+});
+
+test("pinColorOnlyUnlitBasicFrustumCulled corrects a wrong color-only Mesh that still passes isColorOnlyUnlitBasic", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assert.equal(fresh.frustumCulled, true, "r170 Mesh defaults frustumCulled true");
+
+  const wrong = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  wrong.frustumCulled = false;
+  assert.equal(isColorOnlyUnlitBasic(wrong.material), true, "color-only MeshBasic still passes the gate");
+  assert.equal(wrong.frustumCulled, false);
+  pinColorOnlyUnlitBasicFrustumCulled(wrong);
+  assertQuestSafeUnlitFrustumCulled(wrong, "deliberately wrong color-only Mesh");
+  assert.equal(wrong.castShadow, false, "frustum pin does not change castShadow");
+  assert.equal(wrong.receiveShadow, false, "frustum pin does not change receiveShadow");
+  assert.equal(wrong.material.fog, true, "frustum pin does not change fog");
+  assert.equal(wrong.material.toneMapped, true, "frustum pin does not change toneMapped");
+  assert.equal(wrong.material.transparent, false, "frustum pin does not change opaque FrontSide");
+  assert.equal(wrong.material.side, THREE.FrontSide, "frustum pin does not change FrontSide");
+});
+
+test("pinColorOnlyUnlitBasicFrustumCulled / pinColorOnlyVisualFrustumCulled skip mapped, lit, morph, colliders, shared blocked", () => {
+  const colorOnly = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  colorOnly.frustumCulled = false;
+  const mapped = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } })
+  );
+  mapped.frustumCulled = false;
+  const std = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshStandardMaterial()
+  );
+  std.frustumCulled = false;
+  pinColorOnlyUnlitBasicFrustumCulled(colorOnly);
+  pinColorOnlyUnlitBasicFrustumCulled(mapped);
+  pinColorOnlyUnlitBasicFrustumCulled(std);
+  assertQuestSafeUnlitFrustumCulled(colorOnly);
+  assert.equal(mapped.frustumCulled, false, "mapped MeshBasic stays authored frustumCulled");
+  assert.equal(std.frustumCulled, false, "MeshStandard stays authored frustumCulled");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = mapped;
+  const colorMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  colorMesh.frustumCulled = false;
+  const morph = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xc1c3c9 })
+  );
+  morph.geometry.morphAttributes.position = [morph.geometry.getAttribute("position").clone()];
+  morph.frustumCulled = false;
+  const collider = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.frustumCulled = false;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedVisual.frustumCulled = false;
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  sharedCollider.frustumCulled = false;
+  body.add(mappedMesh, colorMesh, morph, sharedVisual);
+  root.add(body, collider, sharedCollider, std);
+  pinColorOnlyVisualFrustumCulled(root);
+  assertQuestSafeUnlitFrustumCulled(colorMesh, "entity helper color-only");
+  assert.equal(mapped.frustumCulled, false, "mapped MeshBasic stays authored via entity helper");
+  assert.equal(morph.frustumCulled, false, "morph color-only MeshBasic is skipped");
+  assert.equal(collider.frustumCulled, false, "collider Mesh stays authored");
+  assert.equal(sharedVisual.frustumCulled, false, "shared collider material visual stays unpinned");
+  assert.equal(sharedCollider.frustumCulled, false, "shared collider stays authored");
+  assert.equal(std.frustumCulled, false, "MeshStandard stays authored via entity helper");
 });
 
 test("v0.48 pins fog/toneMapped false and opaque FrontSide on unique color-only MeshBasics; envelope stays v0.47", () => {
