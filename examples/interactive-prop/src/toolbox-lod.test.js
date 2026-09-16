@@ -43,10 +43,12 @@ const {
   collectLodVisualMaterials,
   compactIndexToUint16,
   createToolbox,
+  disableColorOnlyVisualRaycast,
   freezeStaticColorOnlyWorldMatrices,
   getToolboxLodStats,
   isColorOnlyUnlitBasic,
   isUnderAnimatedToolboxPivot,
+  noopColorOnlyVisualRaycast,
   packColorOnlyGeometry,
   quantizePositionToFloat16,
   releaseCpuArraysOnGpuUpload,
@@ -695,4 +697,144 @@ test("freezeStaticColorOnlyWorldMatrices skips mapped MeshBasic and colliders", 
   assert.equal(colorOnly.matrixAutoUpdate, false);
   assert.equal(mapped.matrixAutoUpdate, true, "mapped MeshBasic stays live");
   assert.equal(collider.matrixAutoUpdate, true, "collider stays live");
+});
+
+function countVisualRaycast(crate) {
+  let disabled = 0;
+  let defaultRaycast = 0;
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.raycast === noopColorOnlyVisualRaycast) disabled += 1;
+    else if (mesh.raycast === THREE.Mesh.prototype.raycast) defaultRaycast += 1;
+  }
+  return { disabled, defaultRaycast, total: disabled + defaultRaycast };
+}
+
+test("v0.46 disables Mesh.raycast on packed color-only visuals; colliders keep default", () => {
+  assert.equal(typeof THREE.Mesh.prototype.raycast, "function", "r170 Mesh.prototype.raycast exists");
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assert.equal(fresh.raycast, THREE.Mesh.prototype.raycast, "default Mesh uses prototype.raycast");
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 6 + 4 + 2 + 1, "LOD0 6 + LOD1 4 + LOD2 2 + fastener 1");
+  const counts = countVisualRaycast(crate);
+  assert.equal(counts.total, 13);
+  assert.equal(counts.disabled, 13, "all color-only visual MeshBasics get the no-op raycast");
+  assert.equal(counts.defaultRaycast, 0, "no visual MeshBasic keeps Mesh.prototype.raycast");
+
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3, "body LOD0/1/2 still matrix-frozen");
+  assert.equal(matrixCounts.live, 10, "lid/latch/tool/fastener still matrix-live");
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.equal(lidMesh.raycast, noopColorOnlyVisualRaycast);
+  assert.equal(latchMesh.raycast, noopColorOnlyVisualRaycast);
+  assert.equal(fastener.raycast, noopColorOnlyVisualRaycast);
+  assert.equal(lidMesh.matrixAutoUpdate, true);
+  assert.equal(latchMesh.matrixAutoUpdate, true);
+  assert.equal(fastener.matrixAutoUpdate, true);
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false);
+  assert.equal(bodyHero.raycast, noopColorOnlyVisualRaycast);
+
+  const intersects = [];
+  bodyHero.raycast(new THREE.Raycaster(), intersects);
+  fastener.raycast(new THREE.Raycaster(), intersects);
+  assert.equal(intersects.length, 0, "no-op raycast does not push intersections");
+
+  for (const c of crate.userData.colliders) {
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast, "colliders keep default Mesh raycast");
+    assert.notEqual(c.raycast, noopColorOnlyVisualRaycast, "colliders are not assigned the visual no-op");
+  }
+});
+
+test("L4/L5 activity smoke still passes after visual raycast disable", () => {
+  const crate = createToolbox();
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const fastener = crate.userData.fastener.mesh;
+  assert.equal(activityState(crate), "closed");
+
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(fastener.raycast, noopColorOnlyVisualRaycast, "L5 drive does not restore mesh raycast");
+});
+
+test("pick path still hits collider AABBs after visual raycast disable", async () => {
+  const { collectPickables, firstHit } = await import("./interaction.js");
+  const crate = createToolbox();
+  crate.updateMatrixWorld(true);
+  const list = collectPickables([crate]);
+  assert.ok(list.every((o) => o.userData.collider || o.name.startsWith("collider_")));
+  assert.ok(list.every((o) => o.raycast === THREE.Mesh.prototype.raycast));
+  assert.ok(!list.some((o) => o.raycast === noopColorOnlyVisualRaycast));
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.ray.origin.set(0, 0.075, 1);
+  raycaster.ray.direction.set(0, 0, -1);
+  const hit = firstHit(raycaster, list);
+  assert.ok(hit, "AABB firstHit still finds a collider");
+  assert.ok(hit.object.name.startsWith("collider_"), "picks hit colliders only, not visual meshes");
+  assert.equal(hit.object.raycast, THREE.Mesh.prototype.raycast);
+  assert.notEqual(hit.object.raycast, noopColorOnlyVisualRaycast);
+});
+
+test("disableColorOnlyVisualRaycast skips mapped MeshBasic, morph, and colliders", () => {
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mapped = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } })
+  );
+  const colorOnly = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  const morph = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  morph.geometry.morphAttributes.position = [morph.geometry.getAttribute("position").clone()];
+  const collider = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  body.add(mapped, colorOnly, morph);
+  root.add(body, collider);
+  disableColorOnlyVisualRaycast(root);
+  assert.equal(colorOnly.raycast, noopColorOnlyVisualRaycast);
+  assert.equal(mapped.raycast, THREE.Mesh.prototype.raycast, "mapped MeshBasic keeps default raycast");
+  assert.equal(morph.raycast, THREE.Mesh.prototype.raycast, "morph color-only MeshBasic is skipped");
+  assert.equal(collider.raycast, THREE.Mesh.prototype.raycast, "collider keeps default raycast");
 });

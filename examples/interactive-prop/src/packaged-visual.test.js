@@ -9,6 +9,7 @@ import {
 } from "./packaged-visual.js";
 import {
   mergeSameMaterialMeshes,
+  noopColorOnlyVisualRaycast,
   setToolboxLod,
   TOOLBOX_LOD_DISTANCES,
   updateToolboxLod,
@@ -492,4 +493,41 @@ test("packaged ingest without lod groups still freezes static body MeshBasic", (
   assert.equal(visualMeshes(latch)[0].matrixAutoUpdate, true);
   assert.equal(visualMeshes(tool)[0].matrixAutoUpdate, true);
   assert.equal(fastener.matrixAutoUpdate, true);
+});
+
+test("packaged ingest disables color-only visual raycast; collider_grab does not", () => {
+  const { root, body, lid, latch, tool, fastener, groups } = makePackagedFixture();
+  ingestPackagedRoot(root, sidecar);
+
+  const bodyMeshes = groups[0].concat(groups[1], groups[2])
+    .filter((g) => g.parent === body)
+    .flatMap((g) => visualMeshes(g));
+  assert.equal(bodyMeshes.length, 3);
+  for (const mesh of bodyMeshes) {
+    assert.equal(mesh.raycast, noopColorOnlyVisualRaycast, "packed color-only body visuals skip triangle raycast");
+  }
+
+  const liveParents = new Set([lid, latch, tool]);
+  const pivotMeshes = groups[0].concat(groups[1], groups[2])
+    .filter((g) => liveParents.has(g.parent))
+    .flatMap((g) => visualMeshes(g));
+  assert.equal(pivotMeshes.length, 9);
+  for (const mesh of pivotMeshes) {
+    assert.equal(mesh.raycast, noopColorOnlyVisualRaycast, "lid/latch/tool visuals skip triangle raycast");
+  }
+  assert.equal(fastener.raycast, noopColorOnlyVisualRaycast, "packaged fastener visual raycast is disabled");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.raycast, THREE.Mesh.prototype.raycast, "collider_grab keeps default Mesh raycast");
+  assert.notEqual(colliderGrab.raycast, noopColorOnlyVisualRaycast);
+});
+
+test("packaged ingest without lod groups still disables static body visual raycast", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(visualMeshes(body)[0].raycast, noopColorOnlyVisualRaycast);
+  assert.equal(visualMeshes(lid)[0].raycast, noopColorOnlyVisualRaycast);
+  assert.equal(visualMeshes(latch)[0].raycast, noopColorOnlyVisualRaycast);
+  assert.equal(visualMeshes(tool)[0].raycast, noopColorOnlyVisualRaycast);
+  assert.equal(fastener.raycast, noopColorOnlyVisualRaycast);
+  assert.equal(root.getObjectByName("collider_grab").raycast, THREE.Mesh.prototype.raycast);
 });

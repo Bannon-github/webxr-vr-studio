@@ -265,8 +265,8 @@ export function releaseCpuArraysOnGpuUpload(geometry, material) {
  * Strip unused color-only attrs, compact a wasteful 32-bit index, quantize
  * Float32 `position` to Float16, then hook GPU-upload CPU-array release
  * on color-only unlit MeshBasic. Shared by procedural create (v0.37–v0.44)
- * and packaged ingest. v0.45 matrix freeze is a post-attach Object3D
- * step, not a geometry pack step.
+ * and packaged ingest. v0.45 matrix freeze and v0.46 visual raycast
+ * disable are post-attach Object3D steps, not geometry pack steps.
  */
 export function packColorOnlyGeometry(geometry, material) {
   stripUnusedColorOnlyAttributes(geometry, material);
@@ -336,6 +336,60 @@ export function freezeStaticColorOnlyWorldMatrices(entity) {
     if (isFastenerVisual(o, entity)) return;
     if (isUnderAnimatedToolboxPivot(o, entity)) return;
     o.matrixAutoUpdate = false;
+  });
+  return entity;
+}
+
+/**
+ * Shared no-op for `Mesh.raycast`. Three r170
+ * `Mesh.prototype.raycast(raycaster, intersects)` walks triangles and
+ * pushes hits. Assigning this empty function returns without pushing.
+ * Pick path (`firstHit` / `collectPickables`) uses collider AABB slabs
+ * (`userData.size`), not visual `Mesh.raycast` — this is a CPU fence
+ * if anything still calls triangle raycast on hero/LOD/fastener meshes.
+ */
+export function noopColorOnlyVisualRaycast(/* raycaster, intersects */) {}
+
+function colorOnlyGeometryBlocksPack(geometry) {
+  if (!geometry) return false;
+  if (Object.keys(geometry.morphAttributes || {}).length) return true;
+  for (const name of Object.keys(geometry.attributes || {})) {
+    if (geometry.getAttribute(name)?.isInterleavedBufferAttribute) return true;
+  }
+  if (geometry.getIndex()?.isInterleavedBufferAttribute) return true;
+  return false;
+}
+
+/**
+ * After procedural create + LOD attach (and on packaged ingest of
+ * packed color-only MeshBasic visuals), disable triangle raycast on
+ * every color-only unlit MeshBasic visual mesh: LOD0/1/2 body +
+ * lid/latch/tool meshes + fastener MeshBasic.
+ *
+ * **Verified r170 API:** `Mesh.prototype.raycast` is the default
+ * identity (`new Mesh().raycast === Mesh.prototype.raycast`).
+ * Assigning `mesh.raycast = noopColorOnlyVisualRaycast` is enough.
+ *
+ * **Verified pick path (ADR 0004 / photoreal-realtime):**
+ * `collectPickables` gathers `userData.colliders` only;
+ * `firstHit` slab-tests `userData.size`. No `intersectObjects`.
+ * Hover/grab do not need visual mesh raycast.
+ *
+ * Skip colliders even if they are MeshBasic debug hulls — leave
+ * default `Mesh.prototype.raycast` intact. Skip mapped / lit /
+ * morph / interleaved (same color-only unlit MeshBasic gate as the
+ * pack pipeline). Fastener is a visual MeshBasic — disable it too
+ * (L5 drive is transform writes, not mesh raycast). Load-time only.
+ */
+export function disableColorOnlyVisualRaycast(entity) {
+  if (!entity) return entity;
+  entity.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.userData.collider) return;
+    if (o.name && o.name.startsWith("collider_")) return;
+    if (!isColorOnlyUnlitBasic(o.material)) return;
+    if (colorOnlyGeometryBlocksPack(o.geometry)) return;
+    o.raycast = noopColorOnlyVisualRaycast;
   });
   return entity;
 }
@@ -637,7 +691,8 @@ export function createToolbox() {
   // color-only unused-attr strip + Uint16 compact (v0.41) + Float16
   // position quantize (v0.44) + post-upload CPU array release (v0.43).
   // applyFastenerVisual mutates this mesh's rotation.z / position.z,
-  // so v0.45 must not freeze its matrixAutoUpdate.
+  // so v0.45 must not freeze its matrixAutoUpdate. v0.46 still
+  // disables its Mesh.raycast (L5 is transform writes, not pick).
   const fastener = boxMesh(0.028, 0.028, 0.02, brass, -0.12, 0.07, 0.131);
   fastener.name = "fastenerMesh";
   packColorOnlyGeometry(fastener.geometry, fastener.material);
@@ -690,7 +745,7 @@ export function createToolbox() {
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
     uniqueMaterials: colorOnlyByHex.size,
-    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
+    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. v0.46 disables Mesh.raycast on packed color-only MeshBasic visuals (body + lid/latch/tool + fastener); colliders keep Mesh.prototype.raycast. Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -715,6 +770,8 @@ export function createToolbox() {
   // Float32 position to Float16 on those same color-only geos.
   // v0.45: after LODs attach, freeze matrixAutoUpdate on static
   // color-only MeshBasic body leaves (not lid/latch/tool/fastener).
+  // v0.46: after that freeze, disable Mesh.raycast on packed
+  // color-only MeshBasic visuals (body + lid/latch/tool + fastener).
   // Pivots stay separate. Fastener is packed above, not merged here.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);
@@ -733,6 +790,7 @@ export function createToolbox() {
     2: [bodyL2, lidL2, latchL2, toolL2],
   });
   freezeStaticColorOnlyWorldMatrices(root);
+  disableColorOnlyVisualRaycast(root);
 
   return root;
 }
