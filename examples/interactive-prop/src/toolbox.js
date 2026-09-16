@@ -266,8 +266,9 @@ export function releaseCpuArraysOnGpuUpload(geometry, material) {
  * Float32 `position` to Float16, then hook GPU-upload CPU-array release
  * on color-only unlit MeshBasic. Shared by procedural create (v0.37–v0.44)
  * and packaged ingest. v0.45 matrix freeze, v0.46 visual raycast
- * disable, and v0.47 MeshBasic fog/toneMapped pin are post-attach
- * Object3D / material-state steps, not geometry pack steps.
+ * disable, v0.47 MeshBasic fog/toneMapped pin, and v0.48 opaque
+ * FrontSide draw-state fences are post-attach Object3D /
+ * material-state steps, not geometry pack steps.
  */
 export function packColorOnlyGeometry(geometry, material) {
   stripUnusedColorOnlyAttributes(geometry, material);
@@ -407,20 +408,34 @@ export function disableColorOnlyVisualRaycast(entity) {
  * false` drops fog from the MeshBasic program when `scene.fog` is
  * set later.
  *
+ * **Verified r170 API (opaque FrontSide):** a fresh
+ * `MeshBasicMaterial` is already `transparent === false`,
+ * `opacity === 1`, `depthWrite === true`, `depthTest === true`,
+ * `side === FrontSide` (0). Accidental DoubleSide or
+ * transparent/alpha from DCC / packaged GLBs doubles fill or
+ * forces blending on a TBDR mobile GPU. Pin those five as the
+ * unlit midtone stand-in contract. Load-time only — not per-frame.
+ *
  * Same `isColorOnlyUnlitBasic` gate as the pack pipeline. Does not
- * invent materials or hex-dedupe. Load-time only — not per-frame.
+ * invent materials or hex-dedupe.
  */
 export function pinColorOnlyUnlitBasicFlags(material) {
   if (!isColorOnlyUnlitBasic(material)) return material;
   material.fog = false;
   material.toneMapped = false;
+  material.transparent = false;
+  material.opacity = 1;
+  material.depthWrite = true;
+  material.depthTest = true;
+  material.side = THREE.FrontSide;
   return material;
 }
 
 /**
  * After materials are shared (procedural) or color-only MeshBasics
- * are detected (packaged ingest), pin fog/toneMapped on every unique
- * packed color-only unlit MeshBasic visual material.
+ * are detected (packaged ingest), pin fog/toneMapped and opaque
+ * FrontSide draw-state on every unique packed color-only unlit
+ * MeshBasic visual material.
  *
  * Skip colliders (even MeshBasic debug hulls). Skip mapped / lit.
  * Skip morph / interleaved (same pack-pipeline gate as raycast).
@@ -804,7 +819,7 @@ export function createToolbox() {
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
     uniqueMaterials: colorOnlyByHex.size,
-    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. v0.46 disables Mesh.raycast on packed color-only MeshBasic visuals (body + lid/latch/tool + fastener); colliders keep Mesh.prototype.raycast. v0.47 pins fog = false and toneMapped = false on packed color-only unlit MeshBasic materials (3 unique shared instances; mapped/lit/colliders stay r170 defaults). Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
+    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. v0.46 disables Mesh.raycast on packed color-only MeshBasic visuals (body + lid/latch/tool + fastener); colliders keep Mesh.prototype.raycast. v0.47 pins fog = false and toneMapped = false on packed color-only unlit MeshBasic materials (3 unique shared instances; mapped/lit/colliders stay r170 defaults). v0.48 also pins opaque FrontSide draw-state (transparent = false, opacity = 1, depthWrite = true, depthTest = true, side = FrontSide) on those same materials. Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -833,6 +848,8 @@ export function createToolbox() {
   // color-only MeshBasic visuals (body + lid/latch/tool + fastener).
   // v0.47: after that raycast disable (and after hex-share above),
   // pin fog/toneMapped false on the shared color-only MeshBasics.
+  // v0.48: the same helper also pins opaque FrontSide draw-state
+  // (transparent/opacity/depthWrite/depthTest/side) on those materials.
   // Pivots stay separate. Fastener is packed above, not merged here.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);

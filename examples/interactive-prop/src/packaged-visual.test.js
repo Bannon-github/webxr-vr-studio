@@ -78,6 +78,16 @@ function boxMesh(name, material) {
   return m;
 }
 
+function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
+  assert.equal(mat.fog, false, `${label} pins fog false`);
+  assert.equal(mat.toneMapped, false, `${label} pins toneMapped false`);
+  assert.equal(mat.transparent, false, `${label} pins transparent false`);
+  assert.equal(mat.opacity, 1, `${label} pins opacity 1`);
+  assert.equal(mat.depthWrite, true, `${label} pins depthWrite true`);
+  assert.equal(mat.depthTest, true, `${label} pins depthTest true`);
+  assert.equal(mat.side, THREE.FrontSide, `${label} pins FrontSide`);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -532,15 +542,36 @@ test("packaged ingest without lod groups still disables static body visual rayca
   assert.equal(root.getObjectByName("collider_grab").raycast, THREE.Mesh.prototype.raycast);
 });
 
-test("packaged ingest pins fog/toneMapped on color-only MeshBasics; mapped/lit stay default", () => {
+test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only MeshBasics; mapped/lit stay default", () => {
   const fresh = new THREE.MeshBasicMaterial();
   assert.equal(fresh.fog, true, "r170 MeshBasicMaterial defaults fog true");
   assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
+  assert.equal(fresh.transparent, false, "r170 MeshBasicMaterial defaults transparent false");
+  assert.equal(fresh.opacity, 1, "r170 MeshBasicMaterial defaults opacity 1");
+  assert.equal(fresh.depthWrite, true, "r170 MeshBasicMaterial defaults depthWrite true");
+  assert.equal(fresh.depthTest, true, "r170 MeshBasicMaterial defaults depthTest true");
+  assert.equal(fresh.side, THREE.FrontSide, "r170 MeshBasicMaterial defaults FrontSide");
+  assert.equal(THREE.FrontSide, 0, "r170 FrontSide is 0");
 
   const { root, fastener, groups } = makePackagedFixture();
-  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    transparent: true,
+    opacity: 0.5,
+    side: THREE.DoubleSide,
+  });
   const mappedMesh = boxMesh("mappedHero", mapped);
-  groups[0][0].add(mappedMesh);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.DoubleSide,
+  });
+  const wrongMesh = boxMesh("dccDoubleSide", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
 
   ingestPackagedRoot(root, sidecar);
 
@@ -550,29 +581,35 @@ test("packaged ingest pins fog/toneMapped on color-only MeshBasics; mapped/lit s
     .concat(fastener);
   for (const mesh of fixtureVisuals) {
     if (mesh.material === mapped) continue;
-    assert.equal(mesh.material.fog, false, "packaged color-only MeshBasic pins fog false");
-    assert.equal(mesh.material.toneMapped, false, "packaged color-only MeshBasic pins toneMapped false");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
   }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC DoubleSide color-only MeshBasic");
   assert.equal(mapped.fog, true, "mapped MeshBasic stays r170 fog default");
   assert.equal(mapped.toneMapped, true, "mapped MeshBasic stays r170 toneMapped default");
+  assert.equal(mapped.transparent, true, "mapped MeshBasic stays authored transparent");
+  assert.equal(mapped.opacity, 0.5, "mapped MeshBasic stays authored opacity");
+  assert.equal(mapped.side, THREE.DoubleSide, "mapped MeshBasic stays authored DoubleSide");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.material.fog, true, "collider MeshBasic stays default fog");
   assert.equal(colliderGrab.material.toneMapped, true, "collider MeshBasic stays default toneMapped");
+  assert.equal(colliderGrab.material.transparent, false, "collider MeshBasic stays r170 transparent default");
+  assert.equal(colliderGrab.material.side, THREE.FrontSide, "collider MeshBasic stays r170 FrontSide default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
   const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
   ingestPackagedRoot(root, sidecar);
-  assert.equal(visualMeshes(body)[0].material.fog, false);
-  assert.equal(visualMeshes(body)[0].material.toneMapped, false);
-  assert.equal(visualMeshes(lid)[0].material.fog, false);
-  assert.equal(visualMeshes(latch)[0].material.fog, false);
-  assert.equal(visualMeshes(tool)[0].material.fog, false);
-  assert.equal(fastener.material.fog, false);
-  assert.equal(fastener.material.toneMapped, false);
+  assertQuestSafeUnlitFlags(visualMeshes(body)[0].material, "fail-soft body");
+  assertQuestSafeUnlitFlags(visualMeshes(lid)[0].material, "fail-soft lid");
+  assertQuestSafeUnlitFlags(visualMeshes(latch)[0].material, "fail-soft latch");
+  assertQuestSafeUnlitFlags(visualMeshes(tool)[0].material, "fail-soft tool");
+  assertQuestSafeUnlitFlags(fastener.material, "fail-soft fastener");
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.material.fog, true);
   assert.equal(colliderGrab.material.toneMapped, true);
+  assert.equal(colliderGrab.material.transparent, false, "fail-soft collider stays r170 transparent default");
+  assert.equal(colliderGrab.material.side, THREE.FrontSide, "fail-soft collider stays r170 FrontSide default");
 });

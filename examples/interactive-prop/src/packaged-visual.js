@@ -69,6 +69,12 @@
  * unlit MeshBasic visual materials (same `isColorOnlyUnlitBasic`
  * gate). Does not hex-dedupe or invent materials. Mapped / lit stay
  * at r170 defaults. Collider MeshBasics stay untouched.
+ *
+ * v0.48: the same helper also pins opaque FrontSide draw-state
+ * (`transparent = false`, `opacity = 1`, `depthWrite = true`,
+ * `depthTest = true`, `side = FrontSide`) on those color-only
+ * MeshBasics. Accidental DoubleSide / transparent from DCC is
+ * fenced at load time. Mapped / lit / colliders stay untouched.
  */
 
 import {
