@@ -93,6 +93,10 @@ function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mes
   assert.equal(mesh.receiveShadow, false, `${label} pins receiveShadow false`);
 }
 
+function assertQuestSafeUnlitFrustumCulled(mesh, label = "color-only MeshBasic mesh") {
+  assert.equal(mesh.frustumCulled, true, `${label} pins frustumCulled true`);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -674,4 +678,55 @@ test("packaged ingest without lod groups still pins color-only Mesh shadow flags
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.castShadow, false);
   assert.equal(colliderGrab.receiveShadow, false);
+});
+
+test("packaged ingest pins frustumCulled true on color-only meshes; mapped/lit stay authored", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assert.equal(fresh.frustumCulled, true, "r170 Mesh defaults frustumCulled true");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  mappedMesh.frustumCulled = false;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccFrustumOff", wrong);
+  wrongMesh.frustumCulled = false;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.frustumCulled = false;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFrustumCulled(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowFlags(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitFrustumCulled(wrongMesh, "packaged DCC frustumCulled-off color-only Mesh");
+  assert.equal(mappedMesh.frustumCulled, false, "mapped MeshBasic stays authored frustumCulled");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.frustumCulled, false, "collider Mesh stays authored frustumCulled");
+});
+
+test("packaged ingest without lod groups still pins color-only Mesh frustumCulled", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitFrustumCulled(visualMeshes(body)[0], "fail-soft body");
+  assertQuestSafeUnlitFrustumCulled(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitFrustumCulled(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitFrustumCulled(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitFrustumCulled(fastener, "fail-soft fastener");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.frustumCulled, true, "fail-soft collider keeps r170 frustumCulled default");
 });
