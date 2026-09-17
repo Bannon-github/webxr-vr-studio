@@ -91,6 +91,12 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.alphaTest, 0, `${label} pins alphaTest 0`);
   assert.equal(mat.dithering, false, `${label} pins dithering false`);
   assert.equal(mat.alphaToCoverage, false, `${label} pins alphaToCoverage false`);
+  assert.equal(mat.wireframe, false, `${label} pins wireframe false`);
+  assert.equal(mat.colorWrite, true, `${label} pins colorWrite true`);
+  assert.equal(mat.depthFunc, THREE.LessEqualDepth, `${label} pins LessEqualDepth`);
+  assert.equal(mat.polygonOffset, false, `${label} pins polygonOffset false`);
+  assert.equal(mat.polygonOffsetFactor, 0, `${label} pins polygonOffsetFactor 0`);
+  assert.equal(mat.polygonOffsetUnits, 0, `${label} pins polygonOffsetUnits 0`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -571,6 +577,13 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(fresh.alphaTest, 0, "r170 MeshBasicMaterial defaults alphaTest 0");
   assert.equal(fresh.dithering, false, "r170 MeshBasicMaterial defaults dithering false");
   assert.equal(fresh.alphaToCoverage, false, "r170 MeshBasicMaterial defaults alphaToCoverage false");
+  assert.equal(fresh.wireframe, false, "r170 MeshBasicMaterial defaults wireframe false");
+  assert.equal(fresh.colorWrite, true, "r170 MeshBasicMaterial defaults colorWrite true");
+  assert.equal(fresh.depthFunc, THREE.LessEqualDepth, "r170 MeshBasicMaterial defaults LessEqualDepth");
+  assert.equal(fresh.polygonOffset, false, "r170 MeshBasicMaterial defaults polygonOffset false");
+  assert.equal(fresh.polygonOffsetFactor, 0, "r170 MeshBasicMaterial defaults polygonOffsetFactor 0");
+  assert.equal(fresh.polygonOffsetUnits, 0, "r170 MeshBasicMaterial defaults polygonOffsetUnits 0");
+  assert.equal(THREE.LessEqualDepth, 3, "r170 LessEqualDepth is 3");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -582,6 +595,12 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     blending: THREE.AdditiveBlending,
     premultipliedAlpha: true,
     alphaTest: 0.25,
+    wireframe: true,
+    colorWrite: false,
+    depthFunc: THREE.AlwaysDepth,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -596,6 +615,12 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     alphaTest: 0.5,
     dithering: true,
     alphaToCoverage: true,
+    wireframe: true,
+    colorWrite: false,
+    depthFunc: THREE.AlwaysDepth,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -619,6 +644,10 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(mapped.blending, THREE.AdditiveBlending, "mapped MeshBasic stays authored blending");
   assert.equal(mapped.premultipliedAlpha, true, "mapped MeshBasic stays authored premultipliedAlpha");
   assert.equal(mapped.alphaTest, 0.25, "mapped MeshBasic stays authored alphaTest");
+  assert.equal(mapped.wireframe, true, "mapped MeshBasic stays authored wireframe");
+  assert.equal(mapped.colorWrite, false, "mapped MeshBasic stays authored colorWrite");
+  assert.equal(mapped.depthFunc, THREE.AlwaysDepth, "mapped MeshBasic stays authored depthFunc");
+  assert.equal(mapped.polygonOffset, true, "mapped MeshBasic stays authored polygonOffset");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -630,6 +659,10 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(colliderGrab.material.blending, THREE.NormalBlending, "collider MeshBasic stays r170 blending default");
   assert.equal(colliderGrab.material.premultipliedAlpha, false, "collider MeshBasic stays r170 premultipliedAlpha default");
   assert.equal(colliderGrab.material.alphaTest, 0, "collider MeshBasic stays r170 alphaTest default");
+  assert.equal(colliderGrab.material.wireframe, false, "collider MeshBasic stays r170 wireframe default");
+  assert.equal(colliderGrab.material.colorWrite, true, "collider MeshBasic stays r170 colorWrite default");
+  assert.equal(colliderGrab.material.depthFunc, THREE.LessEqualDepth, "collider MeshBasic stays r170 depthFunc default");
+  assert.equal(colliderGrab.material.polygonOffset, false, "collider MeshBasic stays r170 polygonOffset default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
@@ -648,6 +681,10 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.blending, THREE.NormalBlending, "fail-soft collider stays r170 blending default");
   assert.equal(colliderGrab.material.premultipliedAlpha, false, "fail-soft collider stays r170 premultipliedAlpha default");
   assert.equal(colliderGrab.material.alphaTest, 0, "fail-soft collider stays r170 alphaTest default");
+  assert.equal(colliderGrab.material.wireframe, false, "fail-soft collider stays r170 wireframe default");
+  assert.equal(colliderGrab.material.colorWrite, true, "fail-soft collider stays r170 colorWrite default");
+  assert.equal(colliderGrab.material.depthFunc, THREE.LessEqualDepth, "fail-soft collider stays r170 depthFunc default");
+  assert.equal(colliderGrab.material.polygonOffset, false, "fail-soft collider stays r170 polygonOffset default");
 });
 
 test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest 0; mapped/lit stay authored", () => {
@@ -699,6 +736,76 @@ test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest
   assert.equal(colliderGrab.material.blending, THREE.AdditiveBlending, "collider MeshBasic stays authored blending");
   assert.equal(colliderGrab.material.premultipliedAlpha, true, "collider MeshBasic stays authored premultipliedAlpha");
   assert.equal(colliderGrab.material.alphaTest, 0.4, "collider MeshBasic stays authored alphaTest");
+});
+
+test("packaged ingest pins wireframe false / colorWrite true / depthFunc LessEqualDepth / polygonOffset off; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.wireframe, false, "r170 MeshBasicMaterial defaults wireframe false");
+  assert.equal(fresh.colorWrite, true, "r170 MeshBasicMaterial defaults colorWrite true");
+  assert.equal(fresh.depthFunc, THREE.LessEqualDepth, "r170 MeshBasicMaterial defaults LessEqualDepth");
+  assert.equal(fresh.polygonOffset, false, "r170 MeshBasicMaterial defaults polygonOffset false");
+  assert.equal(fresh.polygonOffsetFactor, 0, "r170 MeshBasicMaterial defaults polygonOffsetFactor 0");
+  assert.equal(fresh.polygonOffsetUnits, 0, "r170 MeshBasicMaterial defaults polygonOffsetUnits 0");
+  assert.equal(THREE.LessEqualDepth, 3, "r170 LessEqualDepth is 3");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    wireframe: true,
+    colorWrite: false,
+    depthFunc: THREE.AlwaysDepth,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    wireframe: true,
+    colorWrite: false,
+    depthFunc: THREE.AlwaysDepth,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+  const wrongMesh = boxMesh("dccWireframeGpuState", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.wireframe = true;
+  colliderGrabBefore.material.colorWrite = false;
+  colliderGrabBefore.material.depthFunc = THREE.AlwaysDepth;
+  colliderGrabBefore.material.polygonOffset = true;
+  colliderGrabBefore.material.polygonOffsetFactor = 1;
+  colliderGrabBefore.material.polygonOffsetUnits = 1;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC wireframe/colorWrite/depthFunc/polygonOffset color-only MeshBasic");
+  assert.equal(mapped.wireframe, true, "mapped MeshBasic stays authored wireframe");
+  assert.equal(mapped.colorWrite, false, "mapped MeshBasic stays authored colorWrite");
+  assert.equal(mapped.depthFunc, THREE.AlwaysDepth, "mapped MeshBasic stays authored depthFunc");
+  assert.equal(mapped.polygonOffset, true, "mapped MeshBasic stays authored polygonOffset");
+  assert.equal(mapped.polygonOffsetFactor, 1, "mapped MeshBasic stays authored polygonOffsetFactor");
+  assert.equal(mapped.polygonOffsetUnits, 1, "mapped MeshBasic stays authored polygonOffsetUnits");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.wireframe, true, "collider MeshBasic stays authored wireframe");
+  assert.equal(colliderGrab.material.colorWrite, false, "collider MeshBasic stays authored colorWrite");
+  assert.equal(colliderGrab.material.depthFunc, THREE.AlwaysDepth, "collider MeshBasic stays authored depthFunc");
+  assert.equal(colliderGrab.material.polygonOffset, true, "collider MeshBasic stays authored polygonOffset");
+  assert.equal(colliderGrab.material.polygonOffsetFactor, 1, "collider MeshBasic stays authored polygonOffsetFactor");
+  assert.equal(colliderGrab.material.polygonOffsetUnits, 1, "collider MeshBasic stays authored polygonOffsetUnits");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {

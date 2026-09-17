@@ -85,6 +85,16 @@ function assertR170MeshBasicBlendingAlphaDefaults(mat, label = "r170 MeshBasicMa
   assert.equal(THREE.NormalBlending, 1, "r170 NormalBlending is 1");
 }
 
+function assertR170MeshBasicGpuStateDefaults(mat, label = "r170 MeshBasicMaterial") {
+  assert.equal(mat.wireframe, false, `${label} defaults wireframe false`);
+  assert.equal(mat.colorWrite, true, `${label} defaults colorWrite true`);
+  assert.equal(mat.depthFunc, THREE.LessEqualDepth, `${label} defaults LessEqualDepth`);
+  assert.equal(mat.polygonOffset, false, `${label} defaults polygonOffset false`);
+  assert.equal(mat.polygonOffsetFactor, 0, `${label} defaults polygonOffsetFactor 0`);
+  assert.equal(mat.polygonOffsetUnits, 0, `${label} defaults polygonOffsetUnits 0`);
+  assert.equal(THREE.LessEqualDepth, 3, "r170 LessEqualDepth is 3");
+}
+
 function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.fog, false, `${label} pins fog false`);
   assert.equal(mat.toneMapped, false, `${label} pins toneMapped false`);
@@ -98,6 +108,12 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.alphaTest, 0, `${label} pins alphaTest 0`);
   assert.equal(mat.dithering, false, `${label} pins dithering false`);
   assert.equal(mat.alphaToCoverage, false, `${label} pins alphaToCoverage false`);
+  assert.equal(mat.wireframe, false, `${label} pins wireframe false`);
+  assert.equal(mat.colorWrite, true, `${label} pins colorWrite true`);
+  assert.equal(mat.depthFunc, THREE.LessEqualDepth, `${label} pins LessEqualDepth`);
+  assert.equal(mat.polygonOffset, false, `${label} pins polygonOffset false`);
+  assert.equal(mat.polygonOffsetFactor, 0, `${label} pins polygonOffsetFactor 0`);
+  assert.equal(mat.polygonOffsetUnits, 0, `${label} pins polygonOffsetUnits 0`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -1276,6 +1292,7 @@ test("v0.51 pins NormalBlending / premultipliedAlpha false / alphaTest 0 on uniq
   assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
   assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
   assertR170MeshBasicBlendingAlphaDefaults(fresh);
+  assertR170MeshBasicGpuStateDefaults(fresh);
 
   const crate = createToolbox();
   const stats = getToolboxLodStats(crate);
@@ -1341,12 +1358,91 @@ test("v0.51 pins NormalBlending / premultipliedAlpha false / alphaTest 0 on uniq
   }
 });
 
+test("v0.52 pins wireframe false / colorWrite true / depthFunc LessEqualDepth / polygonOffset off on unique color-only MeshBasics; envelope stays v0.51", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.fog, true, "r170 MeshBasicMaterial defaults fog true");
+  assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
+  assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
+  assertR170MeshBasicBlendingAlphaDefaults(fresh);
+  assertR170MeshBasicGpuStateDefaults(fresh);
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+  }
+  const named = crate.userData.materials.lod0;
+  assertQuestSafeUnlitFlags(named.wood, "wood");
+  assertQuestSafeUnlitFlags(named.brass, "brass");
+  assertQuestSafeUnlitFlags(named.steel, "steel");
+  assert.equal(named.wood, crate.userData.materials.lod1.wood);
+  assert.equal(named.brass, crate.userData.materials.lod1.brass);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFlags(mesh.material);
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+  }
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitFlags(lidMesh.material, "lidMesh");
+  assertQuestSafeUnlitFlags(latchMesh.material, "latchMesh");
+  assertQuestSafeUnlitFlags(fastener.material, "fastenerMesh");
+
+  for (const c of crate.userData.colliders) {
+    assert.equal(c.material.fog, true, "collider MeshBasic keeps r170 fog default");
+    assert.equal(c.material.toneMapped, true, "collider MeshBasic keeps r170 toneMapped default");
+    assert.equal(c.material.transparent, true, "collider MeshBasic keeps authored transparent");
+    assert.equal(c.material.opacity, 0.55, "collider MeshBasic keeps authored opacity");
+    assert.equal(c.material.depthTest, false, "collider MeshBasic keeps authored depthTest");
+    assert.equal(c.material.blending, THREE.NormalBlending, "collider MeshBasic keeps r170 blending default");
+    assert.equal(c.material.premultipliedAlpha, false, "collider MeshBasic keeps r170 premultipliedAlpha default");
+    assert.equal(c.material.alphaTest, 0, "collider MeshBasic keeps r170 alphaTest default");
+    assert.equal(c.material.wireframe, true, "collider MeshBasic keeps authored wireframe");
+    assert.equal(c.material.colorWrite, true, "collider MeshBasic keeps r170 colorWrite default");
+    assert.equal(c.material.depthFunc, THREE.LessEqualDepth, "collider MeshBasic keeps r170 depthFunc default");
+    assert.equal(c.material.polygonOffset, false, "collider MeshBasic keeps r170 polygonOffset default");
+    assert.equal(c.material.polygonOffsetFactor, 0, "collider MeshBasic keeps r170 polygonOffsetFactor default");
+    assert.equal(c.material.polygonOffsetUnits, 0, "collider MeshBasic keeps r170 polygonOffsetUnits default");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+  }
+});
+
 test("v0.48 pins fog/toneMapped false and opaque FrontSide on unique color-only MeshBasics; envelope stays v0.47", () => {
   const fresh = new THREE.MeshBasicMaterial();
   assert.equal(fresh.fog, true, "r170 MeshBasicMaterial defaults fog true");
   assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
   assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
   assertR170MeshBasicBlendingAlphaDefaults(fresh);
+  assertR170MeshBasicGpuStateDefaults(fresh);
 
   const crate = createToolbox();
   const stats = getToolboxLodStats(crate);
@@ -1423,6 +1519,7 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
   assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
   assertR170MeshBasicBlendingAlphaDefaults(fresh);
+  assertR170MeshBasicGpuStateDefaults(fresh);
 
   const wrong = new THREE.MeshBasicMaterial({
     color: 0x633318,
@@ -1436,6 +1533,12 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
     alphaTest: 0.5,
     dithering: true,
     alphaToCoverage: true,
+    wireframe: true,
+    colorWrite: false,
+    depthFunc: THREE.AlwaysDepth,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
   assert.equal(isColorOnlyUnlitBasic(wrong), true, "transparent DoubleSide color-only still passes the gate");
   assert.equal(wrong.transparent, true);
@@ -1448,6 +1551,12 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assert.equal(wrong.alphaTest, 0.5);
   assert.equal(wrong.dithering, true);
   assert.equal(wrong.alphaToCoverage, true);
+  assert.equal(wrong.wireframe, true);
+  assert.equal(wrong.colorWrite, false);
+  assert.equal(wrong.depthFunc, THREE.AlwaysDepth);
+  assert.equal(wrong.polygonOffset, true);
+  assert.equal(wrong.polygonOffsetFactor, 1);
+  assert.equal(wrong.polygonOffsetUnits, 1);
   pinColorOnlyUnlitBasicFlags(wrong);
   assertQuestSafeUnlitFlags(wrong, "deliberately wrong color-only MeshBasic");
 });
@@ -1463,6 +1572,12 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
     blending: THREE.AdditiveBlending,
     premultipliedAlpha: true,
     alphaTest: 0.25,
+    wireframe: true,
+    colorWrite: false,
+    depthFunc: THREE.AlwaysDepth,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
   const std = new THREE.MeshStandardMaterial({
     transparent: true,
@@ -1471,6 +1586,12 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
     blending: THREE.CustomBlending,
     premultipliedAlpha: true,
     alphaTest: 0.25,
+    wireframe: true,
+    colorWrite: false,
+    depthFunc: THREE.AlwaysDepth,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
   assert.equal(colorOnly.fog, true);
   assert.equal(colorOnly.toneMapped, true);
@@ -1486,6 +1607,12 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(mapped.blending, THREE.AdditiveBlending, "mapped MeshBasic stays authored blending");
   assert.equal(mapped.premultipliedAlpha, true, "mapped MeshBasic stays authored premultipliedAlpha");
   assert.equal(mapped.alphaTest, 0.25, "mapped MeshBasic stays authored alphaTest");
+  assert.equal(mapped.wireframe, true, "mapped MeshBasic stays authored wireframe");
+  assert.equal(mapped.colorWrite, false, "mapped MeshBasic stays authored colorWrite");
+  assert.equal(mapped.depthFunc, THREE.AlwaysDepth, "mapped MeshBasic stays authored depthFunc");
+  assert.equal(mapped.polygonOffset, true, "mapped MeshBasic stays authored polygonOffset");
+  assert.equal(mapped.polygonOffsetFactor, 1, "mapped MeshBasic stays authored polygonOffsetFactor");
+  assert.equal(mapped.polygonOffsetUnits, 1, "mapped MeshBasic stays authored polygonOffsetUnits");
   assert.equal(std.fog, true, "MeshStandard stays r170 fog default");
   assert.equal(std.toneMapped, true, "MeshStandard stays r170 toneMapped default");
   assert.equal(std.transparent, true, "MeshStandard stays authored transparent");
@@ -1493,6 +1620,10 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(std.blending, THREE.CustomBlending, "MeshStandard stays authored blending");
   assert.equal(std.premultipliedAlpha, true, "MeshStandard stays authored premultipliedAlpha");
   assert.equal(std.alphaTest, 0.25, "MeshStandard stays authored alphaTest");
+  assert.equal(std.wireframe, true, "MeshStandard stays authored wireframe");
+  assert.equal(std.colorWrite, false, "MeshStandard stays authored colorWrite");
+  assert.equal(std.depthFunc, THREE.AlwaysDepth, "MeshStandard stays authored depthFunc");
+  assert.equal(std.polygonOffset, true, "MeshStandard stays authored polygonOffset");
 
   const root = new THREE.Group();
   const body = new THREE.Group();
@@ -1529,16 +1660,32 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(mapped.blending, THREE.AdditiveBlending, "mapped MeshBasic stays authored blending via entity helper");
   assert.equal(mapped.premultipliedAlpha, true, "mapped MeshBasic stays authored premultipliedAlpha via entity helper");
   assert.equal(mapped.alphaTest, 0.25, "mapped MeshBasic stays authored alphaTest via entity helper");
+  assert.equal(mapped.wireframe, true, "mapped MeshBasic stays authored wireframe via entity helper");
+  assert.equal(mapped.colorWrite, false, "mapped MeshBasic stays authored colorWrite via entity helper");
+  assert.equal(mapped.depthFunc, THREE.AlwaysDepth, "mapped MeshBasic stays authored depthFunc via entity helper");
+  assert.equal(mapped.polygonOffset, true, "mapped MeshBasic stays authored polygonOffset via entity helper");
   assert.equal(morph.material.fog, true, "morph color-only MeshBasic is skipped");
   assert.equal(morph.material.toneMapped, true);
   assert.equal(morph.material.transparent, false, "morph color-only MeshBasic keeps r170 transparent default");
   assert.equal(morph.material.side, THREE.FrontSide, "morph color-only MeshBasic keeps r170 FrontSide default");
   assert.equal(morph.material.blending, THREE.NormalBlending, "morph color-only MeshBasic keeps r170 blending default");
+  assert.equal(morph.material.wireframe, false, "morph color-only MeshBasic keeps r170 wireframe default");
+  assert.equal(morph.material.colorWrite, true, "morph color-only MeshBasic keeps r170 colorWrite default");
+  assert.equal(morph.material.depthFunc, THREE.LessEqualDepth, "morph color-only MeshBasic keeps r170 depthFunc default");
+  assert.equal(morph.material.polygonOffset, false, "morph color-only MeshBasic keeps r170 polygonOffset default");
   assert.equal(collider.material.fog, true, "collider MeshBasic stays default");
   assert.equal(collider.material.toneMapped, true);
+  assert.equal(collider.material.wireframe, false, "collider MeshBasic keeps r170 wireframe default");
+  assert.equal(collider.material.colorWrite, true, "collider MeshBasic keeps r170 colorWrite default");
+  assert.equal(collider.material.depthFunc, THREE.LessEqualDepth, "collider MeshBasic keeps r170 depthFunc default");
+  assert.equal(collider.material.polygonOffset, false, "collider MeshBasic keeps r170 polygonOffset default");
   assert.equal(sharedVisual.material.fog, true, "shared collider material stays default");
   assert.equal(sharedVisual.material.toneMapped, true, "shared collider material stays default");
   assert.equal(sharedVisual.material.transparent, false, "shared collider material stays unpinned");
   assert.equal(sharedVisual.material.side, THREE.FrontSide, "shared collider material stays unpinned FrontSide");
   assert.equal(sharedVisual.material.blending, THREE.NormalBlending, "shared collider material stays unpinned blending");
+  assert.equal(sharedVisual.material.wireframe, false, "shared collider material stays unpinned wireframe");
+  assert.equal(sharedVisual.material.colorWrite, true, "shared collider material stays unpinned colorWrite");
+  assert.equal(sharedVisual.material.depthFunc, THREE.LessEqualDepth, "shared collider material stays unpinned depthFunc");
+  assert.equal(sharedVisual.material.polygonOffset, false, "shared collider material stays unpinned polygonOffset");
 });
