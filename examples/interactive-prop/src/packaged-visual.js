@@ -116,6 +116,14 @@
  * `stencilWrite=true` (or non-Always func / non-Keep ops) would
  * force stencil test/write on a TBDR mobile GPU. Mapped / lit /
  * colliders stay untouched.
+ *
+ * v0.54: the same helper also pins r170 Material clipping defaults
+ * (`clippingPlanes = null`, `clipIntersection = false`,
+ * `clipShadows = false`) on those color-only MeshBasics.
+ * Accidental DCC / GLB non-null `clippingPlanes` /
+ * `clipIntersection` / `clipShadows` would force clipping-plane
+ * fragment work on a TBDR mobile GPU. Mapped / lit / colliders
+ * stay untouched.
  */
 
 import {
