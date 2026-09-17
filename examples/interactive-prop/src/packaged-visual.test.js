@@ -97,6 +97,14 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.polygonOffset, false, `${label} pins polygonOffset false`);
   assert.equal(mat.polygonOffsetFactor, 0, `${label} pins polygonOffsetFactor 0`);
   assert.equal(mat.polygonOffsetUnits, 0, `${label} pins polygonOffsetUnits 0`);
+  assert.equal(mat.stencilWrite, false, `${label} pins stencilWrite false`);
+  assert.equal(mat.stencilFunc, THREE.AlwaysStencilFunc, `${label} pins AlwaysStencilFunc`);
+  assert.equal(mat.stencilRef, 0, `${label} pins stencilRef 0`);
+  assert.equal(mat.stencilWriteMask, 0xff, `${label} pins stencilWriteMask 0xff`);
+  assert.equal(mat.stencilFuncMask, 0xff, `${label} pins stencilFuncMask 0xff`);
+  assert.equal(mat.stencilFail, THREE.KeepStencilOp, `${label} pins stencilFail Keep`);
+  assert.equal(mat.stencilZFail, THREE.KeepStencilOp, `${label} pins stencilZFail Keep`);
+  assert.equal(mat.stencilZPass, THREE.KeepStencilOp, `${label} pins stencilZPass Keep`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -584,6 +592,16 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(fresh.polygonOffsetFactor, 0, "r170 MeshBasicMaterial defaults polygonOffsetFactor 0");
   assert.equal(fresh.polygonOffsetUnits, 0, "r170 MeshBasicMaterial defaults polygonOffsetUnits 0");
   assert.equal(THREE.LessEqualDepth, 3, "r170 LessEqualDepth is 3");
+  assert.equal(fresh.stencilWrite, false, "r170 MeshBasicMaterial defaults stencilWrite false");
+  assert.equal(fresh.stencilFunc, THREE.AlwaysStencilFunc, "r170 MeshBasicMaterial defaults AlwaysStencilFunc");
+  assert.equal(fresh.stencilRef, 0, "r170 MeshBasicMaterial defaults stencilRef 0");
+  assert.equal(fresh.stencilWriteMask, 0xff, "r170 MeshBasicMaterial defaults stencilWriteMask 0xff");
+  assert.equal(fresh.stencilFuncMask, 0xff, "r170 MeshBasicMaterial defaults stencilFuncMask 0xff");
+  assert.equal(fresh.stencilFail, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilFail Keep");
+  assert.equal(fresh.stencilZFail, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilZFail Keep");
+  assert.equal(fresh.stencilZPass, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilZPass Keep");
+  assert.equal(THREE.AlwaysStencilFunc, 519, "r170 AlwaysStencilFunc is 519");
+  assert.equal(THREE.KeepStencilOp, 7680, "r170 KeepStencilOp is 7680");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -601,6 +619,14 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     polygonOffset: true,
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 1,
+    stencilWrite: true,
+    stencilFunc: THREE.EqualStencilFunc,
+    stencilRef: 1,
+    stencilWriteMask: 0x0f,
+    stencilFuncMask: 0x0f,
+    stencilFail: THREE.ReplaceStencilOp,
+    stencilZFail: THREE.IncrementStencilOp,
+    stencilZPass: THREE.DecrementStencilOp,
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -621,6 +647,14 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     polygonOffset: true,
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 1,
+    stencilWrite: true,
+    stencilFunc: THREE.NotEqualStencilFunc,
+    stencilRef: 2,
+    stencilWriteMask: 0x0f,
+    stencilFuncMask: 0x0f,
+    stencilFail: THREE.ReplaceStencilOp,
+    stencilZFail: THREE.IncrementStencilOp,
+    stencilZPass: THREE.DecrementStencilOp,
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -648,6 +682,10 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(mapped.colorWrite, false, "mapped MeshBasic stays authored colorWrite");
   assert.equal(mapped.depthFunc, THREE.AlwaysDepth, "mapped MeshBasic stays authored depthFunc");
   assert.equal(mapped.polygonOffset, true, "mapped MeshBasic stays authored polygonOffset");
+  assert.equal(mapped.stencilWrite, true, "mapped MeshBasic stays authored stencilWrite");
+  assert.equal(mapped.stencilFunc, THREE.EqualStencilFunc, "mapped MeshBasic stays authored stencilFunc");
+  assert.equal(mapped.stencilRef, 1, "mapped MeshBasic stays authored stencilRef");
+  assert.equal(mapped.stencilFail, THREE.ReplaceStencilOp, "mapped MeshBasic stays authored stencilFail");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -663,6 +701,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(colliderGrab.material.colorWrite, true, "collider MeshBasic stays r170 colorWrite default");
   assert.equal(colliderGrab.material.depthFunc, THREE.LessEqualDepth, "collider MeshBasic stays r170 depthFunc default");
   assert.equal(colliderGrab.material.polygonOffset, false, "collider MeshBasic stays r170 polygonOffset default");
+  assert.equal(colliderGrab.material.stencilWrite, false, "collider MeshBasic stays r170 stencilWrite default");
+  assert.equal(colliderGrab.material.stencilFunc, THREE.AlwaysStencilFunc, "collider MeshBasic stays r170 stencilFunc default");
+  assert.equal(colliderGrab.material.stencilFail, THREE.KeepStencilOp, "collider MeshBasic stays r170 stencilFail default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
@@ -685,6 +726,9 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.colorWrite, true, "fail-soft collider stays r170 colorWrite default");
   assert.equal(colliderGrab.material.depthFunc, THREE.LessEqualDepth, "fail-soft collider stays r170 depthFunc default");
   assert.equal(colliderGrab.material.polygonOffset, false, "fail-soft collider stays r170 polygonOffset default");
+  assert.equal(colliderGrab.material.stencilWrite, false, "fail-soft collider stays r170 stencilWrite default");
+  assert.equal(colliderGrab.material.stencilFunc, THREE.AlwaysStencilFunc, "fail-soft collider stays r170 stencilFunc default");
+  assert.equal(colliderGrab.material.stencilFail, THREE.KeepStencilOp, "fail-soft collider stays r170 stencilFail default");
 });
 
 test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest 0; mapped/lit stay authored", () => {
@@ -747,6 +791,16 @@ test("packaged ingest pins wireframe false / colorWrite true / depthFunc LessEqu
   assert.equal(fresh.polygonOffsetFactor, 0, "r170 MeshBasicMaterial defaults polygonOffsetFactor 0");
   assert.equal(fresh.polygonOffsetUnits, 0, "r170 MeshBasicMaterial defaults polygonOffsetUnits 0");
   assert.equal(THREE.LessEqualDepth, 3, "r170 LessEqualDepth is 3");
+  assert.equal(fresh.stencilWrite, false, "r170 MeshBasicMaterial defaults stencilWrite false");
+  assert.equal(fresh.stencilFunc, THREE.AlwaysStencilFunc, "r170 MeshBasicMaterial defaults AlwaysStencilFunc");
+  assert.equal(fresh.stencilRef, 0, "r170 MeshBasicMaterial defaults stencilRef 0");
+  assert.equal(fresh.stencilWriteMask, 0xff, "r170 MeshBasicMaterial defaults stencilWriteMask 0xff");
+  assert.equal(fresh.stencilFuncMask, 0xff, "r170 MeshBasicMaterial defaults stencilFuncMask 0xff");
+  assert.equal(fresh.stencilFail, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilFail Keep");
+  assert.equal(fresh.stencilZFail, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilZFail Keep");
+  assert.equal(fresh.stencilZPass, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilZPass Keep");
+  assert.equal(THREE.AlwaysStencilFunc, 519, "r170 AlwaysStencilFunc is 519");
+  assert.equal(THREE.KeepStencilOp, 7680, "r170 KeepStencilOp is 7680");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -806,6 +860,89 @@ test("packaged ingest pins wireframe false / colorWrite true / depthFunc LessEqu
   assert.equal(colliderGrab.material.polygonOffset, true, "collider MeshBasic stays authored polygonOffset");
   assert.equal(colliderGrab.material.polygonOffsetFactor, 1, "collider MeshBasic stays authored polygonOffsetFactor");
   assert.equal(colliderGrab.material.polygonOffsetUnits, 1, "collider MeshBasic stays authored polygonOffsetUnits");
+});
+
+test("packaged ingest pins r170 stencil defaults; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.stencilWrite, false, "r170 MeshBasicMaterial defaults stencilWrite false");
+  assert.equal(fresh.stencilFunc, THREE.AlwaysStencilFunc, "r170 MeshBasicMaterial defaults AlwaysStencilFunc");
+  assert.equal(fresh.stencilRef, 0, "r170 MeshBasicMaterial defaults stencilRef 0");
+  assert.equal(fresh.stencilWriteMask, 0xff, "r170 MeshBasicMaterial defaults stencilWriteMask 0xff");
+  assert.equal(fresh.stencilFuncMask, 0xff, "r170 MeshBasicMaterial defaults stencilFuncMask 0xff");
+  assert.equal(fresh.stencilFail, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilFail Keep");
+  assert.equal(fresh.stencilZFail, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilZFail Keep");
+  assert.equal(fresh.stencilZPass, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilZPass Keep");
+  assert.equal(THREE.AlwaysStencilFunc, 519, "r170 AlwaysStencilFunc is 519");
+  assert.equal(THREE.KeepStencilOp, 7680, "r170 KeepStencilOp is 7680");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    stencilWrite: true,
+    stencilFunc: THREE.EqualStencilFunc,
+    stencilRef: 1,
+    stencilWriteMask: 0x0f,
+    stencilFuncMask: 0x0f,
+    stencilFail: THREE.ReplaceStencilOp,
+    stencilZFail: THREE.IncrementStencilOp,
+    stencilZPass: THREE.DecrementStencilOp,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    stencilWrite: true,
+    stencilFunc: THREE.NotEqualStencilFunc,
+    stencilRef: 2,
+    stencilWriteMask: 0x0f,
+    stencilFuncMask: 0x0f,
+    stencilFail: THREE.ReplaceStencilOp,
+    stencilZFail: THREE.IncrementStencilOp,
+    stencilZPass: THREE.DecrementStencilOp,
+  });
+  const wrongMesh = boxMesh("dccStencilOn", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.stencilWrite = true;
+  colliderGrabBefore.material.stencilFunc = THREE.EqualStencilFunc;
+  colliderGrabBefore.material.stencilRef = 1;
+  colliderGrabBefore.material.stencilWriteMask = 0x0f;
+  colliderGrabBefore.material.stencilFuncMask = 0x0f;
+  colliderGrabBefore.material.stencilFail = THREE.ReplaceStencilOp;
+  colliderGrabBefore.material.stencilZFail = THREE.IncrementStencilOp;
+  colliderGrabBefore.material.stencilZPass = THREE.DecrementStencilOp;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC stencilWrite/non-Always/non-Keep color-only MeshBasic");
+  assert.equal(mapped.stencilWrite, true, "mapped MeshBasic stays authored stencilWrite");
+  assert.equal(mapped.stencilFunc, THREE.EqualStencilFunc, "mapped MeshBasic stays authored stencilFunc");
+  assert.equal(mapped.stencilRef, 1, "mapped MeshBasic stays authored stencilRef");
+  assert.equal(mapped.stencilWriteMask, 0x0f, "mapped MeshBasic stays authored stencilWriteMask");
+  assert.equal(mapped.stencilFuncMask, 0x0f, "mapped MeshBasic stays authored stencilFuncMask");
+  assert.equal(mapped.stencilFail, THREE.ReplaceStencilOp, "mapped MeshBasic stays authored stencilFail");
+  assert.equal(mapped.stencilZFail, THREE.IncrementStencilOp, "mapped MeshBasic stays authored stencilZFail");
+  assert.equal(mapped.stencilZPass, THREE.DecrementStencilOp, "mapped MeshBasic stays authored stencilZPass");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.stencilWrite, true, "collider MeshBasic stays authored stencilWrite");
+  assert.equal(colliderGrab.material.stencilFunc, THREE.EqualStencilFunc, "collider MeshBasic stays authored stencilFunc");
+  assert.equal(colliderGrab.material.stencilRef, 1, "collider MeshBasic stays authored stencilRef");
+  assert.equal(colliderGrab.material.stencilWriteMask, 0x0f, "collider MeshBasic stays authored stencilWriteMask");
+  assert.equal(colliderGrab.material.stencilFuncMask, 0x0f, "collider MeshBasic stays authored stencilFuncMask");
+  assert.equal(colliderGrab.material.stencilFail, THREE.ReplaceStencilOp, "collider MeshBasic stays authored stencilFail");
+  assert.equal(colliderGrab.material.stencilZFail, THREE.IncrementStencilOp, "collider MeshBasic stays authored stencilZFail");
+  assert.equal(colliderGrab.material.stencilZPass, THREE.DecrementStencilOp, "collider MeshBasic stays authored stencilZPass");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
