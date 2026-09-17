@@ -131,6 +131,15 @@
  * `alphaHash=true` would force a stochastic discard path;
  * `forceSinglePass=true` can change multi-pass material behavior.
  * Mapped / lit / colliders stay untouched.
+ *
+ * v0.56: the same helper also pins r170 NormalBlending
+ * factor/equation companions (`blendSrc = SrcAlphaFactor`,
+ * `blendDst = OneMinusSrcAlphaFactor`, `blendEquation =
+ * AddEquation`, `blendSrcAlpha = null`, `blendDstAlpha = null`,
+ * `blendEquationAlpha = null`) on those color-only MeshBasics.
+ * Accidental DCC / GLB CustomBlending leftovers still sit on the
+ * material even when blending mode is restored to NormalBlending.
+ * Mapped / lit / colliders stay untouched.
  */
 
 import {
