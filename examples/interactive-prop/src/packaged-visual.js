@@ -124,6 +124,13 @@
  * `clipIntersection` / `clipShadows` would force clipping-plane
  * fragment work on a TBDR mobile GPU. Mapped / lit / colliders
  * stay untouched.
+ *
+ * v0.55: the same helper also pins r170 Material boolean GPU-state
+ * defaults (`alphaHash = false`, `forceSinglePass = false`) on
+ * those color-only MeshBasics. Accidental DCC / GLB
+ * `alphaHash=true` would force a stochastic discard path;
+ * `forceSinglePass=true` can change multi-pass material behavior.
+ * Mapped / lit / colliders stay untouched.
  */
 
 import {

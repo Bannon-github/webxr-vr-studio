@@ -271,9 +271,10 @@ export function releaseCpuArraysOnGpuUpload(geometry, material) {
  * receiveShadow pin, v0.50 Mesh frustumCulled pin, v0.51
  * MeshBasic blending/alpha pin, v0.52 MeshBasic
  * wireframe/colorWrite/depthFunc/polygonOffset pin,
- * v0.53 MeshBasic stencil pin, and v0.54 MeshBasic
- * clipping pin are post-attach Object3D / material-state
- * steps, not geometry pack steps.
+ * v0.53 MeshBasic stencil pin, v0.54 MeshBasic
+ * clipping pin, and v0.55 MeshBasic alphaHash /
+ * forceSinglePass pin are post-attach Object3D /
+ * material-state steps, not geometry pack steps.
  */
 export function packColorOnlyGeometry(geometry, material) {
   stripUnusedColorOnlyAttributes(geometry, material);
@@ -461,6 +462,14 @@ export function disableColorOnlyVisualRaycast(entity) {
  * mobile GPU. Pin r170 defaults as the Quest-safe unlit contract
  * after v0.53 stencil. Load-time only — not per-frame.
  *
+ * **Verified r170 API (alphaHash / forceSinglePass):** a fresh
+ * `MeshBasicMaterial` is already `alphaHash === false` and
+ * `forceSinglePass === false` (`Material` defaults). Accidental
+ * DCC / packaged GLB `alphaHash=true` forces a stochastic discard
+ * path; `forceSinglePass=true` can change multi-pass material
+ * behavior. Pin r170 defaults as the Quest-safe unlit contract
+ * after v0.54 clipping. Load-time only — not per-frame.
+ *
  * Same `isColorOnlyUnlitBasic` gate as the pack pipeline. Does not
  * invent materials or hex-dedupe.
  */
@@ -495,6 +504,8 @@ export function pinColorOnlyUnlitBasicFlags(material) {
   material.clippingPlanes = null;
   material.clipIntersection = false;
   material.clipShadows = false;
+  material.alphaHash = false;
+  material.forceSinglePass = false;
   return material;
 }
 
@@ -503,7 +514,8 @@ export function pinColorOnlyUnlitBasicFlags(material) {
  * are detected (packaged ingest), pin fog/toneMapped, opaque
  * FrontSide, blending/alpha, remaining r170 Material GPU-state
  * (wireframe / colorWrite / depthFunc / polygonOffset), r170
- * Material stencil defaults, and r170 Material clipping defaults
+ * Material stencil defaults, r170 Material clipping defaults,
+ * and r170 Material alphaHash / forceSinglePass defaults
  * on every unique packed color-only unlit MeshBasic visual material.
  *
  * Skip colliders (even MeshBasic debug hulls). Skip mapped / lit.
@@ -999,7 +1011,7 @@ export function createToolbox() {
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
     uniqueMaterials: colorOnlyByHex.size,
-    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. v0.46 disables Mesh.raycast on packed color-only MeshBasic visuals (body + lid/latch/tool + fastener); colliders keep Mesh.prototype.raycast. v0.47 pins fog = false and toneMapped = false on packed color-only unlit MeshBasic materials (3 unique shared instances; mapped/lit/colliders stay r170 defaults). v0.48 also pins opaque FrontSide draw-state (transparent = false, opacity = 1, depthWrite = true, depthTest = true, side = FrontSide) on those same materials. v0.49 pins castShadow = false and receiveShadow = false on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults). v0.50 pins frustumCulled = true on those same visual meshes (colliders stay r170 Mesh defaults). v0.51 also pins NormalBlending / premultipliedAlpha false / alphaTest 0 (plus dithering false / alphaToCoverage false) on those same materials. v0.52 also pins wireframe false / colorWrite true / depthFunc LessEqualDepth / polygonOffset off on those same materials. v0.53 also pins r170 stencil defaults (stencilWrite false / AlwaysStencilFunc / Keep ops) on those same materials. v0.54 also pins r170 clipping defaults (clippingPlanes null / clipIntersection false / clipShadows false) on those same materials. Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
+    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. v0.46 disables Mesh.raycast on packed color-only MeshBasic visuals (body + lid/latch/tool + fastener); colliders keep Mesh.prototype.raycast. v0.47 pins fog = false and toneMapped = false on packed color-only unlit MeshBasic materials (3 unique shared instances; mapped/lit/colliders stay r170 defaults). v0.48 also pins opaque FrontSide draw-state (transparent = false, opacity = 1, depthWrite = true, depthTest = true, side = FrontSide) on those same materials. v0.49 pins castShadow = false and receiveShadow = false on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults). v0.50 pins frustumCulled = true on those same visual meshes (colliders stay r170 Mesh defaults). v0.51 also pins NormalBlending / premultipliedAlpha false / alphaTest 0 (plus dithering false / alphaToCoverage false) on those same materials. v0.52 also pins wireframe false / colorWrite true / depthFunc LessEqualDepth / polygonOffset off on those same materials. v0.53 also pins r170 stencil defaults (stencilWrite false / AlwaysStencilFunc / Keep ops) on those same materials. v0.54 also pins r170 clipping defaults (clippingPlanes null / clipIntersection false / clipShadows false) on those same materials. v0.55 also pins r170 alphaHash / forceSinglePass defaults (alphaHash false / forceSinglePass false) on those same materials. Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -1046,6 +1058,9 @@ export function createToolbox() {
   // v0.54: the same material helper also pins r170 clipping
   // defaults (clippingPlanes null / clipIntersection false /
   // clipShadows false) on those color-only MeshBasics.
+  // v0.55: the same material helper also pins r170 alphaHash /
+  // forceSinglePass defaults (alphaHash false / forceSinglePass
+  // false) on those color-only MeshBasics.
   // Pivots stay separate. Fastener is packed above, not merged here.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);
