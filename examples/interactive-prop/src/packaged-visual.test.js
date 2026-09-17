@@ -86,6 +86,11 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.depthWrite, true, `${label} pins depthWrite true`);
   assert.equal(mat.depthTest, true, `${label} pins depthTest true`);
   assert.equal(mat.side, THREE.FrontSide, `${label} pins FrontSide`);
+  assert.equal(mat.blending, THREE.NormalBlending, `${label} pins NormalBlending`);
+  assert.equal(mat.premultipliedAlpha, false, `${label} pins premultipliedAlpha false`);
+  assert.equal(mat.alphaTest, 0, `${label} pins alphaTest 0`);
+  assert.equal(mat.dithering, false, `${label} pins dithering false`);
+  assert.equal(mat.alphaToCoverage, false, `${label} pins alphaToCoverage false`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -561,6 +566,11 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(fresh.depthTest, true, "r170 MeshBasicMaterial defaults depthTest true");
   assert.equal(fresh.side, THREE.FrontSide, "r170 MeshBasicMaterial defaults FrontSide");
   assert.equal(THREE.FrontSide, 0, "r170 FrontSide is 0");
+  assert.equal(fresh.blending, THREE.NormalBlending, "r170 MeshBasicMaterial defaults NormalBlending");
+  assert.equal(fresh.premultipliedAlpha, false, "r170 MeshBasicMaterial defaults premultipliedAlpha false");
+  assert.equal(fresh.alphaTest, 0, "r170 MeshBasicMaterial defaults alphaTest 0");
+  assert.equal(fresh.dithering, false, "r170 MeshBasicMaterial defaults dithering false");
+  assert.equal(fresh.alphaToCoverage, false, "r170 MeshBasicMaterial defaults alphaToCoverage false");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -569,6 +579,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     transparent: true,
     opacity: 0.5,
     side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    premultipliedAlpha: true,
+    alphaTest: 0.25,
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -578,6 +591,11 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     depthWrite: false,
     depthTest: false,
     side: THREE.DoubleSide,
+    blending: THREE.CustomBlending,
+    premultipliedAlpha: true,
+    alphaTest: 0.5,
+    dithering: true,
+    alphaToCoverage: true,
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -592,12 +610,15 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     if (mesh.material === mapped) continue;
     assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
   }
-  assertQuestSafeUnlitFlags(wrong, "packaged DCC DoubleSide color-only MeshBasic");
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC DoubleSide / CustomBlending color-only MeshBasic");
   assert.equal(mapped.fog, true, "mapped MeshBasic stays r170 fog default");
   assert.equal(mapped.toneMapped, true, "mapped MeshBasic stays r170 toneMapped default");
   assert.equal(mapped.transparent, true, "mapped MeshBasic stays authored transparent");
   assert.equal(mapped.opacity, 0.5, "mapped MeshBasic stays authored opacity");
   assert.equal(mapped.side, THREE.DoubleSide, "mapped MeshBasic stays authored DoubleSide");
+  assert.equal(mapped.blending, THREE.AdditiveBlending, "mapped MeshBasic stays authored blending");
+  assert.equal(mapped.premultipliedAlpha, true, "mapped MeshBasic stays authored premultipliedAlpha");
+  assert.equal(mapped.alphaTest, 0.25, "mapped MeshBasic stays authored alphaTest");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -606,6 +627,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(colliderGrab.material.toneMapped, true, "collider MeshBasic stays default toneMapped");
   assert.equal(colliderGrab.material.transparent, false, "collider MeshBasic stays r170 transparent default");
   assert.equal(colliderGrab.material.side, THREE.FrontSide, "collider MeshBasic stays r170 FrontSide default");
+  assert.equal(colliderGrab.material.blending, THREE.NormalBlending, "collider MeshBasic stays r170 blending default");
+  assert.equal(colliderGrab.material.premultipliedAlpha, false, "collider MeshBasic stays r170 premultipliedAlpha default");
+  assert.equal(colliderGrab.material.alphaTest, 0, "collider MeshBasic stays r170 alphaTest default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
@@ -621,6 +645,60 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.toneMapped, true);
   assert.equal(colliderGrab.material.transparent, false, "fail-soft collider stays r170 transparent default");
   assert.equal(colliderGrab.material.side, THREE.FrontSide, "fail-soft collider stays r170 FrontSide default");
+  assert.equal(colliderGrab.material.blending, THREE.NormalBlending, "fail-soft collider stays r170 blending default");
+  assert.equal(colliderGrab.material.premultipliedAlpha, false, "fail-soft collider stays r170 premultipliedAlpha default");
+  assert.equal(colliderGrab.material.alphaTest, 0, "fail-soft collider stays r170 alphaTest default");
+});
+
+test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest 0; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.blending, THREE.NormalBlending, "r170 MeshBasicMaterial defaults NormalBlending");
+  assert.equal(fresh.premultipliedAlpha, false, "r170 MeshBasicMaterial defaults premultipliedAlpha false");
+  assert.equal(fresh.alphaTest, 0, "r170 MeshBasicMaterial defaults alphaTest 0");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    blending: THREE.AdditiveBlending,
+    premultipliedAlpha: true,
+    alphaTest: 0.25,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    blending: THREE.CustomBlending,
+    premultipliedAlpha: true,
+    alphaTest: 0.5,
+  });
+  const wrongMesh = boxMesh("dccCustomBlending", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.blending = THREE.AdditiveBlending;
+  colliderGrabBefore.material.premultipliedAlpha = true;
+  colliderGrabBefore.material.alphaTest = 0.4;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC CustomBlending color-only MeshBasic");
+  assert.equal(mapped.blending, THREE.AdditiveBlending, "mapped MeshBasic stays authored blending");
+  assert.equal(mapped.premultipliedAlpha, true, "mapped MeshBasic stays authored premultipliedAlpha");
+  assert.equal(mapped.alphaTest, 0.25, "mapped MeshBasic stays authored alphaTest");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.blending, THREE.AdditiveBlending, "collider MeshBasic stays authored blending");
+  assert.equal(colliderGrab.material.premultipliedAlpha, true, "collider MeshBasic stays authored premultipliedAlpha");
+  assert.equal(colliderGrab.material.alphaTest, 0.4, "collider MeshBasic stays authored alphaTest");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
