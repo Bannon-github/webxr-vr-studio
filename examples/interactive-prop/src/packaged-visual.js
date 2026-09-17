@@ -98,6 +98,14 @@
  * Accidental DCC / GLB CustomBlending / AdditiveBlending /
  * premultiply / alphaTest would force blend or discard paths.
  * Mapped / lit / colliders stay untouched.
+ *
+ * v0.52: the same helper also pins `wireframe = false`,
+ * `colorWrite = true`, `depthFunc = LessEqualDepth`, and
+ * `polygonOffset = false` (`polygonOffsetFactor = 0` /
+ * `polygonOffsetUnits = 0`) on those color-only MeshBasics.
+ * Accidental DCC / GLB wireframe / colorWrite-off / non-LessEqual
+ * depthFunc / polygonOffset would force extra fragment or depth
+ * work. Mapped / lit / colliders stay untouched.
  */
 
 import {
