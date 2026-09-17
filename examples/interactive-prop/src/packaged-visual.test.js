@@ -108,6 +108,8 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.clippingPlanes, null, `${label} pins clippingPlanes null`);
   assert.equal(mat.clipIntersection, false, `${label} pins clipIntersection false`);
   assert.equal(mat.clipShadows, false, `${label} pins clipShadows false`);
+  assert.equal(mat.alphaHash, false, `${label} pins alphaHash false`);
+  assert.equal(mat.forceSinglePass, false, `${label} pins forceSinglePass false`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -608,6 +610,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(fresh.clippingPlanes, null, "r170 MeshBasicMaterial defaults clippingPlanes null");
   assert.equal(fresh.clipIntersection, false, "r170 MeshBasicMaterial defaults clipIntersection false");
   assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
+  assert.equal(fresh.alphaHash, false, "r170 MeshBasicMaterial defaults alphaHash false");
+  assert.equal(fresh.forceSinglePass, false, "r170 MeshBasicMaterial defaults forceSinglePass false");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mappedPlanes = [new THREE.Plane()];
@@ -637,6 +641,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     clippingPlanes: mappedPlanes,
     clipIntersection: true,
     clipShadows: true,
+    alphaHash: true,
+    forceSinglePass: true,
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -668,6 +674,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     clippingPlanes: [new THREE.Plane()],
     clipIntersection: true,
     clipShadows: true,
+    alphaHash: true,
+    forceSinglePass: true,
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -702,6 +710,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(mapped.clippingPlanes, mappedPlanes, "mapped MeshBasic stays authored clippingPlanes");
   assert.equal(mapped.clipIntersection, true, "mapped MeshBasic stays authored clipIntersection");
   assert.equal(mapped.clipShadows, true, "mapped MeshBasic stays authored clipShadows");
+  assert.equal(mapped.alphaHash, true, "mapped MeshBasic stays authored alphaHash");
+  assert.equal(mapped.forceSinglePass, true, "mapped MeshBasic stays authored forceSinglePass");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -723,6 +733,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(colliderGrab.material.clippingPlanes, null, "collider MeshBasic stays r170 clippingPlanes default");
   assert.equal(colliderGrab.material.clipIntersection, false, "collider MeshBasic stays r170 clipIntersection default");
   assert.equal(colliderGrab.material.clipShadows, false, "collider MeshBasic stays r170 clipShadows default");
+  assert.equal(colliderGrab.material.alphaHash, false, "collider MeshBasic stays r170 alphaHash default");
+  assert.equal(colliderGrab.material.forceSinglePass, false, "collider MeshBasic stays r170 forceSinglePass default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
@@ -751,6 +763,8 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.clippingPlanes, null, "fail-soft collider stays r170 clippingPlanes default");
   assert.equal(colliderGrab.material.clipIntersection, false, "fail-soft collider stays r170 clipIntersection default");
   assert.equal(colliderGrab.material.clipShadows, false, "fail-soft collider stays r170 clipShadows default");
+  assert.equal(colliderGrab.material.alphaHash, false, "fail-soft collider stays r170 alphaHash default");
+  assert.equal(colliderGrab.material.forceSinglePass, false, "fail-soft collider stays r170 forceSinglePass default");
 });
 
 test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest 0; mapped/lit stay authored", () => {
@@ -826,6 +840,8 @@ test("packaged ingest pins wireframe false / colorWrite true / depthFunc LessEqu
   assert.equal(fresh.clippingPlanes, null, "r170 MeshBasicMaterial defaults clippingPlanes null");
   assert.equal(fresh.clipIntersection, false, "r170 MeshBasicMaterial defaults clipIntersection false");
   assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
+  assert.equal(fresh.alphaHash, false, "r170 MeshBasicMaterial defaults alphaHash false");
+  assert.equal(fresh.forceSinglePass, false, "r170 MeshBasicMaterial defaults forceSinglePass false");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -902,6 +918,8 @@ test("packaged ingest pins r170 stencil defaults; mapped/lit stay authored", () 
   assert.equal(fresh.clippingPlanes, null, "r170 MeshBasicMaterial defaults clippingPlanes null");
   assert.equal(fresh.clipIntersection, false, "r170 MeshBasicMaterial defaults clipIntersection false");
   assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
+  assert.equal(fresh.alphaHash, false, "r170 MeshBasicMaterial defaults alphaHash false");
+  assert.equal(fresh.forceSinglePass, false, "r170 MeshBasicMaterial defaults forceSinglePass false");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -978,6 +996,8 @@ test("packaged ingest pins r170 clipping defaults; mapped/lit stay authored", ()
   assert.equal(fresh.clippingPlanes, null, "r170 MeshBasicMaterial defaults clippingPlanes null");
   assert.equal(fresh.clipIntersection, false, "r170 MeshBasicMaterial defaults clipIntersection false");
   assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
+  assert.equal(fresh.alphaHash, false, "r170 MeshBasicMaterial defaults alphaHash false");
+  assert.equal(fresh.forceSinglePass, false, "r170 MeshBasicMaterial defaults forceSinglePass false");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mappedPlanes = [new THREE.Plane()];
@@ -1024,6 +1044,51 @@ test("packaged ingest pins r170 clipping defaults; mapped/lit stay authored", ()
   assert.equal(colliderGrab.material.clippingPlanes, colliderPlanes, "collider MeshBasic stays authored clippingPlanes");
   assert.equal(colliderGrab.material.clipIntersection, true, "collider MeshBasic stays authored clipIntersection");
   assert.equal(colliderGrab.material.clipShadows, true, "collider MeshBasic stays authored clipShadows");
+});
+
+test("packaged ingest pins r170 alphaHash/forceSinglePass defaults; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.alphaHash, false, "r170 MeshBasicMaterial defaults alphaHash false");
+  assert.equal(fresh.forceSinglePass, false, "r170 MeshBasicMaterial defaults forceSinglePass false");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    alphaHash: true,
+    forceSinglePass: true,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    alphaHash: true,
+    forceSinglePass: true,
+  });
+  const wrongMesh = boxMesh("dccAlphaHashOn", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.alphaHash = true;
+  colliderGrabBefore.material.forceSinglePass = true;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC alphaHash/forceSinglePass color-only MeshBasic");
+  assert.equal(mapped.alphaHash, true, "mapped MeshBasic stays authored alphaHash");
+  assert.equal(mapped.forceSinglePass, true, "mapped MeshBasic stays authored forceSinglePass");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.alphaHash, true, "collider MeshBasic stays authored alphaHash");
+  assert.equal(colliderGrab.material.forceSinglePass, true, "collider MeshBasic stays authored forceSinglePass");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
