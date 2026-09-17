@@ -105,6 +105,9 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.stencilFail, THREE.KeepStencilOp, `${label} pins stencilFail Keep`);
   assert.equal(mat.stencilZFail, THREE.KeepStencilOp, `${label} pins stencilZFail Keep`);
   assert.equal(mat.stencilZPass, THREE.KeepStencilOp, `${label} pins stencilZPass Keep`);
+  assert.equal(mat.clippingPlanes, null, `${label} pins clippingPlanes null`);
+  assert.equal(mat.clipIntersection, false, `${label} pins clipIntersection false`);
+  assert.equal(mat.clipShadows, false, `${label} pins clipShadows false`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -602,8 +605,12 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(fresh.stencilZPass, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilZPass Keep");
   assert.equal(THREE.AlwaysStencilFunc, 519, "r170 AlwaysStencilFunc is 519");
   assert.equal(THREE.KeepStencilOp, 7680, "r170 KeepStencilOp is 7680");
+  assert.equal(fresh.clippingPlanes, null, "r170 MeshBasicMaterial defaults clippingPlanes null");
+  assert.equal(fresh.clipIntersection, false, "r170 MeshBasicMaterial defaults clipIntersection false");
+  assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
 
   const { root, fastener, groups } = makePackagedFixture();
+  const mappedPlanes = [new THREE.Plane()];
   const mapped = new THREE.MeshBasicMaterial({
     color: 0xffffff,
     map: { isTexture: true },
@@ -627,6 +634,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     stencilFail: THREE.ReplaceStencilOp,
     stencilZFail: THREE.IncrementStencilOp,
     stencilZPass: THREE.DecrementStencilOp,
+    clippingPlanes: mappedPlanes,
+    clipIntersection: true,
+    clipShadows: true,
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -655,6 +665,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     stencilFail: THREE.ReplaceStencilOp,
     stencilZFail: THREE.IncrementStencilOp,
     stencilZPass: THREE.DecrementStencilOp,
+    clippingPlanes: [new THREE.Plane()],
+    clipIntersection: true,
+    clipShadows: true,
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -686,6 +699,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(mapped.stencilFunc, THREE.EqualStencilFunc, "mapped MeshBasic stays authored stencilFunc");
   assert.equal(mapped.stencilRef, 1, "mapped MeshBasic stays authored stencilRef");
   assert.equal(mapped.stencilFail, THREE.ReplaceStencilOp, "mapped MeshBasic stays authored stencilFail");
+  assert.equal(mapped.clippingPlanes, mappedPlanes, "mapped MeshBasic stays authored clippingPlanes");
+  assert.equal(mapped.clipIntersection, true, "mapped MeshBasic stays authored clipIntersection");
+  assert.equal(mapped.clipShadows, true, "mapped MeshBasic stays authored clipShadows");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -704,6 +720,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(colliderGrab.material.stencilWrite, false, "collider MeshBasic stays r170 stencilWrite default");
   assert.equal(colliderGrab.material.stencilFunc, THREE.AlwaysStencilFunc, "collider MeshBasic stays r170 stencilFunc default");
   assert.equal(colliderGrab.material.stencilFail, THREE.KeepStencilOp, "collider MeshBasic stays r170 stencilFail default");
+  assert.equal(colliderGrab.material.clippingPlanes, null, "collider MeshBasic stays r170 clippingPlanes default");
+  assert.equal(colliderGrab.material.clipIntersection, false, "collider MeshBasic stays r170 clipIntersection default");
+  assert.equal(colliderGrab.material.clipShadows, false, "collider MeshBasic stays r170 clipShadows default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
@@ -729,6 +748,9 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.stencilWrite, false, "fail-soft collider stays r170 stencilWrite default");
   assert.equal(colliderGrab.material.stencilFunc, THREE.AlwaysStencilFunc, "fail-soft collider stays r170 stencilFunc default");
   assert.equal(colliderGrab.material.stencilFail, THREE.KeepStencilOp, "fail-soft collider stays r170 stencilFail default");
+  assert.equal(colliderGrab.material.clippingPlanes, null, "fail-soft collider stays r170 clippingPlanes default");
+  assert.equal(colliderGrab.material.clipIntersection, false, "fail-soft collider stays r170 clipIntersection default");
+  assert.equal(colliderGrab.material.clipShadows, false, "fail-soft collider stays r170 clipShadows default");
 });
 
 test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest 0; mapped/lit stay authored", () => {
@@ -801,6 +823,9 @@ test("packaged ingest pins wireframe false / colorWrite true / depthFunc LessEqu
   assert.equal(fresh.stencilZPass, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilZPass Keep");
   assert.equal(THREE.AlwaysStencilFunc, 519, "r170 AlwaysStencilFunc is 519");
   assert.equal(THREE.KeepStencilOp, 7680, "r170 KeepStencilOp is 7680");
+  assert.equal(fresh.clippingPlanes, null, "r170 MeshBasicMaterial defaults clippingPlanes null");
+  assert.equal(fresh.clipIntersection, false, "r170 MeshBasicMaterial defaults clipIntersection false");
+  assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -874,6 +899,9 @@ test("packaged ingest pins r170 stencil defaults; mapped/lit stay authored", () 
   assert.equal(fresh.stencilZPass, THREE.KeepStencilOp, "r170 MeshBasicMaterial defaults stencilZPass Keep");
   assert.equal(THREE.AlwaysStencilFunc, 519, "r170 AlwaysStencilFunc is 519");
   assert.equal(THREE.KeepStencilOp, 7680, "r170 KeepStencilOp is 7680");
+  assert.equal(fresh.clippingPlanes, null, "r170 MeshBasicMaterial defaults clippingPlanes null");
+  assert.equal(fresh.clipIntersection, false, "r170 MeshBasicMaterial defaults clipIntersection false");
+  assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -943,6 +971,59 @@ test("packaged ingest pins r170 stencil defaults; mapped/lit stay authored", () 
   assert.equal(colliderGrab.material.stencilFail, THREE.ReplaceStencilOp, "collider MeshBasic stays authored stencilFail");
   assert.equal(colliderGrab.material.stencilZFail, THREE.IncrementStencilOp, "collider MeshBasic stays authored stencilZFail");
   assert.equal(colliderGrab.material.stencilZPass, THREE.DecrementStencilOp, "collider MeshBasic stays authored stencilZPass");
+});
+
+test("packaged ingest pins r170 clipping defaults; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.clippingPlanes, null, "r170 MeshBasicMaterial defaults clippingPlanes null");
+  assert.equal(fresh.clipIntersection, false, "r170 MeshBasicMaterial defaults clipIntersection false");
+  assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mappedPlanes = [new THREE.Plane()];
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    clippingPlanes: mappedPlanes,
+    clipIntersection: true,
+    clipShadows: true,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    clippingPlanes: [new THREE.Plane()],
+    clipIntersection: true,
+    clipShadows: true,
+  });
+  const wrongMesh = boxMesh("dccClippingOn", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  const colliderPlanes = [new THREE.Plane()];
+  colliderGrabBefore.material.clippingPlanes = colliderPlanes;
+  colliderGrabBefore.material.clipIntersection = true;
+  colliderGrabBefore.material.clipShadows = true;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC clippingPlanes/clipIntersection/clipShadows color-only MeshBasic");
+  assert.equal(mapped.clippingPlanes, mappedPlanes, "mapped MeshBasic stays authored clippingPlanes");
+  assert.equal(mapped.clipIntersection, true, "mapped MeshBasic stays authored clipIntersection");
+  assert.equal(mapped.clipShadows, true, "mapped MeshBasic stays authored clipShadows");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.clippingPlanes, colliderPlanes, "collider MeshBasic stays authored clippingPlanes");
+  assert.equal(colliderGrab.material.clipIntersection, true, "collider MeshBasic stays authored clipIntersection");
+  assert.equal(colliderGrab.material.clipShadows, true, "collider MeshBasic stays authored clipShadows");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
