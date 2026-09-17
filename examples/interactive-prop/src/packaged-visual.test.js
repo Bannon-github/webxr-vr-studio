@@ -110,6 +110,12 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.clipShadows, false, `${label} pins clipShadows false`);
   assert.equal(mat.alphaHash, false, `${label} pins alphaHash false`);
   assert.equal(mat.forceSinglePass, false, `${label} pins forceSinglePass false`);
+  assert.equal(mat.blendSrc, THREE.SrcAlphaFactor, `${label} pins SrcAlphaFactor`);
+  assert.equal(mat.blendDst, THREE.OneMinusSrcAlphaFactor, `${label} pins OneMinusSrcAlphaFactor`);
+  assert.equal(mat.blendEquation, THREE.AddEquation, `${label} pins AddEquation`);
+  assert.equal(mat.blendSrcAlpha, null, `${label} pins blendSrcAlpha null`);
+  assert.equal(mat.blendDstAlpha, null, `${label} pins blendDstAlpha null`);
+  assert.equal(mat.blendEquationAlpha, null, `${label} pins blendEquationAlpha null`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -612,6 +618,15 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
   assert.equal(fresh.alphaHash, false, "r170 MeshBasicMaterial defaults alphaHash false");
   assert.equal(fresh.forceSinglePass, false, "r170 MeshBasicMaterial defaults forceSinglePass false");
+  assert.equal(fresh.blendSrc, THREE.SrcAlphaFactor, "r170 MeshBasicMaterial defaults SrcAlphaFactor");
+  assert.equal(fresh.blendDst, THREE.OneMinusSrcAlphaFactor, "r170 MeshBasicMaterial defaults OneMinusSrcAlphaFactor");
+  assert.equal(fresh.blendEquation, THREE.AddEquation, "r170 MeshBasicMaterial defaults AddEquation");
+  assert.equal(fresh.blendSrcAlpha, null, "r170 MeshBasicMaterial defaults blendSrcAlpha null");
+  assert.equal(fresh.blendDstAlpha, null, "r170 MeshBasicMaterial defaults blendDstAlpha null");
+  assert.equal(fresh.blendEquationAlpha, null, "r170 MeshBasicMaterial defaults blendEquationAlpha null");
+  assert.equal(THREE.SrcAlphaFactor, 204, "r170 SrcAlphaFactor is 204");
+  assert.equal(THREE.OneMinusSrcAlphaFactor, 205, "r170 OneMinusSrcAlphaFactor is 205");
+  assert.equal(THREE.AddEquation, 100, "r170 AddEquation is 100");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mappedPlanes = [new THREE.Plane()];
@@ -643,6 +658,12 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     clipShadows: true,
     alphaHash: true,
     forceSinglePass: true,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.ZeroFactor,
+    blendEquation: THREE.SubtractEquation,
+    blendSrcAlpha: THREE.OneFactor,
+    blendDstAlpha: THREE.ZeroFactor,
+    blendEquationAlpha: THREE.ReverseSubtractEquation,
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -676,6 +697,12 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     clipShadows: true,
     alphaHash: true,
     forceSinglePass: true,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.ZeroFactor,
+    blendEquation: THREE.SubtractEquation,
+    blendSrcAlpha: THREE.OneFactor,
+    blendDstAlpha: THREE.ZeroFactor,
+    blendEquationAlpha: THREE.ReverseSubtractEquation,
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -712,6 +739,12 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(mapped.clipShadows, true, "mapped MeshBasic stays authored clipShadows");
   assert.equal(mapped.alphaHash, true, "mapped MeshBasic stays authored alphaHash");
   assert.equal(mapped.forceSinglePass, true, "mapped MeshBasic stays authored forceSinglePass");
+  assert.equal(mapped.blendSrc, THREE.OneFactor, "mapped MeshBasic stays authored blendSrc");
+  assert.equal(mapped.blendDst, THREE.ZeroFactor, "mapped MeshBasic stays authored blendDst");
+  assert.equal(mapped.blendEquation, THREE.SubtractEquation, "mapped MeshBasic stays authored blendEquation");
+  assert.equal(mapped.blendSrcAlpha, THREE.OneFactor, "mapped MeshBasic stays authored blendSrcAlpha");
+  assert.equal(mapped.blendDstAlpha, THREE.ZeroFactor, "mapped MeshBasic stays authored blendDstAlpha");
+  assert.equal(mapped.blendEquationAlpha, THREE.ReverseSubtractEquation, "mapped MeshBasic stays authored blendEquationAlpha");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -735,6 +768,12 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(colliderGrab.material.clipShadows, false, "collider MeshBasic stays r170 clipShadows default");
   assert.equal(colliderGrab.material.alphaHash, false, "collider MeshBasic stays r170 alphaHash default");
   assert.equal(colliderGrab.material.forceSinglePass, false, "collider MeshBasic stays r170 forceSinglePass default");
+  assert.equal(colliderGrab.material.blendSrc, THREE.SrcAlphaFactor, "collider MeshBasic stays r170 blendSrc default");
+  assert.equal(colliderGrab.material.blendDst, THREE.OneMinusSrcAlphaFactor, "collider MeshBasic stays r170 blendDst default");
+  assert.equal(colliderGrab.material.blendEquation, THREE.AddEquation, "collider MeshBasic stays r170 blendEquation default");
+  assert.equal(colliderGrab.material.blendSrcAlpha, null, "collider MeshBasic stays r170 blendSrcAlpha default");
+  assert.equal(colliderGrab.material.blendDstAlpha, null, "collider MeshBasic stays r170 blendDstAlpha default");
+  assert.equal(colliderGrab.material.blendEquationAlpha, null, "collider MeshBasic stays r170 blendEquationAlpha default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
@@ -765,6 +804,12 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.clipShadows, false, "fail-soft collider stays r170 clipShadows default");
   assert.equal(colliderGrab.material.alphaHash, false, "fail-soft collider stays r170 alphaHash default");
   assert.equal(colliderGrab.material.forceSinglePass, false, "fail-soft collider stays r170 forceSinglePass default");
+  assert.equal(colliderGrab.material.blendSrc, THREE.SrcAlphaFactor, "fail-soft collider stays r170 blendSrc default");
+  assert.equal(colliderGrab.material.blendDst, THREE.OneMinusSrcAlphaFactor, "fail-soft collider stays r170 blendDst default");
+  assert.equal(colliderGrab.material.blendEquation, THREE.AddEquation, "fail-soft collider stays r170 blendEquation default");
+  assert.equal(colliderGrab.material.blendSrcAlpha, null, "fail-soft collider stays r170 blendSrcAlpha default");
+  assert.equal(colliderGrab.material.blendDstAlpha, null, "fail-soft collider stays r170 blendDstAlpha default");
+  assert.equal(colliderGrab.material.blendEquationAlpha, null, "fail-soft collider stays r170 blendEquationAlpha default");
 });
 
 test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest 0; mapped/lit stay authored", () => {
@@ -842,6 +887,15 @@ test("packaged ingest pins wireframe false / colorWrite true / depthFunc LessEqu
   assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
   assert.equal(fresh.alphaHash, false, "r170 MeshBasicMaterial defaults alphaHash false");
   assert.equal(fresh.forceSinglePass, false, "r170 MeshBasicMaterial defaults forceSinglePass false");
+  assert.equal(fresh.blendSrc, THREE.SrcAlphaFactor, "r170 MeshBasicMaterial defaults SrcAlphaFactor");
+  assert.equal(fresh.blendDst, THREE.OneMinusSrcAlphaFactor, "r170 MeshBasicMaterial defaults OneMinusSrcAlphaFactor");
+  assert.equal(fresh.blendEquation, THREE.AddEquation, "r170 MeshBasicMaterial defaults AddEquation");
+  assert.equal(fresh.blendSrcAlpha, null, "r170 MeshBasicMaterial defaults blendSrcAlpha null");
+  assert.equal(fresh.blendDstAlpha, null, "r170 MeshBasicMaterial defaults blendDstAlpha null");
+  assert.equal(fresh.blendEquationAlpha, null, "r170 MeshBasicMaterial defaults blendEquationAlpha null");
+  assert.equal(THREE.SrcAlphaFactor, 204, "r170 SrcAlphaFactor is 204");
+  assert.equal(THREE.OneMinusSrcAlphaFactor, 205, "r170 OneMinusSrcAlphaFactor is 205");
+  assert.equal(THREE.AddEquation, 100, "r170 AddEquation is 100");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -920,6 +974,15 @@ test("packaged ingest pins r170 stencil defaults; mapped/lit stay authored", () 
   assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
   assert.equal(fresh.alphaHash, false, "r170 MeshBasicMaterial defaults alphaHash false");
   assert.equal(fresh.forceSinglePass, false, "r170 MeshBasicMaterial defaults forceSinglePass false");
+  assert.equal(fresh.blendSrc, THREE.SrcAlphaFactor, "r170 MeshBasicMaterial defaults SrcAlphaFactor");
+  assert.equal(fresh.blendDst, THREE.OneMinusSrcAlphaFactor, "r170 MeshBasicMaterial defaults OneMinusSrcAlphaFactor");
+  assert.equal(fresh.blendEquation, THREE.AddEquation, "r170 MeshBasicMaterial defaults AddEquation");
+  assert.equal(fresh.blendSrcAlpha, null, "r170 MeshBasicMaterial defaults blendSrcAlpha null");
+  assert.equal(fresh.blendDstAlpha, null, "r170 MeshBasicMaterial defaults blendDstAlpha null");
+  assert.equal(fresh.blendEquationAlpha, null, "r170 MeshBasicMaterial defaults blendEquationAlpha null");
+  assert.equal(THREE.SrcAlphaFactor, 204, "r170 SrcAlphaFactor is 204");
+  assert.equal(THREE.OneMinusSrcAlphaFactor, 205, "r170 OneMinusSrcAlphaFactor is 205");
+  assert.equal(THREE.AddEquation, 100, "r170 AddEquation is 100");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -998,6 +1061,15 @@ test("packaged ingest pins r170 clipping defaults; mapped/lit stay authored", ()
   assert.equal(fresh.clipShadows, false, "r170 MeshBasicMaterial defaults clipShadows false");
   assert.equal(fresh.alphaHash, false, "r170 MeshBasicMaterial defaults alphaHash false");
   assert.equal(fresh.forceSinglePass, false, "r170 MeshBasicMaterial defaults forceSinglePass false");
+  assert.equal(fresh.blendSrc, THREE.SrcAlphaFactor, "r170 MeshBasicMaterial defaults SrcAlphaFactor");
+  assert.equal(fresh.blendDst, THREE.OneMinusSrcAlphaFactor, "r170 MeshBasicMaterial defaults OneMinusSrcAlphaFactor");
+  assert.equal(fresh.blendEquation, THREE.AddEquation, "r170 MeshBasicMaterial defaults AddEquation");
+  assert.equal(fresh.blendSrcAlpha, null, "r170 MeshBasicMaterial defaults blendSrcAlpha null");
+  assert.equal(fresh.blendDstAlpha, null, "r170 MeshBasicMaterial defaults blendDstAlpha null");
+  assert.equal(fresh.blendEquationAlpha, null, "r170 MeshBasicMaterial defaults blendEquationAlpha null");
+  assert.equal(THREE.SrcAlphaFactor, 204, "r170 SrcAlphaFactor is 204");
+  assert.equal(THREE.OneMinusSrcAlphaFactor, 205, "r170 OneMinusSrcAlphaFactor is 205");
+  assert.equal(THREE.AddEquation, 100, "r170 AddEquation is 100");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mappedPlanes = [new THREE.Plane()];
@@ -1050,6 +1122,15 @@ test("packaged ingest pins r170 alphaHash/forceSinglePass defaults; mapped/lit s
   const fresh = new THREE.MeshBasicMaterial();
   assert.equal(fresh.alphaHash, false, "r170 MeshBasicMaterial defaults alphaHash false");
   assert.equal(fresh.forceSinglePass, false, "r170 MeshBasicMaterial defaults forceSinglePass false");
+  assert.equal(fresh.blendSrc, THREE.SrcAlphaFactor, "r170 MeshBasicMaterial defaults SrcAlphaFactor");
+  assert.equal(fresh.blendDst, THREE.OneMinusSrcAlphaFactor, "r170 MeshBasicMaterial defaults OneMinusSrcAlphaFactor");
+  assert.equal(fresh.blendEquation, THREE.AddEquation, "r170 MeshBasicMaterial defaults AddEquation");
+  assert.equal(fresh.blendSrcAlpha, null, "r170 MeshBasicMaterial defaults blendSrcAlpha null");
+  assert.equal(fresh.blendDstAlpha, null, "r170 MeshBasicMaterial defaults blendDstAlpha null");
+  assert.equal(fresh.blendEquationAlpha, null, "r170 MeshBasicMaterial defaults blendEquationAlpha null");
+  assert.equal(THREE.SrcAlphaFactor, 204, "r170 SrcAlphaFactor is 204");
+  assert.equal(THREE.OneMinusSrcAlphaFactor, 205, "r170 OneMinusSrcAlphaFactor is 205");
+  assert.equal(THREE.AddEquation, 100, "r170 AddEquation is 100");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mapped = new THREE.MeshBasicMaterial({
@@ -1089,6 +1170,78 @@ test("packaged ingest pins r170 alphaHash/forceSinglePass defaults; mapped/lit s
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.material.alphaHash, true, "collider MeshBasic stays authored alphaHash");
   assert.equal(colliderGrab.material.forceSinglePass, true, "collider MeshBasic stays authored forceSinglePass");
+});
+
+test("packaged ingest pins r170 NormalBlending factor/equation companions; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.blendSrc, THREE.SrcAlphaFactor, "r170 MeshBasicMaterial defaults SrcAlphaFactor");
+  assert.equal(fresh.blendDst, THREE.OneMinusSrcAlphaFactor, "r170 MeshBasicMaterial defaults OneMinusSrcAlphaFactor");
+  assert.equal(fresh.blendEquation, THREE.AddEquation, "r170 MeshBasicMaterial defaults AddEquation");
+  assert.equal(fresh.blendSrcAlpha, null, "r170 MeshBasicMaterial defaults blendSrcAlpha null");
+  assert.equal(fresh.blendDstAlpha, null, "r170 MeshBasicMaterial defaults blendDstAlpha null");
+  assert.equal(fresh.blendEquationAlpha, null, "r170 MeshBasicMaterial defaults blendEquationAlpha null");
+  assert.equal(THREE.SrcAlphaFactor, 204, "r170 SrcAlphaFactor is 204");
+  assert.equal(THREE.OneMinusSrcAlphaFactor, 205, "r170 OneMinusSrcAlphaFactor is 205");
+  assert.equal(THREE.AddEquation, 100, "r170 AddEquation is 100");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.ZeroFactor,
+    blendEquation: THREE.SubtractEquation,
+    blendSrcAlpha: THREE.OneFactor,
+    blendDstAlpha: THREE.ZeroFactor,
+    blendEquationAlpha: THREE.ReverseSubtractEquation,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.ZeroFactor,
+    blendEquation: THREE.SubtractEquation,
+    blendSrcAlpha: THREE.OneFactor,
+    blendDstAlpha: THREE.ZeroFactor,
+    blendEquationAlpha: THREE.ReverseSubtractEquation,
+  });
+  const wrongMesh = boxMesh("dccBlendFactorsOn", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.blendSrc = THREE.OneFactor;
+  colliderGrabBefore.material.blendDst = THREE.ZeroFactor;
+  colliderGrabBefore.material.blendEquation = THREE.SubtractEquation;
+  colliderGrabBefore.material.blendSrcAlpha = THREE.OneFactor;
+  colliderGrabBefore.material.blendDstAlpha = THREE.ZeroFactor;
+  colliderGrabBefore.material.blendEquationAlpha = THREE.ReverseSubtractEquation;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC NormalBlending companion leftovers color-only MeshBasic");
+  assert.equal(mapped.blendSrc, THREE.OneFactor, "mapped MeshBasic stays authored blendSrc");
+  assert.equal(mapped.blendDst, THREE.ZeroFactor, "mapped MeshBasic stays authored blendDst");
+  assert.equal(mapped.blendEquation, THREE.SubtractEquation, "mapped MeshBasic stays authored blendEquation");
+  assert.equal(mapped.blendSrcAlpha, THREE.OneFactor, "mapped MeshBasic stays authored blendSrcAlpha");
+  assert.equal(mapped.blendDstAlpha, THREE.ZeroFactor, "mapped MeshBasic stays authored blendDstAlpha");
+  assert.equal(mapped.blendEquationAlpha, THREE.ReverseSubtractEquation, "mapped MeshBasic stays authored blendEquationAlpha");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.blendSrc, THREE.OneFactor, "collider MeshBasic stays authored blendSrc");
+  assert.equal(colliderGrab.material.blendDst, THREE.ZeroFactor, "collider MeshBasic stays authored blendDst");
+  assert.equal(colliderGrab.material.blendEquation, THREE.SubtractEquation, "collider MeshBasic stays authored blendEquation");
+  assert.equal(colliderGrab.material.blendSrcAlpha, THREE.OneFactor, "collider MeshBasic stays authored blendSrcAlpha");
+  assert.equal(colliderGrab.material.blendDstAlpha, THREE.ZeroFactor, "collider MeshBasic stays authored blendDstAlpha");
+  assert.equal(colliderGrab.material.blendEquationAlpha, THREE.ReverseSubtractEquation, "collider MeshBasic stays authored blendEquationAlpha");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
