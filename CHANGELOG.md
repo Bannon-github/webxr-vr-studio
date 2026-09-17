@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.58.0] — 2026-09-17
+
+### Changed
+
+- `crate-toolbox` **v0.56.0** L3 packaging/perf UPGRADE: after the v0.55 alphaHash / forceSinglePass pin (and after the v0.51 blending-mode pin), also pin r170 NormalBlending factor/equation companions (`blendSrc = SrcAlphaFactor`, `blendDst = OneMinusSrcAlphaFactor`, `blendEquation = AddEquation`, `blendSrcAlpha = null`, `blendDstAlpha = null`, `blendEquationAlpha = null`) on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances). Mapped / lit / colliders stay authored / r170 defaults. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13 unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.57.0] — 2026-09-17
 
 ### Changed
