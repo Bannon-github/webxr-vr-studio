@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.55.0] — 2026-09-17
+
+### Changed
+
+- `crate-toolbox` **v0.53.0** L3 packaging/perf UPGRADE: after the v0.52 wireframe/depthFunc/colorWrite/polygonOffset pin (and after the v0.51 blending/alpha pin), also pin r170 Material stencil defaults (`stencilWrite = false`, `stencilFunc = AlwaysStencilFunc`, `stencilRef = 0`, `stencilWriteMask = 0xff`, `stencilFuncMask = 0xff`, `stencilFail = KeepStencilOp`, `stencilZFail = KeepStencilOp`, `stencilZPass = KeepStencilOp`) on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances). Mapped / lit / colliders stay authored / r170 defaults. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13 unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.54.0] — 2026-09-17
 
 ### Changed

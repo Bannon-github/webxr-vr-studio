@@ -106,6 +106,16 @@
  * Accidental DCC / GLB wireframe / colorWrite-off / non-LessEqual
  * depthFunc / polygonOffset would force extra fragment or depth
  * work. Mapped / lit / colliders stay untouched.
+ *
+ * v0.53: the same helper also pins r170 Material stencil defaults
+ * (`stencilWrite = false`, `stencilFunc = AlwaysStencilFunc`,
+ * `stencilRef = 0`, `stencilWriteMask = 0xff`,
+ * `stencilFuncMask = 0xff`, `stencilFail = KeepStencilOp`,
+ * `stencilZFail = KeepStencilOp`, `stencilZPass = KeepStencilOp`)
+ * on those color-only MeshBasics. Accidental DCC / GLB
+ * `stencilWrite=true` (or non-Always func / non-Keep ops) would
+ * force stencil test/write on a TBDR mobile GPU. Mapped / lit /
+ * colliders stay untouched.
  */
 
 import {
