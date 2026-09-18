@@ -140,6 +140,13 @@
  * Accidental DCC / GLB CustomBlending leftovers still sit on the
  * material even when blending mode is restored to NormalBlending.
  * Mapped / lit / colliders stay untouched.
+ *
+ * v0.57: the same helper also pins r170 Material `vertexColors =
+ * false` on those color-only MeshBasics. Accidental DCC / GLB
+ * `vertexColors = true` leftovers force a color-attribute shader
+ * variant even when maps are absent (still passes
+ * `isColorOnlyUnlitBasic`). Mapped / lit / colliders stay
+ * untouched.
  */
 
 import {
