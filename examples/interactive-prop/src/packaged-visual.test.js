@@ -117,6 +117,7 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.blendDstAlpha, null, `${label} pins blendDstAlpha null`);
   assert.equal(mat.blendEquationAlpha, null, `${label} pins blendEquationAlpha null`);
   assert.equal(mat.vertexColors, false, `${label} pins vertexColors false`);
+  assert.equal(mat.precision, null, `${label} pins precision null`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -629,6 +630,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(THREE.OneMinusSrcAlphaFactor, 205, "r170 OneMinusSrcAlphaFactor is 205");
   assert.equal(THREE.AddEquation, 100, "r170 AddEquation is 100");
   assert.equal(fresh.vertexColors, false, "r170 MeshBasicMaterial defaults vertexColors false");
+  assert.equal(fresh.precision, null, "r170 MeshBasicMaterial defaults precision null");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
 
   const { root, fastener, groups } = makePackagedFixture();
   const mappedPlanes = [new THREE.Plane()];
@@ -667,6 +670,7 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     blendDstAlpha: THREE.ZeroFactor,
     blendEquationAlpha: THREE.ReverseSubtractEquation,
     vertexColors: true,
+    precision: "highp",
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -707,6 +711,7 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     blendDstAlpha: THREE.ZeroFactor,
     blendEquationAlpha: THREE.ReverseSubtractEquation,
     vertexColors: true,
+    precision: "highp",
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -750,6 +755,7 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(mapped.blendDstAlpha, THREE.ZeroFactor, "mapped MeshBasic stays authored blendDstAlpha");
   assert.equal(mapped.blendEquationAlpha, THREE.ReverseSubtractEquation, "mapped MeshBasic stays authored blendEquationAlpha");
   assert.equal(mapped.vertexColors, true, "mapped MeshBasic stays authored vertexColors");
+  assert.equal(mapped.precision, "highp", "mapped MeshBasic stays authored precision");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -780,6 +786,7 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(colliderGrab.material.blendDstAlpha, null, "collider MeshBasic stays r170 blendDstAlpha default");
   assert.equal(colliderGrab.material.blendEquationAlpha, null, "collider MeshBasic stays r170 blendEquationAlpha default");
   assert.equal(colliderGrab.material.vertexColors, false, "collider MeshBasic stays r170 vertexColors default");
+  assert.equal(colliderGrab.material.precision, null, "collider MeshBasic stays r170 precision default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
@@ -817,6 +824,7 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.blendDstAlpha, null, "fail-soft collider stays r170 blendDstAlpha default");
   assert.equal(colliderGrab.material.blendEquationAlpha, null, "fail-soft collider stays r170 blendEquationAlpha default");
   assert.equal(colliderGrab.material.vertexColors, false, "fail-soft collider stays r170 vertexColors default");
+  assert.equal(colliderGrab.material.precision, null, "fail-soft collider stays r170 precision default");
 });
 
 test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest 0; mapped/lit stay authored", () => {
@@ -1288,6 +1296,46 @@ test("packaged ingest pins r170 vertexColors false; mapped/lit stay authored", (
 
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.material.vertexColors, true, "collider MeshBasic stays authored vertexColors");
+});
+
+test("packaged ingest pins r170 precision null; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.precision, null, "r170 MeshBasicMaterial defaults precision null");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    precision: "highp",
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    precision: "highp",
+  });
+  const wrongMesh = boxMesh("dccPrecisionHighp", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.precision = "highp";
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC precision leftover color-only MeshBasic");
+  assert.equal(mapped.precision, "highp", "mapped MeshBasic stays authored precision");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.precision, "highp", "collider MeshBasic stays authored precision");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {

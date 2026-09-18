@@ -147,6 +147,13 @@
  * variant even when maps are absent (still passes
  * `isColorOnlyUnlitBasic`). Mapped / lit / colliders stay
  * untouched.
+ *
+ * v0.58: the same helper also pins r170 Material `precision =
+ * null` on those color-only MeshBasics. Accidental DCC / GLB
+ * `precision = 'highp'` (or other string) leftovers force a
+ * non-renderer precision even when maps are absent (still
+ * passes `isColorOnlyUnlitBasic`). Mapped / lit / colliders
+ * stay untouched. Do not force 'mediump' / 'lowp' / 'highp'.
  */
 
 import {
