@@ -130,6 +130,10 @@ function assertQuestSafeUnlitFrustumCulled(mesh, label = "color-only MeshBasic m
   assert.equal(mesh.frustumCulled, true, `${label} pins frustumCulled true`);
 }
 
+function assertQuestSafeUnlitRenderOrder(mesh, label = "color-only MeshBasic mesh") {
+  assert.equal(mesh.renderOrder, 0, `${label} pins renderOrder 0`);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -1491,4 +1495,56 @@ test("packaged ingest without lod groups still pins color-only Mesh frustumCulle
   assertQuestSafeUnlitFrustumCulled(fastener, "fail-soft fastener");
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.frustumCulled, true, "fail-soft collider keeps r170 frustumCulled default");
+});
+
+test("packaged ingest pins renderOrder 0 on color-only meshes; mapped/lit stay authored", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assert.equal(fresh.renderOrder, 0, "r170 Mesh defaults renderOrder 0");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  mappedMesh.renderOrder = 2;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccRenderOrder", wrong);
+  wrongMesh.renderOrder = 3;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.renderOrder = 4;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitRenderOrder(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFrustumCulled(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowFlags(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitRenderOrder(wrongMesh, "packaged DCC renderOrder leftover color-only Mesh");
+  assert.equal(mappedMesh.renderOrder, 2, "mapped MeshBasic stays authored renderOrder");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.renderOrder, 4, "collider Mesh stays authored renderOrder");
+});
+
+test("packaged ingest without lod groups still pins color-only Mesh renderOrder", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitRenderOrder(visualMeshes(body)[0], "fail-soft body");
+  assertQuestSafeUnlitRenderOrder(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitRenderOrder(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitRenderOrder(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitRenderOrder(fastener, "fail-soft fastener");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.renderOrder, 0, "fail-soft collider keeps r170 renderOrder default");
 });

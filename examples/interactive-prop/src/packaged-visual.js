@@ -165,6 +165,17 @@
  * this is the matching **material** fence, not a mesh change.
  * Mapped / lit / colliders stay untouched. Do not force a
  * non-null shadowSide.
+ *
+ * v0.60: after that frustumCulled pin (and after the v0.49
+ * shadow-flag pin), `pinColorOnlyVisualRenderOrder` sets
+ * `renderOrder = 0` on packed color-only unlit MeshBasic
+ * visual meshes (same `isColorOnlyUnlitBasic` gate). Accidental
+ * DCC / GLB non-zero `renderOrder` forces separate opaque /
+ * transparent sort buckets and can break batching. Does not
+ * hex-dedupe or invent meshes. Mapped / lit stay at authored /
+ * r170 Mesh defaults. Collider meshes stay untouched. Does
+ * **not** pin `mesh.visible` (LOD visibility uses it), change
+ * `layers`, or force a non-zero renderOrder.
  */
 
 import {
@@ -176,6 +187,7 @@ import {
   pinColorOnlyVisualMaterialFlags,
   pinColorOnlyVisualShadowFlags,
   pinColorOnlyVisualFrustumCulled,
+  pinColorOnlyVisualRenderOrder,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -338,6 +350,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialFlags(root);
   pinColorOnlyVisualShadowFlags(root);
   pinColorOnlyVisualFrustumCulled(root);
+  pinColorOnlyVisualRenderOrder(root);
   return root;
 }
 
