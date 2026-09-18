@@ -184,6 +184,17 @@
  * Mapped / lit / colliders stay untouched. Do **not** pin
  * `mesh.visible` (LOD visibility uses it). Do not force
  * `material.visible = false`.
+ *
+ * v0.62: the same helper also pins r170 MeshBasic envMap
+ * companions (`combine = MultiplyOperation`,
+ * `reflectivity = 1`, `refractionRatio = 0.98`) on those
+ * color-only MeshBasics. Accidental DCC / GLB MixOperation /
+ * AddOperation / non-1 reflectivity / non-0.98
+ * refractionRatio leftovers still sit on the material even
+ * when `envMap` is null (still passes
+ * `isColorOnlyUnlitBasic`). Mapped / lit / colliders stay
+ * untouched. Does not force envMap or attach maps. Does not
+ * change the `isColorOnlyUnlitBasic` map/envMap gate.
  */
 
 import {
