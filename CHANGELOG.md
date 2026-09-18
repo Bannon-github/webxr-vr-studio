@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.61.0] — 2026-09-18
+
+### Changed
+
+- `crate-toolbox` **v0.59.0** L3 packaging/perf UPGRADE: after the v0.58 precision pin (and after the v0.49 mesh-level shadow-flag pin), also pin r170 Material `shadowSide = null` on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances). Mapped / lit / colliders stay authored / r170 defaults. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13 unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.60.0] — 2026-09-18
 
 ### Changed
