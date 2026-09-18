@@ -277,7 +277,8 @@ export function releaseCpuArraysOnGpuUpload(geometry, material) {
  * factor/equation companion pin, v0.57 MeshBasic
  * vertexColors pin, v0.58 MeshBasic precision pin,
  * v0.59 MeshBasic shadowSide pin, v0.60 Mesh
- * renderOrder pin, and v0.61 MeshBasic visible pin
+ * renderOrder pin, v0.61 MeshBasic visible pin, and
+ * v0.62 MeshBasic envMap companion pin
  * are post-attach Object3D / material-state steps,
  * not geometry pack steps.
  */
@@ -528,6 +529,22 @@ export function disableColorOnlyVisualRaycast(entity) {
  * pin `mesh.visible` — LOD visibility uses it. Do not force
  * `material.visible = false`. Load-time only — not per-frame.
  *
+ * **Verified r170 API (envMap companions):** a fresh
+ * `MeshBasicMaterial` is already `combine ===
+ * MultiplyOperation` (0), `reflectivity === 1`, and
+ * `refractionRatio === 0.98` (`MeshBasicMaterial` defaults;
+ * `REVISION` 170). `isColorOnlyUnlitBasic` already requires
+ * `envMap` to be falsy — this pulse does not change that
+ * gate and does not attach or force an envMap. Accidental
+ * DCC / packaged GLB `combine = MixOperation` /
+ * `AddOperation`, non-1 `reflectivity`, or non-0.98
+ * `refractionRatio` leftovers still sit on the material
+ * even when `envMap` is null (still passes
+ * `isColorOnlyUnlitBasic`). Pin r170 MeshBasic envMap
+ * companions as the Quest-safe unlit contract after v0.61
+ * visible. Do not force envMap or attach maps. Load-time
+ * only — not per-frame.
+ *
  * Same `isColorOnlyUnlitBasic` gate as the pack pipeline. Does not
  * invent materials or hex-dedupe.
  */
@@ -574,6 +591,9 @@ export function pinColorOnlyUnlitBasicFlags(material) {
   material.precision = null;
   material.shadowSide = null;
   material.visible = true;
+  material.combine = THREE.MultiplyOperation;
+  material.reflectivity = 1;
+  material.refractionRatio = 0.98;
   return material;
 }
 
@@ -586,8 +606,10 @@ export function pinColorOnlyUnlitBasicFlags(material) {
  * r170 Material alphaHash / forceSinglePass defaults, r170
  * NormalBlending factor/equation companions, r170 Material
  * vertexColors = false, r170 Material precision = null,
- * r170 Material shadowSide = null, and r170 Material
- * visible = true
+ * r170 Material shadowSide = null, r170 Material
+ * visible = true, and r170 MeshBasic envMap companions
+ * (`combine = MultiplyOperation`, `reflectivity = 1`,
+ * `refractionRatio = 0.98`)
  * on every unique packed color-only unlit MeshBasic visual material.
  *
  * Skip colliders (even MeshBasic debug hulls). Skip mapped / lit.
@@ -1142,7 +1164,7 @@ export function createToolbox() {
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
     uniqueMaterials: colorOnlyByHex.size,
-    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. v0.46 disables Mesh.raycast on packed color-only MeshBasic visuals (body + lid/latch/tool + fastener); colliders keep Mesh.prototype.raycast. v0.47 pins fog = false and toneMapped = false on packed color-only unlit MeshBasic materials (3 unique shared instances; mapped/lit/colliders stay r170 defaults). v0.48 also pins opaque FrontSide draw-state (transparent = false, opacity = 1, depthWrite = true, depthTest = true, side = FrontSide) on those same materials. v0.49 pins castShadow = false and receiveShadow = false on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults). v0.50 pins frustumCulled = true on those same visual meshes (colliders stay r170 Mesh defaults). v0.51 also pins NormalBlending / premultipliedAlpha false / alphaTest 0 (plus dithering false / alphaToCoverage false) on those same materials. v0.52 also pins wireframe false / colorWrite true / depthFunc LessEqualDepth / polygonOffset off on those same materials. v0.53 also pins r170 stencil defaults (stencilWrite false / AlwaysStencilFunc / Keep ops) on those same materials. v0.54 also pins r170 clipping defaults (clippingPlanes null / clipIntersection false / clipShadows false) on those same materials. v0.55 also pins r170 alphaHash / forceSinglePass defaults (alphaHash false / forceSinglePass false) on those same materials. v0.56 also pins r170 NormalBlending factor/equation companions (blendSrc SrcAlphaFactor / blendDst OneMinusSrcAlphaFactor / blendEquation AddEquation / blendSrcAlpha null / blendDstAlpha null / blendEquationAlpha null) on those same materials. v0.57 also pins r170 vertexColors false on those same materials. v0.58 also pins r170 precision null on those same materials. v0.59 also pins r170 shadowSide null on those same materials. v0.60 pins renderOrder = 0 on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults). v0.61 also pins r170 Material visible true on those same materials (does not pin mesh.visible — LOD visibility uses it). Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
+    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. v0.46 disables Mesh.raycast on packed color-only MeshBasic visuals (body + lid/latch/tool + fastener); colliders keep Mesh.prototype.raycast. v0.47 pins fog = false and toneMapped = false on packed color-only unlit MeshBasic materials (3 unique shared instances; mapped/lit/colliders stay r170 defaults). v0.48 also pins opaque FrontSide draw-state (transparent = false, opacity = 1, depthWrite = true, depthTest = true, side = FrontSide) on those same materials. v0.49 pins castShadow = false and receiveShadow = false on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults). v0.50 pins frustumCulled = true on those same visual meshes (colliders stay r170 Mesh defaults). v0.51 also pins NormalBlending / premultipliedAlpha false / alphaTest 0 (plus dithering false / alphaToCoverage false) on those same materials. v0.52 also pins wireframe false / colorWrite true / depthFunc LessEqualDepth / polygonOffset off on those same materials. v0.53 also pins r170 stencil defaults (stencilWrite false / AlwaysStencilFunc / Keep ops) on those same materials. v0.54 also pins r170 clipping defaults (clippingPlanes null / clipIntersection false / clipShadows false) on those same materials. v0.55 also pins r170 alphaHash / forceSinglePass defaults (alphaHash false / forceSinglePass false) on those same materials. v0.56 also pins r170 NormalBlending factor/equation companions (blendSrc SrcAlphaFactor / blendDst OneMinusSrcAlphaFactor / blendEquation AddEquation / blendSrcAlpha null / blendDstAlpha null / blendEquationAlpha null) on those same materials. v0.57 also pins r170 vertexColors false on those same materials. v0.58 also pins r170 precision null on those same materials. v0.59 also pins r170 shadowSide null on those same materials. v0.60 pins renderOrder = 0 on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults). v0.61 also pins r170 Material visible true on those same materials (does not pin mesh.visible — LOD visibility uses it). v0.62 also pins r170 MeshBasic envMap companions (combine MultiplyOperation / reflectivity 1 / refractionRatio 0.98) on those same materials (does not force envMap or attach maps). Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -1208,6 +1230,10 @@ export function createToolbox() {
   // v0.61: the same material helper also pins r170 Material
   // visible true on those color-only MeshBasics (does not pin
   // mesh.visible — LOD visibility uses it).
+  // v0.62: the same material helper also pins r170 MeshBasic
+  // envMap companions (combine MultiplyOperation /
+  // reflectivity 1 / refractionRatio 0.98) on those
+  // color-only MeshBasics (does not force envMap or attach maps).
   // Pivots stay separate. Fastener is packed above, not merged here.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);

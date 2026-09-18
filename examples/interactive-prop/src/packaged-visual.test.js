@@ -120,6 +120,9 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.precision, null, `${label} pins precision null`);
   assert.equal(mat.shadowSide, null, `${label} pins shadowSide null`);
   assert.equal(mat.visible, true, `${label} pins visible true`);
+  assert.equal(mat.combine, THREE.MultiplyOperation, `${label} pins MultiplyOperation`);
+  assert.equal(mat.reflectivity, 1, `${label} pins reflectivity 1`);
+  assert.equal(mat.refractionRatio, 0.98, `${label} pins refractionRatio 0.98`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -681,6 +684,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     precision: "highp",
     shadowSide: THREE.FrontSide,
     visible: false,
+    combine: THREE.MixOperation,
+    reflectivity: 0.25,
+    refractionRatio: 0.5,
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -724,6 +730,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     precision: "highp",
     shadowSide: THREE.DoubleSide,
     visible: false,
+    combine: THREE.AddOperation,
+    reflectivity: 0.4,
+    refractionRatio: 0.7,
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -770,6 +779,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(mapped.precision, "highp", "mapped MeshBasic stays authored precision");
   assert.equal(mapped.shadowSide, THREE.FrontSide, "mapped MeshBasic stays authored shadowSide");
   assert.equal(mapped.visible, false, "mapped MeshBasic stays authored visible");
+  assert.equal(mapped.combine, THREE.MixOperation, "mapped MeshBasic stays authored combine");
+  assert.equal(mapped.reflectivity, 0.25, "mapped MeshBasic stays authored reflectivity");
+  assert.equal(mapped.refractionRatio, 0.5, "mapped MeshBasic stays authored refractionRatio");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -803,6 +815,9 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(colliderGrab.material.precision, null, "collider MeshBasic stays r170 precision default");
   assert.equal(colliderGrab.material.shadowSide, null, "collider MeshBasic stays r170 shadowSide default");
   assert.equal(colliderGrab.material.visible, true, "collider MeshBasic stays r170 visible default");
+  assert.equal(colliderGrab.material.combine, THREE.MultiplyOperation, "collider MeshBasic stays r170 combine default");
+  assert.equal(colliderGrab.material.reflectivity, 1, "collider MeshBasic stays r170 reflectivity default");
+  assert.equal(colliderGrab.material.refractionRatio, 0.98, "collider MeshBasic stays r170 refractionRatio default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
@@ -843,6 +858,9 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.precision, null, "fail-soft collider stays r170 precision default");
   assert.equal(colliderGrab.material.shadowSide, null, "fail-soft collider stays r170 shadowSide default");
   assert.equal(colliderGrab.material.visible, true, "fail-soft collider stays r170 visible default");
+  assert.equal(colliderGrab.material.combine, THREE.MultiplyOperation, "fail-soft collider stays r170 combine default");
+  assert.equal(colliderGrab.material.reflectivity, 1, "fail-soft collider stays r170 reflectivity default");
+  assert.equal(colliderGrab.material.refractionRatio, 0.98, "fail-soft collider stays r170 refractionRatio default");
 });
 
 test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest 0; mapped/lit stay authored", () => {
@@ -1439,6 +1457,62 @@ test("packaged ingest pins r170 Material visible true; mapped/lit stay authored"
 
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.material.visible, false, "collider MeshBasic stays authored visible");
+});
+
+test("packaged ingest pins r170 MeshBasic envMap companions; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.combine, THREE.MultiplyOperation, "r170 MeshBasicMaterial defaults MultiplyOperation");
+  assert.equal(fresh.reflectivity, 1, "r170 MeshBasicMaterial defaults reflectivity 1");
+  assert.equal(fresh.refractionRatio, 0.98, "r170 MeshBasicMaterial defaults refractionRatio 0.98");
+  assert.equal(fresh.envMap, null, "r170 MeshBasicMaterial defaults envMap null");
+  assert.equal(THREE.MultiplyOperation, 0, "r170 MultiplyOperation is 0");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    combine: THREE.MixOperation,
+    reflectivity: 0.25,
+    refractionRatio: 0.5,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    combine: THREE.AddOperation,
+    reflectivity: 0.4,
+    refractionRatio: 0.7,
+  });
+  const wrongMesh = boxMesh("dccEnvMapCompanions", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.combine = THREE.MixOperation;
+  colliderGrabBefore.material.reflectivity = 0.3;
+  colliderGrabBefore.material.refractionRatio = 0.4;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.material.envMap, null, "color-only pin does not attach envMap");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC envMap companion leftover color-only MeshBasic");
+  assert.equal(wrong.envMap, null, "color-only leftover still has no envMap");
+  assert.equal(mapped.combine, THREE.MixOperation, "mapped MeshBasic stays authored combine");
+  assert.equal(mapped.reflectivity, 0.25, "mapped MeshBasic stays authored reflectivity");
+  assert.equal(mapped.refractionRatio, 0.5, "mapped MeshBasic stays authored refractionRatio");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.combine, THREE.MixOperation, "collider MeshBasic stays authored combine");
+  assert.equal(colliderGrab.material.reflectivity, 0.3, "collider MeshBasic stays authored reflectivity");
+  assert.equal(colliderGrab.material.refractionRatio, 0.4, "collider MeshBasic stays authored refractionRatio");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
