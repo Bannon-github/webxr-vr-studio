@@ -123,6 +123,8 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.combine, THREE.MultiplyOperation, `${label} pins MultiplyOperation`);
   assert.equal(mat.reflectivity, 1, `${label} pins reflectivity 1`);
   assert.equal(mat.refractionRatio, 0.98, `${label} pins refractionRatio 0.98`);
+  assert.equal(mat.lightMapIntensity, 1, `${label} pins lightMapIntensity 1`);
+  assert.equal(mat.aoMapIntensity, 1, `${label} pins aoMapIntensity 1`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -687,6 +689,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     combine: THREE.MixOperation,
     reflectivity: 0.25,
     refractionRatio: 0.5,
+    lightMapIntensity: 0.25,
+    aoMapIntensity: 0.5,
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -733,6 +737,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     combine: THREE.AddOperation,
     reflectivity: 0.4,
     refractionRatio: 0.7,
+    lightMapIntensity: 0.4,
+    aoMapIntensity: 0.25,
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -782,6 +788,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(mapped.combine, THREE.MixOperation, "mapped MeshBasic stays authored combine");
   assert.equal(mapped.reflectivity, 0.25, "mapped MeshBasic stays authored reflectivity");
   assert.equal(mapped.refractionRatio, 0.5, "mapped MeshBasic stays authored refractionRatio");
+  assert.equal(mapped.lightMapIntensity, 0.25, "mapped MeshBasic stays authored lightMapIntensity");
+  assert.equal(mapped.aoMapIntensity, 0.5, "mapped MeshBasic stays authored aoMapIntensity");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -818,6 +826,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(colliderGrab.material.combine, THREE.MultiplyOperation, "collider MeshBasic stays r170 combine default");
   assert.equal(colliderGrab.material.reflectivity, 1, "collider MeshBasic stays r170 reflectivity default");
   assert.equal(colliderGrab.material.refractionRatio, 0.98, "collider MeshBasic stays r170 refractionRatio default");
+  assert.equal(colliderGrab.material.lightMapIntensity, 1, "collider MeshBasic stays r170 lightMapIntensity default");
+  assert.equal(colliderGrab.material.aoMapIntensity, 1, "collider MeshBasic stays r170 aoMapIntensity default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
@@ -861,6 +871,8 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.combine, THREE.MultiplyOperation, "fail-soft collider stays r170 combine default");
   assert.equal(colliderGrab.material.reflectivity, 1, "fail-soft collider stays r170 reflectivity default");
   assert.equal(colliderGrab.material.refractionRatio, 0.98, "fail-soft collider stays r170 refractionRatio default");
+  assert.equal(colliderGrab.material.lightMapIntensity, 1, "fail-soft collider stays r170 lightMapIntensity default");
+  assert.equal(colliderGrab.material.aoMapIntensity, 1, "fail-soft collider stays r170 aoMapIntensity default");
 });
 
 test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest 0; mapped/lit stay authored", () => {
@@ -1475,6 +1487,8 @@ test("packaged ingest pins r170 MeshBasic envMap companions; mapped/lit stay aut
     combine: THREE.MixOperation,
     reflectivity: 0.25,
     refractionRatio: 0.5,
+    lightMapIntensity: 0.25,
+    aoMapIntensity: 0.5,
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -1482,6 +1496,8 @@ test("packaged ingest pins r170 MeshBasic envMap companions; mapped/lit stay aut
     combine: THREE.AddOperation,
     reflectivity: 0.4,
     refractionRatio: 0.7,
+    lightMapIntensity: 0.4,
+    aoMapIntensity: 0.25,
   });
   const wrongMesh = boxMesh("dccEnvMapCompanions", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -1489,6 +1505,8 @@ test("packaged ingest pins r170 MeshBasic envMap companions; mapped/lit stay aut
   colliderGrabBefore.material.combine = THREE.MixOperation;
   colliderGrabBefore.material.reflectivity = 0.3;
   colliderGrabBefore.material.refractionRatio = 0.4;
+  colliderGrabBefore.material.lightMapIntensity = 0.3;
+  colliderGrabBefore.material.aoMapIntensity = 0.4;
 
   ingestPackagedRoot(root, sidecar);
 
@@ -1506,6 +1524,8 @@ test("packaged ingest pins r170 MeshBasic envMap companions; mapped/lit stay aut
   assert.equal(mapped.combine, THREE.MixOperation, "mapped MeshBasic stays authored combine");
   assert.equal(mapped.reflectivity, 0.25, "mapped MeshBasic stays authored reflectivity");
   assert.equal(mapped.refractionRatio, 0.5, "mapped MeshBasic stays authored refractionRatio");
+  assert.equal(mapped.lightMapIntensity, 0.25, "mapped MeshBasic stays authored lightMapIntensity");
+  assert.equal(mapped.aoMapIntensity, 0.5, "mapped MeshBasic stays authored aoMapIntensity");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -1513,6 +1533,60 @@ test("packaged ingest pins r170 MeshBasic envMap companions; mapped/lit stay aut
   assert.equal(colliderGrab.material.combine, THREE.MixOperation, "collider MeshBasic stays authored combine");
   assert.equal(colliderGrab.material.reflectivity, 0.3, "collider MeshBasic stays authored reflectivity");
   assert.equal(colliderGrab.material.refractionRatio, 0.4, "collider MeshBasic stays authored refractionRatio");
+  assert.equal(colliderGrab.material.lightMapIntensity, 0.3, "collider MeshBasic stays authored lightMapIntensity");
+  assert.equal(colliderGrab.material.aoMapIntensity, 0.4, "collider MeshBasic stays authored aoMapIntensity");
+});
+
+test("packaged ingest pins r170 MeshBasic map-intensity companions; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.lightMapIntensity, 1, "r170 MeshBasicMaterial defaults lightMapIntensity 1");
+  assert.equal(fresh.aoMapIntensity, 1, "r170 MeshBasicMaterial defaults aoMapIntensity 1");
+  assert.equal(fresh.lightMap, null, "r170 MeshBasicMaterial defaults lightMap null");
+  assert.equal(fresh.aoMap, null, "r170 MeshBasicMaterial defaults aoMap null");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    lightMapIntensity: 0.25,
+    aoMapIntensity: 0.5,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    lightMapIntensity: 0.4,
+    aoMapIntensity: 0.25,
+  });
+  const wrongMesh = boxMesh("dccMapIntensityCompanions", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.lightMapIntensity = 0.3;
+  colliderGrabBefore.material.aoMapIntensity = 0.4;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.material.lightMap, null, "color-only pin does not attach lightMap");
+    assert.equal(mesh.material.aoMap, null, "color-only pin does not attach aoMap");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC map-intensity leftover color-only MeshBasic");
+  assert.equal(wrong.lightMap, null, "color-only leftover still has no lightMap");
+  assert.equal(wrong.aoMap, null, "color-only leftover still has no aoMap");
+  assert.equal(mapped.lightMapIntensity, 0.25, "mapped MeshBasic stays authored lightMapIntensity");
+  assert.equal(mapped.aoMapIntensity, 0.5, "mapped MeshBasic stays authored aoMapIntensity");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.lightMapIntensity, 0.3, "collider MeshBasic stays authored lightMapIntensity");
+  assert.equal(colliderGrab.material.aoMapIntensity, 0.4, "collider MeshBasic stays authored aoMapIntensity");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
