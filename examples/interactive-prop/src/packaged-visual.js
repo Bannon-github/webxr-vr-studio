@@ -195,6 +195,17 @@
  * `isColorOnlyUnlitBasic`). Mapped / lit / colliders stay
  * untouched. Does not force envMap or attach maps. Does not
  * change the `isColorOnlyUnlitBasic` map/envMap gate.
+ *
+ * v0.63: the same helper also pins r170 MeshBasic
+ * map-intensity companions (`lightMapIntensity = 1`,
+ * `aoMapIntensity = 1`) on those color-only MeshBasics.
+ * Accidental DCC / GLB `lightMapIntensity !== 1` /
+ * `aoMapIntensity !== 1` leftovers still sit on the
+ * material even when maps are already gated null (still
+ * passes `isColorOnlyUnlitBasic`). Mapped / lit /
+ * colliders stay untouched. Does not force lightMap /
+ * aoMap or attach maps. Does not change the
+ * `isColorOnlyUnlitBasic` map / lightMap / aoMap gate.
  */
 
 import {

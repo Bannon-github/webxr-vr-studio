@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.65.0] — 2026-09-18
+
+### Changed
+
+- `crate-toolbox` **v0.63.0** L3 packaging/perf UPGRADE: after the v0.62 MeshBasic envMap companion pin (and after the v0.61 material visible pin), also pin r170 MeshBasic map-intensity companions (`lightMapIntensity = 1`, `aoMapIntensity = 1`) on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances). Mapped / lit / colliders stay authored / r170 defaults. Does not pin `mesh.visible`, force lightMap / aoMap, or attach maps. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13 unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.64.0] — 2026-09-18
 
 ### Changed

@@ -156,6 +156,11 @@ function assertR170MeshBasicEnvMapCompanions(mat, label = "r170 MeshBasicMateria
   assert.equal(THREE.MultiplyOperation, 0, "r170 MultiplyOperation is 0");
 }
 
+function assertR170MeshBasicMapIntensityCompanions(mat, label = "r170 MeshBasicMaterial") {
+  assert.equal(mat.lightMapIntensity, 1, `${label} defaults lightMapIntensity 1`);
+  assert.equal(mat.aoMapIntensity, 1, `${label} defaults aoMapIntensity 1`);
+}
+
 function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.fog, false, `${label} pins fog false`);
   assert.equal(mat.toneMapped, false, `${label} pins toneMapped false`);
@@ -201,6 +206,8 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.combine, THREE.MultiplyOperation, `${label} pins MultiplyOperation`);
   assert.equal(mat.reflectivity, 1, `${label} pins reflectivity 1`);
   assert.equal(mat.refractionRatio, 0.98, `${label} pins refractionRatio 0.98`);
+  assert.equal(mat.lightMapIntensity, 1, `${label} pins lightMapIntensity 1`);
+  assert.equal(mat.aoMapIntensity, 1, `${label} pins aoMapIntensity 1`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -2492,6 +2499,146 @@ test("v0.62 pins r170 MeshBasic envMap companions on unique color-only MeshBasic
   assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
 });
 
+test("v0.63 pins r170 MeshBasic map-intensity companions on unique color-only MeshBasics; envelope stays v0.62", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.fog, true, "r170 MeshBasicMaterial defaults fog true");
+  assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
+  assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
+  assertR170MeshBasicBlendingAlphaDefaults(fresh);
+  assertR170MeshBasicGpuStateDefaults(fresh);
+  assertR170MeshBasicStencilDefaults(fresh);
+  assertR170MeshBasicClippingDefaults(fresh);
+  assertR170MeshBasicAlphaHashForceSinglePassDefaults(fresh);
+  assertR170MeshBasicNormalBlendingCompanions(fresh);
+  assertR170MeshBasicVertexColorsDefault(fresh);
+  assertR170MeshBasicPrecisionDefault(fresh);
+  assertR170MeshBasicShadowSideDefault(fresh);
+  assertR170MeshBasicVisibleDefault(fresh);
+  assertR170MeshBasicEnvMapCompanions(fresh);
+  assertR170MeshBasicMapIntensityCompanions(fresh);
+  assert.equal(fresh.envMap, null, "r170 MeshBasicMaterial defaults envMap null");
+  assert.equal(fresh.lightMap, null, "r170 MeshBasicMaterial defaults lightMap null");
+  assert.equal(fresh.aoMap, null, "r170 MeshBasicMaterial defaults aoMap null");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+    assert.equal(mat.lightMap, null, "color-only MeshBasic lightMap stays null; pin does not attach lightMap");
+    assert.equal(mat.aoMap, null, "color-only MeshBasic aoMap stays null; pin does not attach aoMap");
+    assert.equal(mat.lightMapIntensity, 1, "color-only MeshBasic pins lightMapIntensity 1");
+    assert.equal(mat.aoMapIntensity, 1, "color-only MeshBasic pins aoMapIntensity 1");
+  }
+  const named = crate.userData.materials.lod0;
+  assertQuestSafeUnlitFlags(named.wood, "wood");
+  assertQuestSafeUnlitFlags(named.brass, "brass");
+  assertQuestSafeUnlitFlags(named.steel, "steel");
+  assert.equal(named.wood.lightMapIntensity, 1, "wood pins lightMapIntensity 1");
+  assert.equal(named.brass.lightMapIntensity, 1, "brass pins lightMapIntensity 1");
+  assert.equal(named.steel.lightMapIntensity, 1, "steel pins lightMapIntensity 1");
+  assert.equal(named.wood.aoMapIntensity, 1, "wood pins aoMapIntensity 1");
+  assert.equal(named.brass.aoMapIntensity, 1, "brass pins aoMapIntensity 1");
+  assert.equal(named.steel.aoMapIntensity, 1, "steel pins aoMapIntensity 1");
+  assert.equal(named.wood.lightMap, null, "wood lightMap stays null");
+  assert.equal(named.wood.aoMap, null, "wood aoMap stays null");
+  assert.equal(named.wood, crate.userData.materials.lod1.wood);
+  assert.equal(named.brass, crate.userData.materials.lod1.brass);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFlags(mesh.material);
+    assert.equal(mesh.material.visible, true, "visual MeshBasic material.visible true");
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitRenderOrder(mesh);
+  }
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  assert.equal(renderOrderCounts.nonzero, 0);
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitFlags(lidMesh.material, "lidMesh");
+  assertQuestSafeUnlitFlags(latchMesh.material, "latchMesh");
+  assertQuestSafeUnlitFlags(fastener.material, "fastenerMesh");
+
+  const lod0Group = crate.userData.lod.groups[0][0];
+  assert.equal(lod0Group.visible, true, "LOD0 group starts visible");
+  setToolboxLod(crate, 1);
+  assert.equal(lod0Group.visible, false, "LOD hides via group.visible, not material.visible");
+  assert.equal(named.wood.visible, true, "material.visible stays true while LOD0 group is hidden");
+  assert.equal(lidMesh.visible, true, "mesh.visible is not pinned; LOD uses group.visible");
+  setToolboxLod(crate, 0);
+
+  for (const c of crate.userData.colliders) {
+    assert.equal(c.material.fog, true, "collider MeshBasic keeps r170 fog default");
+    assert.equal(c.material.toneMapped, true, "collider MeshBasic keeps r170 toneMapped default");
+    assert.equal(c.material.transparent, true, "collider MeshBasic keeps authored transparent");
+    assert.equal(c.material.opacity, 0.55, "collider MeshBasic keeps authored opacity");
+    assert.equal(c.material.depthTest, false, "collider MeshBasic keeps authored depthTest");
+    assert.equal(c.material.wireframe, true, "collider MeshBasic keeps authored wireframe");
+    assert.equal(c.material.visible, true, "collider MeshBasic keeps r170 visible default");
+    assert.equal(c.material.lightMapIntensity, 1, "collider MeshBasic keeps r170 lightMapIntensity default");
+    assert.equal(c.material.aoMapIntensity, 1, "collider MeshBasic keeps r170 aoMapIntensity default");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(activityState(crate), "closed");
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assert.equal(fastener.material.lightMapIntensity, 1, "fastener lightMapIntensity stays 1 after L5");
+  assert.equal(fastener.material.aoMapIntensity, 1, "fastener aoMapIntensity stays 1 after L5");
+  assert.equal(fastener.material.lightMap, null, "fastener lightMap stays null after L5");
+  assert.equal(fastener.material.aoMap, null, "fastener aoMap stays null after L5");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+});
+
 test("L4/L5 activity smoke still passes after Mesh renderOrder pin", () => {
   const crate = createToolbox();
   const { lidPivot, latchPivot } = crate.userData.parts;
@@ -2760,6 +2907,8 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
     combine: THREE.MixOperation,
     reflectivity: 0.25,
     refractionRatio: 0.5,
+    lightMapIntensity: 0.4,
+    aoMapIntensity: 0.25,
   });
   assert.equal(wrong.transparent, true);
   assert.equal(wrong.opacity, 0.5);
@@ -2804,6 +2953,8 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assert.equal(wrong.combine, THREE.MixOperation);
   assert.equal(wrong.reflectivity, 0.25);
   assert.equal(wrong.refractionRatio, 0.5);
+  assert.equal(wrong.lightMapIntensity, 0.4);
+  assert.equal(wrong.aoMapIntensity, 0.25);
   pinColorOnlyUnlitBasicFlags(wrong);
   assertQuestSafeUnlitFlags(wrong, "deliberately wrong color-only MeshBasic");
 });
@@ -2852,6 +3003,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
     combine: THREE.MixOperation,
     reflectivity: 0.25,
     refractionRatio: 0.5,
+    lightMapIntensity: 0.25,
+    aoMapIntensity: 0.5,
   });
   const stdPlanes = [new THREE.Plane()];
   const std = new THREE.MeshStandardMaterial({
@@ -2894,6 +3047,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   std.combine = THREE.AddOperation;
   std.reflectivity = 0.4;
   std.refractionRatio = 0.7;
+  std.lightMapIntensity = 0.4;
+  std.aoMapIntensity = 0.7;
   assert.equal(colorOnly.fog, true);
   assert.equal(colorOnly.toneMapped, true);
   pinColorOnlyUnlitBasicFlags(colorOnly);
@@ -2936,6 +3091,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(mapped.combine, THREE.MixOperation, "mapped MeshBasic stays authored combine");
   assert.equal(mapped.reflectivity, 0.25, "mapped MeshBasic stays authored reflectivity");
   assert.equal(mapped.refractionRatio, 0.5, "mapped MeshBasic stays authored refractionRatio");
+  assert.equal(mapped.lightMapIntensity, 0.25, "mapped MeshBasic stays authored lightMapIntensity");
+  assert.equal(mapped.aoMapIntensity, 0.5, "mapped MeshBasic stays authored aoMapIntensity");
   assert.equal(std.fog, true, "MeshStandard stays r170 fog default");
   assert.equal(std.toneMapped, true, "MeshStandard stays r170 toneMapped default");
   assert.equal(std.transparent, true, "MeshStandard stays authored transparent");
@@ -2968,6 +3125,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(std.combine, THREE.AddOperation, "MeshStandard stays authored combine leftover");
   assert.equal(std.reflectivity, 0.4, "MeshStandard stays authored reflectivity leftover");
   assert.equal(std.refractionRatio, 0.7, "MeshStandard stays authored refractionRatio leftover");
+  assert.equal(std.lightMapIntensity, 0.4, "MeshStandard stays authored lightMapIntensity leftover");
+  assert.equal(std.aoMapIntensity, 0.7, "MeshStandard stays authored aoMapIntensity leftover");
 
   const root = new THREE.Group();
   const body = new THREE.Group();
@@ -2992,11 +3151,15 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   collider.material.combine = THREE.AddOperation;
   collider.material.reflectivity = 0.3;
   collider.material.refractionRatio = 0.4;
+  collider.material.lightMapIntensity = 0.3;
+  collider.material.aoMapIntensity = 0.4;
   const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
   sharedBlocked.visible = false;
   sharedBlocked.combine = THREE.MixOperation;
   sharedBlocked.reflectivity = 0.2;
   sharedBlocked.refractionRatio = 0.6;
+  sharedBlocked.lightMapIntensity = 0.2;
+  sharedBlocked.aoMapIntensity = 0.6;
   const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
   const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
   sharedCollider.name = "collider_shared";
@@ -3036,6 +3199,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(mapped.combine, THREE.MixOperation, "mapped MeshBasic stays authored combine via entity helper");
   assert.equal(mapped.reflectivity, 0.25, "mapped MeshBasic stays authored reflectivity via entity helper");
   assert.equal(mapped.refractionRatio, 0.5, "mapped MeshBasic stays authored refractionRatio via entity helper");
+  assert.equal(mapped.lightMapIntensity, 0.25, "mapped MeshBasic stays authored lightMapIntensity via entity helper");
+  assert.equal(mapped.aoMapIntensity, 0.5, "mapped MeshBasic stays authored aoMapIntensity via entity helper");
   assert.equal(morph.material.fog, true, "morph color-only MeshBasic is skipped");
   assert.equal(morph.material.toneMapped, true);
   assert.equal(morph.material.transparent, false, "morph color-only MeshBasic keeps r170 transparent default");
@@ -3065,6 +3230,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(morph.material.combine, THREE.MultiplyOperation, "morph color-only MeshBasic keeps r170 combine default");
   assert.equal(morph.material.reflectivity, 1, "morph color-only MeshBasic keeps r170 reflectivity default");
   assert.equal(morph.material.refractionRatio, 0.98, "morph color-only MeshBasic keeps r170 refractionRatio default");
+  assert.equal(morph.material.lightMapIntensity, 1, "morph color-only MeshBasic keeps r170 lightMapIntensity default");
+  assert.equal(morph.material.aoMapIntensity, 1, "morph color-only MeshBasic keeps r170 aoMapIntensity default");
   assert.equal(collider.material.fog, true, "collider MeshBasic stays default");
   assert.equal(collider.material.toneMapped, true);
   assert.equal(collider.material.wireframe, false, "collider MeshBasic keeps r170 wireframe default");
@@ -3100,6 +3267,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(sharedVisual.material.combine, THREE.MixOperation, "shared collider material stays unpinned combine");
   assert.equal(sharedVisual.material.reflectivity, 0.2, "shared collider material stays unpinned reflectivity");
   assert.equal(sharedVisual.material.refractionRatio, 0.6, "shared collider material stays unpinned refractionRatio");
+  assert.equal(sharedVisual.material.lightMapIntensity, 0.2, "shared collider material stays unpinned lightMapIntensity");
+  assert.equal(sharedVisual.material.aoMapIntensity, 0.6, "shared collider material stays unpinned aoMapIntensity");
   assert.equal(collider.material.stencilWrite, false, "collider MeshBasic keeps r170 stencilWrite default");
   assert.equal(collider.material.stencilFunc, THREE.AlwaysStencilFunc, "collider MeshBasic keeps r170 stencilFunc default");
   assert.equal(collider.material.clippingPlanes, null, "collider MeshBasic keeps r170 clippingPlanes default");
@@ -3120,4 +3289,6 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(collider.material.combine, THREE.AddOperation, "collider MeshBasic stays authored combine");
   assert.equal(collider.material.reflectivity, 0.3, "collider MeshBasic stays authored reflectivity");
   assert.equal(collider.material.refractionRatio, 0.4, "collider MeshBasic stays authored refractionRatio");
+  assert.equal(collider.material.lightMapIntensity, 0.3, "collider MeshBasic stays authored lightMapIntensity");
+  assert.equal(collider.material.aoMapIntensity, 0.4, "collider MeshBasic stays authored aoMapIntensity");
 });
