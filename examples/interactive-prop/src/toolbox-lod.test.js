@@ -145,6 +145,10 @@ function assertR170MeshBasicShadowSideDefault(mat, label = "r170 MeshBasicMateri
   assert.equal(mat.shadowSide, null, `${label} defaults shadowSide null`);
 }
 
+function assertR170MeshBasicVisibleDefault(mat, label = "r170 MeshBasicMaterial") {
+  assert.equal(mat.visible, true, `${label} defaults visible true`);
+}
+
 function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.fog, false, `${label} pins fog false`);
   assert.equal(mat.toneMapped, false, `${label} pins toneMapped false`);
@@ -186,6 +190,7 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.vertexColors, false, `${label} pins vertexColors false`);
   assert.equal(mat.precision, null, `${label} pins precision null`);
   assert.equal(mat.shadowSide, null, `${label} pins shadowSide null`);
+  assert.equal(mat.visible, true, `${label} pins visible true`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -2042,6 +2047,7 @@ test("v0.58 pins r170 precision null on unique color-only MeshBasics; envelope s
     assert.equal(c.material.vertexColors, false, "collider MeshBasic keeps r170 vertexColors default");
     assert.equal(c.material.precision, null, "collider MeshBasic keeps r170 precision default");
     assert.equal(c.material.shadowSide, null, "collider MeshBasic keeps r170 shadowSide default");
+    assert.equal(c.material.visible, true, "collider MeshBasic keeps r170 visible default");
     assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
   }
 });
@@ -2060,6 +2066,7 @@ test("v0.59 pins r170 shadowSide null on unique color-only MeshBasics; envelope 
   assertR170MeshBasicVertexColorsDefault(fresh);
   assertR170MeshBasicPrecisionDefault(fresh);
   assertR170MeshBasicShadowSideDefault(fresh);
+  assertR170MeshBasicVisibleDefault(fresh);
   assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
 
   const crate = createToolbox();
@@ -2138,6 +2145,7 @@ test("v0.59 pins r170 shadowSide null on unique color-only MeshBasics; envelope 
     assert.equal(c.material.vertexColors, false, "collider MeshBasic keeps r170 vertexColors default");
     assert.equal(c.material.precision, null, "collider MeshBasic keeps r170 precision default");
     assert.equal(c.material.shadowSide, null, "collider MeshBasic keeps r170 shadowSide default");
+    assert.equal(c.material.visible, true, "collider MeshBasic keeps r170 visible default");
     assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
   }
 });
@@ -2205,8 +2213,132 @@ test("v0.60 pins renderOrder 0 on color-only visual meshes; envelope stays v0.59
     assert.equal(c.material.fog, true, "collider MeshBasic keeps r170 fog default");
     assert.equal(c.material.toneMapped, true, "collider MeshBasic keeps r170 toneMapped default");
     assert.equal(c.material.transparent, true, "collider MeshBasic keeps authored transparent");
+    assert.equal(c.material.visible, true, "collider MeshBasic keeps r170 visible default");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden; material pin does not change it");
     assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
   }
+});
+
+test("v0.61 pins r170 Material visible true on unique color-only MeshBasics; envelope stays v0.60", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.fog, true, "r170 MeshBasicMaterial defaults fog true");
+  assert.equal(fresh.toneMapped, true, "r170 MeshBasicMaterial defaults toneMapped true");
+  assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
+  assertR170MeshBasicBlendingAlphaDefaults(fresh);
+  assertR170MeshBasicGpuStateDefaults(fresh);
+  assertR170MeshBasicStencilDefaults(fresh);
+  assertR170MeshBasicClippingDefaults(fresh);
+  assertR170MeshBasicAlphaHashForceSinglePassDefaults(fresh);
+  assertR170MeshBasicNormalBlendingCompanions(fresh);
+  assertR170MeshBasicVertexColorsDefault(fresh);
+  assertR170MeshBasicPrecisionDefault(fresh);
+  assertR170MeshBasicShadowSideDefault(fresh);
+  assertR170MeshBasicVisibleDefault(fresh);
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+    assert.equal(mat.visible, true, "color-only MeshBasic pins visible true");
+  }
+  const named = crate.userData.materials.lod0;
+  assertQuestSafeUnlitFlags(named.wood, "wood");
+  assertQuestSafeUnlitFlags(named.brass, "brass");
+  assertQuestSafeUnlitFlags(named.steel, "steel");
+  assert.equal(named.wood.visible, true, "wood pins visible true");
+  assert.equal(named.brass.visible, true, "brass pins visible true");
+  assert.equal(named.steel.visible, true, "steel pins visible true");
+  assert.equal(named.wood, crate.userData.materials.lod1.wood);
+  assert.equal(named.brass, crate.userData.materials.lod1.brass);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFlags(mesh.material);
+    assert.equal(mesh.material.visible, true, "visual MeshBasic material.visible true");
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitRenderOrder(mesh);
+  }
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  assert.equal(renderOrderCounts.nonzero, 0);
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitFlags(lidMesh.material, "lidMesh");
+  assertQuestSafeUnlitFlags(latchMesh.material, "latchMesh");
+  assertQuestSafeUnlitFlags(fastener.material, "fastenerMesh");
+
+  const lod0Group = crate.userData.lod.groups[0][0];
+  assert.equal(lod0Group.visible, true, "LOD0 group starts visible");
+  setToolboxLod(crate, 1);
+  assert.equal(lod0Group.visible, false, "LOD hides via group.visible, not material.visible");
+  assert.equal(named.wood.visible, true, "material.visible stays true while LOD0 group is hidden");
+  assert.equal(lidMesh.visible, true, "mesh.visible is not pinned; LOD uses group.visible");
+  setToolboxLod(crate, 0);
+
+  for (const c of crate.userData.colliders) {
+    assert.equal(c.material.fog, true, "collider MeshBasic keeps r170 fog default");
+    assert.equal(c.material.toneMapped, true, "collider MeshBasic keeps r170 toneMapped default");
+    assert.equal(c.material.transparent, true, "collider MeshBasic keeps authored transparent");
+    assert.equal(c.material.opacity, 0.55, "collider MeshBasic keeps authored opacity");
+    assert.equal(c.material.depthTest, false, "collider MeshBasic keeps authored depthTest");
+    assert.equal(c.material.wireframe, true, "collider MeshBasic keeps authored wireframe");
+    assert.equal(c.material.visible, true, "collider MeshBasic keeps r170 visible default");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(activityState(crate), "closed");
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assert.equal(fastener.material.visible, true, "fastener material.visible stays true after L5");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
 });
 
 test("L4/L5 activity smoke still passes after Mesh renderOrder pin", () => {
@@ -2424,6 +2556,13 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assertR170MeshBasicVertexColorsDefault(fresh);
   assertR170MeshBasicPrecisionDefault(fresh);
   assertR170MeshBasicShadowSideDefault(fresh);
+  assertR170MeshBasicVisibleDefault(fresh);
+
+  const hiddenMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  hiddenMesh.visible = false;
+  pinColorOnlyUnlitBasicFlags(hiddenMesh.material);
+  assert.equal(hiddenMesh.material.visible, true, "material pin sets material.visible true");
+  assert.equal(hiddenMesh.visible, false, "material pin does not change mesh.visible");
 
   const wrong = new THREE.MeshBasicMaterial({
     color: 0x633318,
@@ -2465,6 +2604,7 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
     vertexColors: true,
     precision: "highp",
     shadowSide: THREE.DoubleSide,
+    visible: false,
   });
   assert.equal(wrong.transparent, true);
   assert.equal(wrong.opacity, 0.5);
@@ -2505,6 +2645,7 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assert.equal(wrong.vertexColors, true);
   assert.equal(wrong.precision, "highp");
   assert.equal(wrong.shadowSide, THREE.DoubleSide);
+  assert.equal(wrong.visible, false);
   pinColorOnlyUnlitBasicFlags(wrong);
   assertQuestSafeUnlitFlags(wrong, "deliberately wrong color-only MeshBasic");
 });
@@ -2549,6 +2690,7 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
     vertexColors: true,
     precision: "highp",
     shadowSide: THREE.FrontSide,
+    visible: false,
   });
   const stdPlanes = [new THREE.Plane()];
   const std = new THREE.MeshStandardMaterial({
@@ -2586,6 +2728,7 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
     vertexColors: true,
     precision: "mediump",
     shadowSide: THREE.BackSide,
+    visible: false,
   });
   assert.equal(colorOnly.fog, true);
   assert.equal(colorOnly.toneMapped, true);
@@ -2625,6 +2768,7 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(mapped.vertexColors, true, "mapped MeshBasic stays authored vertexColors");
   assert.equal(mapped.precision, "highp", "mapped MeshBasic stays authored precision");
   assert.equal(mapped.shadowSide, THREE.FrontSide, "mapped MeshBasic stays authored shadowSide");
+  assert.equal(mapped.visible, false, "mapped MeshBasic stays authored visible");
   assert.equal(std.fog, true, "MeshStandard stays r170 fog default");
   assert.equal(std.toneMapped, true, "MeshStandard stays r170 toneMapped default");
   assert.equal(std.transparent, true, "MeshStandard stays authored transparent");
@@ -2653,6 +2797,7 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(std.vertexColors, true, "MeshStandard stays authored vertexColors");
   assert.equal(std.precision, "mediump", "MeshStandard stays authored precision");
   assert.equal(std.shadowSide, THREE.BackSide, "MeshStandard stays authored shadowSide");
+  assert.equal(std.visible, false, "MeshStandard stays authored visible");
 
   const root = new THREE.Group();
   const body = new THREE.Group();
@@ -2673,7 +2818,9 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   );
   collider.name = "collider_grab";
   collider.userData.collider = true;
+  collider.material.visible = false;
   const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.visible = false;
   const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
   const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
   sharedCollider.name = "collider_shared";
@@ -2709,6 +2856,7 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(mapped.vertexColors, true, "mapped MeshBasic stays authored vertexColors via entity helper");
   assert.equal(mapped.precision, "highp", "mapped MeshBasic stays authored precision via entity helper");
   assert.equal(mapped.shadowSide, THREE.FrontSide, "mapped MeshBasic stays authored shadowSide via entity helper");
+  assert.equal(mapped.visible, false, "mapped MeshBasic stays authored visible via entity helper");
   assert.equal(morph.material.fog, true, "morph color-only MeshBasic is skipped");
   assert.equal(morph.material.toneMapped, true);
   assert.equal(morph.material.transparent, false, "morph color-only MeshBasic keeps r170 transparent default");
@@ -2734,6 +2882,7 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(morph.material.vertexColors, false, "morph color-only MeshBasic keeps r170 vertexColors default");
   assert.equal(morph.material.precision, null, "morph color-only MeshBasic keeps r170 precision default");
   assert.equal(morph.material.shadowSide, null, "morph color-only MeshBasic keeps r170 shadowSide default");
+  assert.equal(morph.material.visible, true, "morph color-only MeshBasic keeps r170 visible default");
   assert.equal(collider.material.fog, true, "collider MeshBasic stays default");
   assert.equal(collider.material.toneMapped, true);
   assert.equal(collider.material.wireframe, false, "collider MeshBasic keeps r170 wireframe default");
@@ -2765,6 +2914,7 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(sharedVisual.material.vertexColors, false, "shared collider material stays unpinned vertexColors");
   assert.equal(sharedVisual.material.precision, null, "shared collider material stays unpinned precision");
   assert.equal(sharedVisual.material.shadowSide, null, "shared collider material stays unpinned shadowSide");
+  assert.equal(sharedVisual.material.visible, false, "shared collider material stays unpinned visible");
   assert.equal(collider.material.stencilWrite, false, "collider MeshBasic keeps r170 stencilWrite default");
   assert.equal(collider.material.stencilFunc, THREE.AlwaysStencilFunc, "collider MeshBasic keeps r170 stencilFunc default");
   assert.equal(collider.material.clippingPlanes, null, "collider MeshBasic keeps r170 clippingPlanes default");
@@ -2781,4 +2931,5 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(collider.material.vertexColors, false, "collider MeshBasic keeps r170 vertexColors default");
   assert.equal(collider.material.precision, null, "collider MeshBasic keeps r170 precision default");
   assert.equal(collider.material.shadowSide, null, "collider MeshBasic keeps r170 shadowSide default");
+  assert.equal(collider.material.visible, false, "collider MeshBasic stays authored visible");
 });

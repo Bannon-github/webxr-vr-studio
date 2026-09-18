@@ -176,6 +176,14 @@
  * r170 Mesh defaults. Collider meshes stay untouched. Does
  * **not** pin `mesh.visible` (LOD visibility uses it), change
  * `layers`, or force a non-zero renderOrder.
+ *
+ * v0.61: the same helper also pins r170 Material `visible =
+ * true` on those color-only MeshBasics. Accidental DCC / GLB
+ * `visible = false` leftovers hide draws without using LOD
+ * `mesh.visible` (still passes `isColorOnlyUnlitBasic`).
+ * Mapped / lit / colliders stay untouched. Do **not** pin
+ * `mesh.visible` (LOD visibility uses it). Do not force
+ * `material.visible = false`.
  */
 
 import {
