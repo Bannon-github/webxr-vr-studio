@@ -154,6 +154,17 @@
  * non-renderer precision even when maps are absent (still
  * passes `isColorOnlyUnlitBasic`). Mapped / lit / colliders
  * stay untouched. Do not force 'mediump' / 'lowp' / 'highp'.
+ *
+ * v0.59: the same helper also pins r170 Material `shadowSide =
+ * null` on those color-only MeshBasics. Accidental DCC / GLB
+ * `shadowSide = FrontSide` / `BackSide` / `DoubleSide`
+ * leftovers force a non-`side` shadow-cast face even when maps
+ * are absent (still passes `isColorOnlyUnlitBasic`). When null,
+ * shadow casting side derives from `side`. Mesh-level
+ * `castShadow` / `receiveShadow` stay pinned false (v0.49) —
+ * this is the matching **material** fence, not a mesh change.
+ * Mapped / lit / colliders stay untouched. Do not force a
+ * non-null shadowSide.
  */
 
 import {
