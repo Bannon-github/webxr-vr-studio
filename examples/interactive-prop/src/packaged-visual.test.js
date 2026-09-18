@@ -119,6 +119,7 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.vertexColors, false, `${label} pins vertexColors false`);
   assert.equal(mat.precision, null, `${label} pins precision null`);
   assert.equal(mat.shadowSide, null, `${label} pins shadowSide null`);
+  assert.equal(mat.visible, true, `${label} pins visible true`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -637,6 +638,7 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(fresh.vertexColors, false, "r170 MeshBasicMaterial defaults vertexColors false");
   assert.equal(fresh.precision, null, "r170 MeshBasicMaterial defaults precision null");
   assert.equal(fresh.shadowSide, null, "r170 MeshBasicMaterial defaults shadowSide null");
+  assert.equal(fresh.visible, true, "r170 MeshBasicMaterial defaults visible true");
   assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
 
   const { root, fastener, groups } = makePackagedFixture();
@@ -678,6 +680,7 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     vertexColors: true,
     precision: "highp",
     shadowSide: THREE.FrontSide,
+    visible: false,
   });
   const mappedMesh = boxMesh("mappedHero", mapped);
   const wrong = new THREE.MeshBasicMaterial({
@@ -720,6 +723,7 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     vertexColors: true,
     precision: "highp",
     shadowSide: THREE.DoubleSide,
+    visible: false,
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -765,6 +769,7 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(mapped.vertexColors, true, "mapped MeshBasic stays authored vertexColors");
   assert.equal(mapped.precision, "highp", "mapped MeshBasic stays authored precision");
   assert.equal(mapped.shadowSide, THREE.FrontSide, "mapped MeshBasic stays authored shadowSide");
+  assert.equal(mapped.visible, false, "mapped MeshBasic stays authored visible");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
 
@@ -797,6 +802,7 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
   assert.equal(colliderGrab.material.vertexColors, false, "collider MeshBasic stays r170 vertexColors default");
   assert.equal(colliderGrab.material.precision, null, "collider MeshBasic stays r170 precision default");
   assert.equal(colliderGrab.material.shadowSide, null, "collider MeshBasic stays r170 shadowSide default");
+  assert.equal(colliderGrab.material.visible, true, "collider MeshBasic stays r170 visible default");
 });
 
 test("packaged ingest without lod groups still pins color-only MeshBasic flags", () => {
@@ -836,6 +842,7 @@ test("packaged ingest without lod groups still pins color-only MeshBasic flags",
   assert.equal(colliderGrab.material.vertexColors, false, "fail-soft collider stays r170 vertexColors default");
   assert.equal(colliderGrab.material.precision, null, "fail-soft collider stays r170 precision default");
   assert.equal(colliderGrab.material.shadowSide, null, "fail-soft collider stays r170 shadowSide default");
+  assert.equal(colliderGrab.material.visible, true, "fail-soft collider stays r170 visible default");
 });
 
 test("packaged ingest pins NormalBlending / premultipliedAlpha false / alphaTest 0; mapped/lit stay authored", () => {
@@ -1387,6 +1394,51 @@ test("packaged ingest pins r170 shadowSide null; mapped/lit stay authored", () =
 
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.material.shadowSide, THREE.BackSide, "collider MeshBasic stays authored shadowSide");
+});
+
+test("packaged ingest pins r170 Material visible true; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.visible, true, "r170 MeshBasicMaterial defaults visible true");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    visible: false,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    visible: false,
+  });
+  const wrongMesh = boxMesh("dccMaterialHidden", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.visible = false;
+  const hiddenVisual = boxMesh("lodVisibleMesh", new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  hiddenVisual.visible = false;
+  groups[0][0].add(hiddenVisual);
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC visible leftover color-only MeshBasic");
+  assert.equal(mapped.visible, false, "mapped MeshBasic stays authored visible");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+  assert.equal(hiddenVisual.material.visible, true, "material pin sets material.visible true");
+  assert.equal(hiddenVisual.visible, false, "material pin does not change mesh.visible");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.visible, false, "collider MeshBasic stays authored visible");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
