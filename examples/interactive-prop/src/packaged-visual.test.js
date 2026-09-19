@@ -1988,9 +1988,11 @@ test("packaged ingest pins r170 Object3D layers default; mapped/lit stay authore
   }
   assertQuestSafeUnlitLayers(wrongMesh, "packaged DCC leftover layers color-only Mesh");
   assert.equal(wrongMesh.layers, wrongLayers, "DCC leftover keeps its Layers instance");
-  assert.equal(wrongMesh.matrixAutoUpdate, matrixAutoBefore, "layers pin does not change matrixAutoUpdate");
+  assert.equal(wrongMesh.matrixAutoUpdate, false, "body LOD leaf still frozen by v0.45; layers pin does not unfreeze");
   assert.equal(wrongMesh.matrixWorldAutoUpdate, matrixWorldAutoBefore, "layers pin does not change matrixWorldAutoUpdate");
   assert.equal(wrongMesh.visible, visibleBefore, "layers pin does not change mesh.visible");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live; layers pin does not freeze it");
+  assert.equal(matrixAutoBefore, true, "pre-ingest DCC leftover started matrix-live");
   assert.equal(mappedMesh.layers.mask, mappedMask, "mapped MeshBasic stays authored layers");
   assert.equal(mappedMesh.layers, mappedLayers, "mapped MeshBasic keeps its Layers instance");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
