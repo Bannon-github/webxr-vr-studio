@@ -93,6 +93,8 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.alphaToCoverage, false, `${label} pins alphaToCoverage false`);
   assert.equal(mat.wireframe, false, `${label} pins wireframe false`);
   assert.equal(mat.wireframeLinewidth, 1, `${label} pins wireframeLinewidth 1`);
+  assert.equal(mat.wireframeLinecap, "round", `${label} pins wireframeLinecap round`);
+  assert.equal(mat.wireframeLinejoin, "round", `${label} pins wireframeLinejoin round`);
   assert.equal(mat.colorWrite, true, `${label} pins colorWrite true`);
   assert.equal(mat.depthFunc, THREE.LessEqualDepth, `${label} pins LessEqualDepth`);
   assert.equal(mat.polygonOffset, false, `${label} pins polygonOffset false`);
@@ -741,6 +743,8 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     lightMapIntensity: 0.4,
     aoMapIntensity: 0.25,
     wireframeLinewidth: 2,
+    wireframeLinecap: "butt",
+    wireframeLinejoin: "miter",
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -1634,6 +1638,59 @@ test("packaged ingest pins r170 MeshBasic wireframeLinewidth; mapped/lit stay au
 
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.material.wireframeLinewidth, 4, "collider MeshBasic stays authored wireframeLinewidth");
+});
+
+test("packaged ingest pins r170 MeshBasic wireframe line style; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.wireframe, false, "r170 MeshBasicMaterial defaults wireframe false");
+  assert.equal(fresh.wireframeLinecap, "round", "r170 MeshBasicMaterial defaults wireframeLinecap round");
+  assert.equal(fresh.wireframeLinejoin, "round", "r170 MeshBasicMaterial defaults wireframeLinejoin round");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    wireframeLinecap: "square",
+    wireframeLinejoin: "bevel",
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    wireframeLinecap: "butt",
+    wireframeLinejoin: "miter",
+  });
+  const wrongMesh = boxMesh("dccWireframeLineStyle", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.wireframeLinecap = "square";
+  colliderGrabBefore.material.wireframeLinejoin = "bevel";
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.material.wireframe, false, "color-only pin does not enable wireframe");
+    assert.equal(mesh.material.wireframeLinecap, "round", "color-only pin sets wireframeLinecap round");
+    assert.equal(mesh.material.wireframeLinejoin, "round", "color-only pin sets wireframeLinejoin round");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC non-round linecap/linejoin color-only MeshBasic");
+  assert.equal(wrong.wireframe, false, "color-only leftover still has wireframe false");
+  assert.equal(wrong.wireframeLinecap, "round", "DCC non-round wireframeLinecap is corrected to round");
+  assert.equal(wrong.wireframeLinejoin, "round", "DCC non-round wireframeLinejoin is corrected to round");
+  assert.equal(mapped.wireframeLinecap, "square", "mapped MeshBasic stays authored wireframeLinecap");
+  assert.equal(mapped.wireframeLinejoin, "bevel", "mapped MeshBasic stays authored wireframeLinejoin");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.wireframeLinecap, "square", "collider MeshBasic stays authored wireframeLinecap");
+  assert.equal(colliderGrab.material.wireframeLinejoin, "bevel", "collider MeshBasic stays authored wireframeLinejoin");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
