@@ -170,6 +170,15 @@ function assertR170MeshBasicWireframeLineStyleDefaults(mat, label = "r170 MeshBa
   assert.equal(mat.wireframeLinejoin, "round", `${label} defaults wireframeLinejoin round`);
 }
 
+function assertR170MeshBasicEnvMapRotationDefault(mat, label = "r170 MeshBasicMaterial") {
+  assert.ok(mat.envMapRotation, `${label} has envMapRotation`);
+  assert.equal(mat.envMapRotation.isEuler, true, `${label} envMapRotation is Euler`);
+  assert.equal(mat.envMapRotation.x, 0, `${label} defaults envMapRotation.x 0`);
+  assert.equal(mat.envMapRotation.y, 0, `${label} defaults envMapRotation.y 0`);
+  assert.equal(mat.envMapRotation.z, 0, `${label} defaults envMapRotation.z 0`);
+  assert.equal(mat.envMapRotation.order, "XYZ", `${label} defaults envMapRotation.order XYZ`);
+}
+
 function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.fog, false, `${label} pins fog false`);
   assert.equal(mat.toneMapped, false, `${label} pins toneMapped false`);
@@ -220,6 +229,12 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.refractionRatio, 0.98, `${label} pins refractionRatio 0.98`);
   assert.equal(mat.lightMapIntensity, 1, `${label} pins lightMapIntensity 1`);
   assert.equal(mat.aoMapIntensity, 1, `${label} pins aoMapIntensity 1`);
+  assert.equal(mat.envMap, null, `${label} leaves envMap null`);
+  assert.ok(mat.envMapRotation, `${label} keeps envMapRotation`);
+  assert.equal(mat.envMapRotation.x, 0, `${label} pins envMapRotation.x 0`);
+  assert.equal(mat.envMapRotation.y, 0, `${label} pins envMapRotation.y 0`);
+  assert.equal(mat.envMapRotation.z, 0, `${label} pins envMapRotation.z 0`);
+  assert.equal(mat.envMapRotation.order, "XYZ", `${label} pins envMapRotation.order XYZ`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -2935,6 +2950,164 @@ test("v0.65 pins r170 MeshBasic wireframe line style on unique color-only MeshBa
   assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
 });
 
+test("v0.66 pins r170 MeshBasic envMapRotation on unique color-only MeshBasics; envelope stays v0.65", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.envMap, null, "r170 MeshBasicMaterial defaults envMap null");
+  assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
+  assertR170MeshBasicBlendingAlphaDefaults(fresh);
+  assertR170MeshBasicGpuStateDefaults(fresh);
+  assertR170MeshBasicStencilDefaults(fresh);
+  assertR170MeshBasicClippingDefaults(fresh);
+  assertR170MeshBasicAlphaHashForceSinglePassDefaults(fresh);
+  assertR170MeshBasicNormalBlendingCompanions(fresh);
+  assertR170MeshBasicVertexColorsDefault(fresh);
+  assertR170MeshBasicPrecisionDefault(fresh);
+  assertR170MeshBasicShadowSideDefault(fresh);
+  assertR170MeshBasicVisibleDefault(fresh);
+  assertR170MeshBasicEnvMapCompanions(fresh);
+  assertR170MeshBasicMapIntensityCompanions(fresh);
+  assertR170MeshBasicWireframeLinewidthDefault(fresh);
+  assertR170MeshBasicWireframeLineStyleDefaults(fresh);
+  assertR170MeshBasicEnvMapRotationDefault(fresh);
+  const freshRotation = fresh.envMapRotation;
+  assert.equal(fresh.wireframe, false, "r170 MeshBasicMaterial defaults wireframe false");
+  assert.equal(fresh.envMapRotation.x, 0, "r170 MeshBasicMaterial defaults envMapRotation.x 0");
+  assert.equal(fresh.envMapRotation.y, 0, "r170 MeshBasicMaterial defaults envMapRotation.y 0");
+  assert.equal(fresh.envMapRotation.z, 0, "r170 MeshBasicMaterial defaults envMapRotation.z 0");
+  assert.equal(fresh.envMapRotation.order, "XYZ", "r170 MeshBasicMaterial defaults envMapRotation.order XYZ");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+    assert.equal(mat.wireframe, false, "color-only MeshBasic pins wireframe false; pin does not enable wireframe");
+    assert.equal(mat.envMap, null, "color-only MeshBasic leaves envMap null; pin does not force envMap");
+    assert.equal(mat.envMapRotation.x, 0, "color-only MeshBasic pins envMapRotation.x 0");
+    assert.equal(mat.envMapRotation.y, 0, "color-only MeshBasic pins envMapRotation.y 0");
+    assert.equal(mat.envMapRotation.z, 0, "color-only MeshBasic pins envMapRotation.z 0");
+    assert.equal(mat.envMapRotation.order, "XYZ", "color-only MeshBasic pins envMapRotation.order XYZ");
+  }
+  const named = crate.userData.materials.lod0;
+  assertQuestSafeUnlitFlags(named.wood, "wood");
+  assertQuestSafeUnlitFlags(named.brass, "brass");
+  assertQuestSafeUnlitFlags(named.steel, "steel");
+  assert.equal(named.wood.envMapRotation.x, 0, "wood pins envMapRotation.x 0");
+  assert.equal(named.brass.envMapRotation.x, 0, "brass pins envMapRotation.x 0");
+  assert.equal(named.steel.envMapRotation.x, 0, "steel pins envMapRotation.x 0");
+  assert.equal(named.wood.envMapRotation.y, 0, "wood pins envMapRotation.y 0");
+  assert.equal(named.brass.envMapRotation.y, 0, "brass pins envMapRotation.y 0");
+  assert.equal(named.steel.envMapRotation.y, 0, "steel pins envMapRotation.y 0");
+  assert.equal(named.wood.envMapRotation.z, 0, "wood pins envMapRotation.z 0");
+  assert.equal(named.brass.envMapRotation.z, 0, "brass pins envMapRotation.z 0");
+  assert.equal(named.steel.envMapRotation.z, 0, "steel pins envMapRotation.z 0");
+  assert.equal(named.wood.envMap, null, "wood envMap stays null");
+  assert.equal(named.brass.envMap, null, "brass envMap stays null");
+  assert.equal(named.steel.envMap, null, "steel envMap stays null");
+  assert.equal(named.wood.wireframe, false, "wood wireframe stays false");
+  assert.equal(named.brass.wireframe, false, "brass wireframe stays false");
+  assert.equal(named.steel.wireframe, false, "steel wireframe stays false");
+  assert.equal(named.wood, crate.userData.materials.lod1.wood);
+  assert.equal(named.brass, crate.userData.materials.lod1.brass);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFlags(mesh.material);
+    assert.equal(mesh.material.visible, true, "visual MeshBasic material.visible true");
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+    assert.equal(mesh.material.wireframe, false, "visual MeshBasic wireframe stays false");
+    assert.equal(mesh.material.envMap, null, "visual MeshBasic envMap stays null");
+    assert.equal(mesh.material.envMapRotation.x, 0, "visual MeshBasic envMapRotation.x stays 0");
+    assert.equal(mesh.material.envMapRotation.y, 0, "visual MeshBasic envMapRotation.y stays 0");
+    assert.equal(mesh.material.envMapRotation.z, 0, "visual MeshBasic envMapRotation.z stays 0");
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitRenderOrder(mesh);
+  }
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  assert.equal(renderOrderCounts.nonzero, 0);
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitFlags(lidMesh.material, "lidMesh");
+  assertQuestSafeUnlitFlags(latchMesh.material, "latchMesh");
+  assertQuestSafeUnlitFlags(fastener.material, "fastenerMesh");
+
+  const lod0Group = crate.userData.lod.groups[0][0];
+  assert.equal(lod0Group.visible, true, "LOD0 group starts visible");
+  setToolboxLod(crate, 1);
+  assert.equal(lod0Group.visible, false, "LOD hides via group.visible, not material.visible");
+  assert.equal(named.wood.visible, true, "material.visible stays true while LOD0 group is hidden");
+  assert.equal(lidMesh.visible, true, "mesh.visible is not pinned; LOD uses group.visible");
+  setToolboxLod(crate, 0);
+
+  for (const c of crate.userData.colliders) {
+    assert.equal(c.material.envMap, null, "collider MeshBasic keeps r170 envMap default");
+    assert.equal(c.material.envMapRotation.x, 0, "collider MeshBasic keeps r170 envMapRotation.x default");
+    assert.equal(c.material.envMapRotation.y, 0, "collider MeshBasic keeps r170 envMapRotation.y default");
+    assert.equal(c.material.envMapRotation.z, 0, "collider MeshBasic keeps r170 envMapRotation.z default");
+    assert.equal(c.material.wireframe, true, "collider MeshBasic keeps authored wireframe");
+    assert.equal(c.material.visible, true, "collider MeshBasic keeps r170 visible default");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(activityState(crate), "closed");
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assert.equal(fastener.material.wireframe, false, "fastener wireframe stays false after L5");
+  assert.equal(fastener.material.envMap, null, "fastener envMap stays null after L5");
+  assert.equal(fastener.material.envMapRotation.x, 0, "fastener envMapRotation.x stays 0 after L5");
+  assert.equal(fastener.material.envMapRotation.y, 0, "fastener envMapRotation.y stays 0 after L5");
+  assert.equal(fastener.material.envMapRotation.z, 0, "fastener envMapRotation.z stays 0 after L5");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+  assert.equal(fresh.envMapRotation, freshRotation, "fresh MeshBasic keeps its Euler instance");
+});
+
 test("L4/L5 activity smoke still passes after Mesh renderOrder pin", () => {
   const crate = createToolbox();
   const { lidPivot, latchPivot } = crate.userData.parts;
@@ -3155,6 +3328,7 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assertR170MeshBasicMapIntensityCompanions(fresh);
   assertR170MeshBasicWireframeLinewidthDefault(fresh);
   assertR170MeshBasicWireframeLineStyleDefaults(fresh);
+  assertR170MeshBasicEnvMapRotationDefault(fresh);
 
   const hiddenMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
   hiddenMesh.visible = false;
@@ -3181,6 +3355,23 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assert.equal(lineStyleOnly.wireframe, false, "wireframe line-style pin does not enable wireframe");
   assert.equal(lineStyleOnly.wireframeLinecap, "round", "non-round leftover is corrected to r170 default round");
   assert.equal(lineStyleOnly.wireframeLinejoin, "round", "non-round leftover is corrected to r170 default round");
+
+  const rotationOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const rotationInst = rotationOnly.envMapRotation;
+  rotationOnly.envMapRotation.x = 0.5;
+  rotationOnly.envMapRotation.y = 1.2;
+  rotationOnly.envMapRotation.z = -0.4;
+  rotationOnly.envMapRotation.order = "ZYX";
+  assert.equal(rotationOnly.envMap, null, "r170 leftover keeps envMap null");
+  assert.equal(rotationOnly.wireframe, false, "r170 leftover keeps wireframe false");
+  pinColorOnlyUnlitBasicFlags(rotationOnly);
+  assert.equal(rotationOnly.envMapRotation, rotationInst, "envMapRotation pin keeps the existing Euler instance");
+  assert.equal(rotationOnly.envMapRotation.x, 0, "non-zero leftover x is corrected to r170 default 0");
+  assert.equal(rotationOnly.envMapRotation.y, 0, "non-zero leftover y is corrected to r170 default 0");
+  assert.equal(rotationOnly.envMapRotation.z, 0, "non-zero leftover z is corrected to r170 default 0");
+  assert.equal(rotationOnly.envMapRotation.order, "XYZ", "non-XYZ leftover order is corrected to r170 default XYZ");
+  assert.equal(rotationOnly.envMap, null, "envMapRotation pin does not force envMap");
+  assert.equal(rotationOnly.wireframe, false, "envMapRotation pin does not enable wireframe");
 
   const wrong = new THREE.MeshBasicMaterial({
     color: 0x633318,
@@ -3280,12 +3471,26 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assert.equal(wrong.wireframeLinewidth, 2);
   assert.equal(wrong.wireframeLinecap, "butt");
   assert.equal(wrong.wireframeLinejoin, "miter");
+  const wrongRotation = wrong.envMapRotation;
+  wrong.envMapRotation.x = 0.3;
+  wrong.envMapRotation.y = -0.8;
+  wrong.envMapRotation.z = 1.1;
+  wrong.envMapRotation.order = "YXZ";
+  assert.equal(wrong.envMapRotation.x, 0.3);
+  assert.equal(wrong.envMapRotation.y, -0.8);
+  assert.equal(wrong.envMapRotation.z, 1.1);
   pinColorOnlyUnlitBasicFlags(wrong);
   assertQuestSafeUnlitFlags(wrong, "deliberately wrong color-only MeshBasic");
+  assert.equal(wrong.envMapRotation, wrongRotation, "wrong color-only MeshBasic keeps its Euler instance");
   assert.equal(wrong.wireframe, false, "wireframe line-style pin does not enable wireframe");
   assert.equal(wrong.wireframeLinewidth, 1, "wrong color-only MeshBasic wireframeLinewidth is corrected to 1");
   assert.equal(wrong.wireframeLinecap, "round", "wrong color-only MeshBasic wireframeLinecap is corrected to round");
   assert.equal(wrong.wireframeLinejoin, "round", "wrong color-only MeshBasic wireframeLinejoin is corrected to round");
+  assert.equal(wrong.envMap, null, "wrong color-only MeshBasic envMap stays null");
+  assert.equal(wrong.envMapRotation.x, 0, "wrong color-only MeshBasic envMapRotation.x is corrected to 0");
+  assert.equal(wrong.envMapRotation.y, 0, "wrong color-only MeshBasic envMapRotation.y is corrected to 0");
+  assert.equal(wrong.envMapRotation.z, 0, "wrong color-only MeshBasic envMapRotation.z is corrected to 0");
+  assert.equal(wrong.envMapRotation.order, "XYZ", "wrong color-only MeshBasic envMapRotation.order is corrected to XYZ");
 });
 
 test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped, lit, morph, colliders, shared blocked", () => {
@@ -3338,6 +3543,10 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
     wireframeLinecap: "butt",
     wireframeLinejoin: "bevel",
   });
+  mapped.envMapRotation.x = 0.4;
+  mapped.envMapRotation.y = 0.8;
+  mapped.envMapRotation.z = -0.2;
+  mapped.envMapRotation.order = "YXZ";
   const stdPlanes = [new THREE.Plane()];
   const std = new THREE.MeshStandardMaterial({
     transparent: true,
@@ -3384,6 +3593,10 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   std.wireframeLinewidth = 3;
   std.wireframeLinecap = "square";
   std.wireframeLinejoin = "miter";
+  std.envMapRotation.x = 0.6;
+  std.envMapRotation.y = -0.3;
+  std.envMapRotation.z = 0.9;
+  std.envMapRotation.order = "ZYX";
   assert.equal(colorOnly.fog, true);
   assert.equal(colorOnly.toneMapped, true);
   pinColorOnlyUnlitBasicFlags(colorOnly);
@@ -3431,6 +3644,10 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(mapped.wireframeLinewidth, 2, "mapped MeshBasic stays authored wireframeLinewidth");
   assert.equal(mapped.wireframeLinecap, "butt", "mapped MeshBasic stays authored wireframeLinecap");
   assert.equal(mapped.wireframeLinejoin, "bevel", "mapped MeshBasic stays authored wireframeLinejoin");
+  assert.equal(mapped.envMapRotation.x, 0.4, "mapped MeshBasic stays authored envMapRotation.x");
+  assert.equal(mapped.envMapRotation.y, 0.8, "mapped MeshBasic stays authored envMapRotation.y");
+  assert.equal(mapped.envMapRotation.z, -0.2, "mapped MeshBasic stays authored envMapRotation.z");
+  assert.equal(mapped.envMapRotation.order, "YXZ", "mapped MeshBasic stays authored envMapRotation.order");
   assert.equal(std.fog, true, "MeshStandard stays r170 fog default");
   assert.equal(std.toneMapped, true, "MeshStandard stays r170 toneMapped default");
   assert.equal(std.transparent, true, "MeshStandard stays authored transparent");
@@ -3468,6 +3685,10 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(std.wireframeLinewidth, 3, "MeshStandard stays authored wireframeLinewidth leftover");
   assert.equal(std.wireframeLinecap, "square", "MeshStandard stays authored wireframeLinecap leftover");
   assert.equal(std.wireframeLinejoin, "miter", "MeshStandard stays authored wireframeLinejoin leftover");
+  assert.equal(std.envMapRotation.x, 0.6, "MeshStandard stays authored envMapRotation.x leftover");
+  assert.equal(std.envMapRotation.y, -0.3, "MeshStandard stays authored envMapRotation.y leftover");
+  assert.equal(std.envMapRotation.z, 0.9, "MeshStandard stays authored envMapRotation.z leftover");
+  assert.equal(std.envMapRotation.order, "ZYX", "MeshStandard stays authored envMapRotation.order leftover");
 
   const root = new THREE.Group();
   const body = new THREE.Group();
@@ -3497,6 +3718,10 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   collider.material.wireframeLinewidth = 4;
   collider.material.wireframeLinecap = "square";
   collider.material.wireframeLinejoin = "bevel";
+  collider.material.envMapRotation.x = 0.15;
+  collider.material.envMapRotation.y = 0.25;
+  collider.material.envMapRotation.z = 0.35;
+  collider.material.envMapRotation.order = "YZX";
   const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
   sharedBlocked.visible = false;
   sharedBlocked.combine = THREE.MixOperation;
@@ -3507,6 +3732,10 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   sharedBlocked.wireframeLinewidth = 5;
   sharedBlocked.wireframeLinecap = "butt";
   sharedBlocked.wireframeLinejoin = "miter";
+  sharedBlocked.envMapRotation.x = 0.11;
+  sharedBlocked.envMapRotation.y = 0.22;
+  sharedBlocked.envMapRotation.z = 0.33;
+  sharedBlocked.envMapRotation.order = "XZY";
   const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
   const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
   sharedCollider.name = "collider_shared";
@@ -3551,6 +3780,10 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(mapped.wireframeLinewidth, 2, "mapped MeshBasic stays authored wireframeLinewidth via entity helper");
   assert.equal(mapped.wireframeLinecap, "butt", "mapped MeshBasic stays authored wireframeLinecap via entity helper");
   assert.equal(mapped.wireframeLinejoin, "bevel", "mapped MeshBasic stays authored wireframeLinejoin via entity helper");
+  assert.equal(mapped.envMapRotation.x, 0.4, "mapped MeshBasic stays authored envMapRotation.x via entity helper");
+  assert.equal(mapped.envMapRotation.y, 0.8, "mapped MeshBasic stays authored envMapRotation.y via entity helper");
+  assert.equal(mapped.envMapRotation.z, -0.2, "mapped MeshBasic stays authored envMapRotation.z via entity helper");
+  assert.equal(mapped.envMapRotation.order, "YXZ", "mapped MeshBasic stays authored envMapRotation.order via entity helper");
   assert.equal(morph.material.fog, true, "morph color-only MeshBasic is skipped");
   assert.equal(morph.material.toneMapped, true);
   assert.equal(morph.material.transparent, false, "morph color-only MeshBasic keeps r170 transparent default");
@@ -3585,6 +3818,9 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(morph.material.wireframeLinewidth, 1, "morph color-only MeshBasic keeps r170 wireframeLinewidth default");
   assert.equal(morph.material.wireframeLinecap, "round", "morph color-only MeshBasic keeps r170 wireframeLinecap default");
   assert.equal(morph.material.wireframeLinejoin, "round", "morph color-only MeshBasic keeps r170 wireframeLinejoin default");
+  assert.equal(morph.material.envMapRotation.x, 0, "morph color-only MeshBasic keeps r170 envMapRotation.x default");
+  assert.equal(morph.material.envMapRotation.y, 0, "morph color-only MeshBasic keeps r170 envMapRotation.y default");
+  assert.equal(morph.material.envMapRotation.z, 0, "morph color-only MeshBasic keeps r170 envMapRotation.z default");
   assert.equal(collider.material.fog, true, "collider MeshBasic stays default");
   assert.equal(collider.material.toneMapped, true);
   assert.equal(collider.material.wireframe, false, "collider MeshBasic keeps r170 wireframe default");
@@ -3625,6 +3861,10 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(sharedVisual.material.wireframeLinewidth, 5, "shared collider material stays unpinned wireframeLinewidth");
   assert.equal(sharedVisual.material.wireframeLinecap, "butt", "shared collider material stays unpinned wireframeLinecap");
   assert.equal(sharedVisual.material.wireframeLinejoin, "miter", "shared collider material stays unpinned wireframeLinejoin");
+  assert.equal(sharedVisual.material.envMapRotation.x, 0.11, "shared collider material stays unpinned envMapRotation.x");
+  assert.equal(sharedVisual.material.envMapRotation.y, 0.22, "shared collider material stays unpinned envMapRotation.y");
+  assert.equal(sharedVisual.material.envMapRotation.z, 0.33, "shared collider material stays unpinned envMapRotation.z");
+  assert.equal(sharedVisual.material.envMapRotation.order, "XZY", "shared collider material stays unpinned envMapRotation.order");
   assert.equal(collider.material.stencilWrite, false, "collider MeshBasic keeps r170 stencilWrite default");
   assert.equal(collider.material.stencilFunc, THREE.AlwaysStencilFunc, "collider MeshBasic keeps r170 stencilFunc default");
   assert.equal(collider.material.clippingPlanes, null, "collider MeshBasic keeps r170 clippingPlanes default");
@@ -3650,4 +3890,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(collider.material.wireframeLinewidth, 4, "collider MeshBasic stays authored wireframeLinewidth");
   assert.equal(collider.material.wireframeLinecap, "square", "collider MeshBasic stays authored wireframeLinecap");
   assert.equal(collider.material.wireframeLinejoin, "bevel", "collider MeshBasic stays authored wireframeLinejoin");
+  assert.equal(collider.material.envMapRotation.x, 0.15, "collider MeshBasic stays authored envMapRotation.x");
+  assert.equal(collider.material.envMapRotation.y, 0.25, "collider MeshBasic stays authored envMapRotation.y");
+  assert.equal(collider.material.envMapRotation.z, 0.35, "collider MeshBasic stays authored envMapRotation.z");
+  assert.equal(collider.material.envMapRotation.order, "YZX", "collider MeshBasic stays authored envMapRotation.order");
 });
