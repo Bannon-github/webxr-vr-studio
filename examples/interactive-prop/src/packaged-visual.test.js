@@ -149,6 +149,17 @@ function assertQuestSafeUnlitRenderOrder(mesh, label = "color-only MeshBasic mes
   assert.equal(mesh.renderOrder, 0, `${label} pins renderOrder 0`);
 }
 
+function assertR170Object3DLayersDefault(obj, label = "r170 Object3D") {
+  assert.ok(obj.layers, `${label} has layers`);
+  assert.equal(obj.layers.mask, 1, `${label} layers.mask is 1 (layer 0 only)`);
+  assert.equal(obj.layers.isEnabled(0), true, `${label} layers.test(0) / isEnabled(0)`);
+  assert.equal(obj.layers.isEnabled(1), false, `${label} layer 1 stays disabled`);
+}
+
+function assertQuestSafeUnlitLayers(mesh, label = "color-only MeshBasic mesh") {
+  assertR170Object3DLayersDefault(mesh, label);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -1928,4 +1939,77 @@ test("packaged ingest without lod groups still pins color-only Mesh renderOrder"
   assertQuestSafeUnlitRenderOrder(fastener, "fail-soft fastener");
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.renderOrder, 0, "fail-soft collider keeps r170 renderOrder default");
+});
+
+test("packaged ingest pins r170 Object3D layers default; mapped/lit stay authored", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  const freshObj = new THREE.Object3D();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assertR170Object3DLayersDefault(fresh, "r170 Mesh");
+  assertR170Object3DLayersDefault(freshObj, "r170 Object3D");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  mappedMesh.layers.enable(2);
+  const mappedMask = mappedMesh.layers.mask;
+  const mappedLayers = mappedMesh.layers;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccLayers", wrong);
+  const wrongLayers = wrongMesh.layers;
+  wrongMesh.layers.enable(3);
+  wrongMesh.layers.enable(5);
+  const matrixAutoBefore = wrongMesh.matrixAutoUpdate;
+  const matrixWorldAutoBefore = wrongMesh.matrixWorldAutoUpdate;
+  const visibleBefore = wrongMesh.visible;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.layers.enable(4);
+  const colliderMask = colliderGrabBefore.layers.mask;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitLayers(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRenderOrder(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFrustumCulled(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowFlags(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+    assert.equal(mesh.material.envMapRotation.x, 0, "prior envMapRotation pin stays intact");
+  }
+  assertQuestSafeUnlitLayers(wrongMesh, "packaged DCC leftover layers color-only Mesh");
+  assert.equal(wrongMesh.layers, wrongLayers, "DCC leftover keeps its Layers instance");
+  assert.equal(wrongMesh.matrixAutoUpdate, false, "body LOD leaf still frozen by v0.45; layers pin does not unfreeze");
+  assert.equal(wrongMesh.matrixWorldAutoUpdate, matrixWorldAutoBefore, "layers pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrongMesh.visible, visibleBefore, "layers pin does not change mesh.visible");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live; layers pin does not freeze it");
+  assert.equal(matrixAutoBefore, true, "pre-ingest DCC leftover started matrix-live");
+  assert.equal(mappedMesh.layers.mask, mappedMask, "mapped MeshBasic stays authored layers");
+  assert.equal(mappedMesh.layers, mappedLayers, "mapped MeshBasic keeps its Layers instance");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.layers.mask, colliderMask, "collider Mesh stays authored layers");
+});
+
+test("packaged ingest without lod groups still pins color-only Mesh layers", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitLayers(visualMeshes(body)[0], "fail-soft body");
+  assertQuestSafeUnlitLayers(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitLayers(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitLayers(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitLayers(fastener, "fail-soft fastener");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assertR170Object3DLayersDefault(colliderGrab, "fail-soft collider keeps r170 layers default");
 });

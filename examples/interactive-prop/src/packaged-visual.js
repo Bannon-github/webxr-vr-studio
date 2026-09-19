@@ -237,6 +237,24 @@
  * maps. Does not change the `isColorOnlyUnlitBasic`
  * map / envMap gate. Does **not** enable wireframe.
  * Does **not** pin `mesh.visible`.
+ *
+ * v0.67: after that renderOrder pin (and after the
+ * v0.66 envMapRotation material pin),
+ * `pinColorOnlyVisualLayers` sets r170 Object3D
+ * layers default (layer 0 only / `mask = 1`) on
+ * packed color-only unlit MeshBasic visual meshes
+ * (same `isColorOnlyUnlitBasic` gate; keeps the
+ * existing Layers instance). Accidental DCC / GLB
+ * leftover non-default layer masks can hide draws
+ * from the default camera or force unexpected
+ * multi-layer membership. Does not hex-dedupe or
+ * invent meshes. Mapped / lit stay at authored /
+ * r170 Mesh defaults. Collider meshes stay
+ * untouched. Does **not** pin `mesh.visible` (LOD
+ * visibility uses it), change
+ * `matrixWorldAutoUpdate` / `matrixAutoUpdate`,
+ * enable extra camera/layers tricks, or invent a
+ * custom layer mask.
  */
 
 import {
@@ -249,6 +267,7 @@ import {
   pinColorOnlyVisualShadowFlags,
   pinColorOnlyVisualFrustumCulled,
   pinColorOnlyVisualRenderOrder,
+  pinColorOnlyVisualLayers,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -412,6 +431,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualShadowFlags(root);
   pinColorOnlyVisualFrustumCulled(root);
   pinColorOnlyVisualRenderOrder(root);
+  pinColorOnlyVisualLayers(root);
   return root;
 }
 
