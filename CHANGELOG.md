@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.69.0] — 2026-09-19
+
+### Changed
+
+- `crate-toolbox` **v0.67.0** L3 packaging/perf UPGRADE: after the v0.66 MeshBasic envMapRotation pin (and after the v0.60 mesh renderOrder pin), also pin r170 Object3D layers default (layer 0 only / `mask = 1`) on packed color-only unlit MeshBasic visual meshes (13 visual meshes; keeps the existing Layers instance). Mapped / lit / colliders stay authored / r170 Mesh defaults. Does not pin `mesh.visible` or change `matrixWorldAutoUpdate` / `matrixAutoUpdate`. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13 unchanged vs v0.66. Headset ms / FFR still unmeasured.
+
 ## [0.68.0] — 2026-09-19
 
 ### Changed
