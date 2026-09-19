@@ -134,6 +134,11 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.envMapRotation.y, 0, `${label} pins envMapRotation.y 0`);
   assert.equal(mat.envMapRotation.z, 0, `${label} pins envMapRotation.z 0`);
   assert.equal(mat.envMapRotation.order, "XYZ", `${label} pins envMapRotation.order XYZ`);
+  assert.ok(mat.blendColor, `${label} keeps blendColor`);
+  assert.equal(mat.blendColor.r, 0, `${label} pins blendColor.r 0`);
+  assert.equal(mat.blendColor.g, 0, `${label} pins blendColor.g 0`);
+  assert.equal(mat.blendColor.b, 0, `${label} pins blendColor.b 0`);
+  assert.equal(mat.blendAlpha, 0, `${label} pins blendAlpha 0`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -2012,4 +2017,77 @@ test("packaged ingest without lod groups still pins color-only Mesh layers", () 
   assertQuestSafeUnlitLayers(fastener, "fail-soft fastener");
   const colliderGrab = root.getObjectByName("collider_grab");
   assertR170Object3DLayersDefault(colliderGrab, "fail-soft collider keeps r170 layers default");
+});
+
+test("packaged ingest pins r170 Material blendColor/blendAlpha; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.blending, THREE.NormalBlending, "r170 MeshBasicMaterial defaults NormalBlending");
+  assert.ok(fresh.blendColor, "r170 MeshBasicMaterial has blendColor");
+  assert.equal(fresh.blendColor.isColor, true, "r170 blendColor is Color");
+  assert.equal(fresh.blendColor.r, 0, "r170 MeshBasicMaterial defaults blendColor.r 0");
+  assert.equal(fresh.blendColor.g, 0, "r170 MeshBasicMaterial defaults blendColor.g 0");
+  assert.equal(fresh.blendColor.b, 0, "r170 MeshBasicMaterial defaults blendColor.b 0");
+  assert.equal(fresh.blendAlpha, 0, "r170 MeshBasicMaterial defaults blendAlpha 0");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  mapped.blendColor.r = 0.3;
+  mapped.blendColor.g = 0.6;
+  mapped.blendColor.b = 0.9;
+  mapped.blendAlpha = 0.45;
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongBlendColor = wrong.blendColor;
+  wrong.blendColor.r = 0.25;
+  wrong.blendColor.g = 0.5;
+  wrong.blendColor.b = 0.75;
+  wrong.blendAlpha = 0.4;
+  const wrongMesh = boxMesh("dccBlendColor", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.blendColor.r = 0.12;
+  colliderGrabBefore.material.blendColor.g = 0.22;
+  colliderGrabBefore.material.blendColor.b = 0.32;
+  colliderGrabBefore.material.blendAlpha = 0.18;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.material.blending, THREE.NormalBlending, "color-only pin does not enable CustomBlending");
+    assert.equal(mesh.material.blendColor.r, 0, "color-only pin sets blendColor.r 0");
+    assert.equal(mesh.material.blendColor.g, 0, "color-only pin sets blendColor.g 0");
+    assert.equal(mesh.material.blendColor.b, 0, "color-only pin sets blendColor.b 0");
+    assert.equal(mesh.material.blendAlpha, 0, "color-only pin sets blendAlpha 0");
+    assert.equal(mesh.material.envMapRotation.x, 0, "prior envMapRotation pin stays intact");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC leftover blendColor/blendAlpha color-only MeshBasic");
+  assert.equal(wrong.blendColor, wrongBlendColor, "DCC leftover keeps its Color instance");
+  assert.equal(wrong.blending, THREE.NormalBlending, "color-only leftover still has NormalBlending");
+  assert.equal(wrong.blendColor.r, 0, "DCC non-zero blendColor.r is corrected to 0");
+  assert.equal(wrong.blendColor.g, 0, "DCC non-zero blendColor.g is corrected to 0");
+  assert.equal(wrong.blendColor.b, 0, "DCC non-zero blendColor.b is corrected to 0");
+  assert.equal(wrong.blendAlpha, 0, "DCC leftover blendAlpha is corrected to 0");
+  assert.equal(mapped.blendColor.r, 0.3, "mapped MeshBasic stays authored blendColor.r");
+  assert.equal(mapped.blendColor.g, 0.6, "mapped MeshBasic stays authored blendColor.g");
+  assert.equal(mapped.blendColor.b, 0.9, "mapped MeshBasic stays authored blendColor.b");
+  assert.equal(mapped.blendAlpha, 0.45, "mapped MeshBasic stays authored blendAlpha");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.blendColor.r, 0.12, "collider MeshBasic stays authored blendColor.r");
+  assert.equal(colliderGrab.material.blendColor.g, 0.22, "collider MeshBasic stays authored blendColor.g");
+  assert.equal(colliderGrab.material.blendColor.b, 0.32, "collider MeshBasic stays authored blendColor.b");
+  assert.equal(colliderGrab.material.blendAlpha, 0.18, "collider MeshBasic stays authored blendAlpha");
 });

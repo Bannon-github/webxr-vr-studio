@@ -255,6 +255,20 @@
  * `matrixWorldAutoUpdate` / `matrixAutoUpdate`,
  * enable extra camera/layers tricks, or invent a
  * custom layer mask.
+ *
+ * v0.68: the same material helper also pins r170
+ * Material CustomBlending color/alpha companions
+ * (`blendColor` `(0, 0, 0)` / `blendAlpha = 0`)
+ * on those color-only MeshBasics (keeps the
+ * existing Color instance). Accidental DCC / GLB
+ * leftover non-default `blendColor` / `blendAlpha`
+ * still sit on the material even when `blending`
+ * is NormalBlending (still passes
+ * `isColorOnlyUnlitBasic`) and can leak into a
+ * later blend-mode change. Mapped / lit /
+ * colliders stay untouched. Does **not** enable
+ * CustomBlending or change `blending` away from
+ * NormalBlending. Does **not** pin `mesh.visible`.
  */
 
 import {
