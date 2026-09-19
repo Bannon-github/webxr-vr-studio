@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.71.0] — 2026-09-19
+
+### Changed
+
+- `crate-toolbox` **v0.69.0** L3 packaging/perf UPGRADE: after the v0.68 Material blendColor/blendAlpha pin (and after the v0.67 Object3D layers default pin), also pin r170 Object3D `matrixWorldAutoUpdate = true` (`Object3D.DEFAULT_MATRIX_WORLD_AUTO_UPDATE`) on packed color-only unlit MeshBasic visual meshes (13 visual meshes). Mapped / lit / colliders stay authored / r170 Mesh defaults. Does not pin `mesh.visible` or change `matrixAutoUpdate` (v0.45 static-body freeze stays). Does not change `layers` / `blendColor` / `blendAlpha`. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13, matrixWorldAutoUpdate-on 13 unchanged vs v0.68. Headset ms / FFR still unmeasured.
+
 ## [0.70.0] — 2026-09-19
 
 ### Changed
