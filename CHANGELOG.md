@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.67.0] — 2026-09-19
+
+### Changed
+
+- `crate-toolbox` **v0.65.0** L3 packaging/perf UPGRADE: after the v0.64 MeshBasic `wireframeLinewidth` pin (and after the v0.52 `wireframe = false` pin), also pin r170 MeshBasic wireframe line-style defaults (`wireframeLinecap = 'round'`, `wireframeLinejoin = 'round'`) on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances). Mapped / lit / colliders stay authored / r170 defaults. Does not pin `mesh.visible` or enable wireframe. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13 unchanged. Headset ms / FFR still unmeasured.
+
 ## [0.66.0] — 2026-09-18
 
 ### Changed
