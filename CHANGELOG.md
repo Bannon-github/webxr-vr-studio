@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.70.0] — 2026-09-19
+
+### Changed
+
+- `crate-toolbox` **v0.68.0** L3 packaging/perf UPGRADE: after the v0.67 Object3D layers default pin (and after the v0.56 NormalBlending factor/equation companions), also pin r170 Material CustomBlending color/alpha companions (`blendColor` `(0, 0, 0)` / `blendAlpha = 0`) on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances; keeps the existing Color instance). Mapped / lit / colliders stay authored / r170 defaults. Does not enable CustomBlending or change `blending` away from NormalBlending. Does not pin `mesh.visible` or change `layers` / `matrixWorldAutoUpdate` / `matrixAutoUpdate`. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13 unchanged vs v0.67. Headset ms / FFR still unmeasured.
+
 ## [0.69.0] — 2026-09-19
 
 ### Changed
