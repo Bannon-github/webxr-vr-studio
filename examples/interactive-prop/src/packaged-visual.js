@@ -289,6 +289,26 @@
  * `matrixAutoUpdate` (v0.45 already freezes
  * static body LOD leaves), change `layers`, or
  * change `blendColor` / `blendAlpha`.
+ *
+ * v0.70: after that matrixWorldAutoUpdate pin,
+ * `pinColorOnlyVisualUp` sets r170 Object3D
+ * `up` `(0, 1, 0)` (`Object3D.DEFAULT_UP`) on
+ * packed color-only unlit MeshBasic visual
+ * meshes (same `isColorOnlyUnlitBasic` gate;
+ * keeps the existing Vector3 instance).
+ * Accidental DCC / GLB leftover non-Y-up `up`
+ * (common Z-up exporter leftovers such as
+ * `(0, 0, 1)`) can skew Object3D `lookAt` and
+ * related orientation helpers even when local
+ * transforms are intentional. Does not
+ * hex-dedupe or invent meshes. Mapped / lit
+ * stay at authored / r170 Mesh defaults.
+ * Collider meshes stay untouched. Does **not**
+ * pin `mesh.visible` (LOD visibility uses it),
+ * change `matrixAutoUpdate` (v0.45 already
+ * freezes static body LOD leaves), change
+ * `matrixWorldAutoUpdate`, change `layers`, or
+ * change `blendColor` / `blendAlpha`.
  */
 
 import {
@@ -303,6 +323,7 @@ import {
   pinColorOnlyVisualRenderOrder,
   pinColorOnlyVisualLayers,
   pinColorOnlyVisualMatrixWorldAutoUpdate,
+  pinColorOnlyVisualUp,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -468,6 +489,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualRenderOrder(root);
   pinColorOnlyVisualLayers(root);
   pinColorOnlyVisualMatrixWorldAutoUpdate(root);
+  pinColorOnlyVisualUp(root);
   return root;
 }
 
