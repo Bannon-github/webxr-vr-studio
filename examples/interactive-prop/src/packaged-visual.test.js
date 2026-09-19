@@ -192,6 +192,17 @@ function assertQuestSafeUnlitUp(mesh, label = "color-only MeshBasic mesh") {
   assertR170Object3DUpDefault(mesh, label);
 }
 
+function assertR170Object3DScaleDefault(obj, label = "r170 Object3D") {
+  assert.ok(obj.scale, `${label} has scale`);
+  assert.equal(obj.scale.x, 1, `${label} scale.x is 1`);
+  assert.equal(obj.scale.y, 1, `${label} scale.y is 1`);
+  assert.equal(obj.scale.z, 1, `${label} scale.z is 1`);
+}
+
+function assertQuestSafeUnlitScale(mesh, label = "color-only MeshBasic mesh") {
+  assertR170Object3DScaleDefault(mesh, label);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -2277,4 +2288,96 @@ test("packaged ingest without lod groups still pins color-only Mesh up", () => {
   assertQuestSafeUnlitUp(fastener, "fail-soft fastener");
   const colliderGrab = root.getObjectByName("collider_grab");
   assertR170Object3DUpDefault(colliderGrab, "fail-soft collider keeps r170 up default");
+});
+
+test("packaged ingest pins r170 Object3D scale; mapped/lit stay authored", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  const freshObj = new THREE.Object3D();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(fresh.scale.x, 1, "r170 Mesh.scale.x is 1");
+  assert.equal(fresh.scale.y, 1, "r170 Mesh.scale.y is 1");
+  assert.equal(fresh.scale.z, 1, "r170 Mesh.scale.z is 1");
+  assert.equal(freshObj.scale.x, 1, "r170 Object3D.scale.x is 1");
+  assert.equal(freshObj.scale.y, 1, "r170 Object3D.scale.y is 1");
+  assert.equal(freshObj.scale.z, 1, "r170 Object3D.scale.z is 1");
+  assertR170Object3DScaleDefault(fresh, "r170 Mesh");
+  assertR170Object3DScaleDefault(freshObj, "r170 Object3D");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  mappedMesh.scale.set(2, 2, 2);
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccScale", wrong);
+  const scaleBefore = wrongMesh.scale;
+  wrongMesh.scale.set(1, -1, 1);
+  const visibleBefore = wrongMesh.visible;
+  const layersMaskBefore = wrongMesh.layers.mask;
+  const worldAutoBefore = wrongMesh.matrixWorldAutoUpdate;
+  const upBefore = wrongMesh.up.clone();
+  const blendColorBefore = wrong.blendColor;
+  const blendAlphaBefore = wrong.blendAlpha;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.scale.set(2, 2, 2);
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitScale(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitUp(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitLayers(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRenderOrder(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFrustumCulled(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowFlags(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+    assert.equal(mesh.material.blendColor.r, 0, "prior blendColor pin stays intact");
+    assert.equal(mesh.material.blendAlpha, 0, "prior blendAlpha pin stays intact");
+  }
+  assertQuestSafeUnlitScale(wrongMesh, "packaged DCC leftover scale color-only Mesh");
+  assert.equal(wrongMesh.scale, scaleBefore, "DCC leftover keeps its Vector3 instance");
+  assert.equal(wrongMesh.matrixAutoUpdate, false, "body LOD leaf still frozen by v0.45; scale pin does not unfreeze");
+  assert.equal(wrongMesh.matrixWorldAutoUpdate, worldAutoBefore, "scale pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrongMesh.visible, visibleBefore, "scale pin does not change mesh.visible");
+  assert.equal(wrongMesh.layers.mask, layersMaskBefore, "scale pin does not change layers");
+  assert.equal(wrongMesh.up.x, upBefore.x, "scale pin does not change up.x");
+  assert.equal(wrongMesh.up.y, upBefore.y, "scale pin does not change up.y");
+  assert.equal(wrongMesh.up.z, upBefore.z, "scale pin does not change up.z");
+  assert.equal(wrong.blendColor, blendColorBefore, "scale pin does not replace blendColor");
+  assert.equal(wrong.blendAlpha, blendAlphaBefore, "scale pin does not change blendAlpha");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live; scale pin does not freeze it");
+  assert.equal(fastener.matrixWorldAutoUpdate, true, "fastener world-matrix auto-update stays on");
+  assertQuestSafeUnlitScale(fastener, "fastener");
+  assert.equal(mappedMesh.scale.x, 2, "mapped MeshBasic stays authored scale.x");
+  assert.equal(mappedMesh.scale.y, 2, "mapped MeshBasic stays authored scale.y");
+  assert.equal(mappedMesh.scale.z, 2, "mapped MeshBasic stays authored scale.z");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.scale.x, 2, "collider Mesh stays authored scale.x");
+  assert.equal(colliderGrab.scale.y, 2, "collider Mesh stays authored scale.y");
+  assert.equal(colliderGrab.scale.z, 2, "collider Mesh stays authored scale.z");
+});
+
+test("packaged ingest without lod groups still pins color-only Mesh scale", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitScale(visualMeshes(body)[0], "fail-soft body");
+  assertQuestSafeUnlitScale(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitScale(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitScale(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitScale(fastener, "fail-soft fastener");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assertR170Object3DScaleDefault(colliderGrab, "fail-soft collider keeps r170 scale default");
 });
