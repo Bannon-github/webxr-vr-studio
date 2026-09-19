@@ -165,6 +165,19 @@ function assertQuestSafeUnlitLayers(mesh, label = "color-only MeshBasic mesh") {
   assertR170Object3DLayersDefault(mesh, label);
 }
 
+function assertR170Object3DMatrixWorldAutoUpdateDefault(obj, label = "r170 Object3D") {
+  assert.equal(obj.matrixWorldAutoUpdate, true, `${label} defaults matrixWorldAutoUpdate true`);
+  assert.equal(
+    THREE.Object3D.DEFAULT_MATRIX_WORLD_AUTO_UPDATE,
+    true,
+    "r170 Object3D.DEFAULT_MATRIX_WORLD_AUTO_UPDATE is true"
+  );
+}
+
+function assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh, label = "color-only MeshBasic mesh") {
+  assertR170Object3DMatrixWorldAutoUpdateDefault(mesh, label);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -2090,4 +2103,78 @@ test("packaged ingest pins r170 Material blendColor/blendAlpha; mapped/lit stay 
   assert.equal(colliderGrab.material.blendColor.g, 0.22, "collider MeshBasic stays authored blendColor.g");
   assert.equal(colliderGrab.material.blendColor.b, 0.32, "collider MeshBasic stays authored blendColor.b");
   assert.equal(colliderGrab.material.blendAlpha, 0.18, "collider MeshBasic stays authored blendAlpha");
+});
+
+test("packaged ingest pins r170 Object3D matrixWorldAutoUpdate; mapped/lit stay authored", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  const freshObj = new THREE.Object3D();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(fresh.matrixWorldAutoUpdate, true, "r170 Mesh defaults matrixWorldAutoUpdate true");
+  assert.equal(freshObj.matrixWorldAutoUpdate, true, "r170 Object3D defaults matrixWorldAutoUpdate true");
+  assert.equal(THREE.Object3D.DEFAULT_MATRIX_WORLD_AUTO_UPDATE, true, "r170 DEFAULT_MATRIX_WORLD_AUTO_UPDATE is true");
+  assertR170Object3DMatrixWorldAutoUpdateDefault(fresh, "r170 Mesh");
+  assertR170Object3DMatrixWorldAutoUpdateDefault(freshObj, "r170 Object3D");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  mappedMesh.matrixWorldAutoUpdate = false;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccMatrixWorldAuto", wrong);
+  wrongMesh.matrixWorldAutoUpdate = false;
+  const visibleBefore = wrongMesh.visible;
+  const layersMaskBefore = wrongMesh.layers.mask;
+  const blendColorBefore = wrong.blendColor;
+  const blendAlphaBefore = wrong.blendAlpha;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.matrixWorldAutoUpdate = false;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitLayers(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRenderOrder(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFrustumCulled(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowFlags(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+    assert.equal(mesh.material.blendColor.r, 0, "prior blendColor pin stays intact");
+    assert.equal(mesh.material.blendAlpha, 0, "prior blendAlpha pin stays intact");
+  }
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(wrongMesh, "packaged DCC leftover matrixWorldAutoUpdate color-only Mesh");
+  assert.equal(wrongMesh.matrixAutoUpdate, false, "body LOD leaf still frozen by v0.45; matrixWorldAutoUpdate pin does not unfreeze");
+  assert.equal(wrongMesh.visible, visibleBefore, "matrixWorldAutoUpdate pin does not change mesh.visible");
+  assert.equal(wrongMesh.layers.mask, layersMaskBefore, "matrixWorldAutoUpdate pin does not change layers");
+  assert.equal(wrong.blendColor, blendColorBefore, "matrixWorldAutoUpdate pin does not replace blendColor");
+  assert.equal(wrong.blendAlpha, blendAlphaBefore, "matrixWorldAutoUpdate pin does not change blendAlpha");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live; matrixWorldAutoUpdate pin does not freeze it");
+  assert.equal(fastener.matrixWorldAutoUpdate, true, "fastener world-matrix auto-update stays on");
+  assert.equal(mappedMesh.matrixWorldAutoUpdate, false, "mapped MeshBasic stays authored matrixWorldAutoUpdate");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.matrixWorldAutoUpdate, false, "collider Mesh stays authored matrixWorldAutoUpdate");
+});
+
+test("packaged ingest without lod groups still pins color-only Mesh matrixWorldAutoUpdate", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(visualMeshes(body)[0], "fail-soft body");
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(fastener, "fail-soft fastener");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assertR170Object3DMatrixWorldAutoUpdateDefault(colliderGrab, "fail-soft collider keeps r170 matrixWorldAutoUpdate default");
 });

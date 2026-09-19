@@ -53,11 +53,13 @@ const {
   pinColorOnlyUnlitBasicFlags,
   pinColorOnlyUnlitBasicFrustumCulled,
   pinColorOnlyUnlitBasicLayers,
+  pinColorOnlyUnlitBasicMatrixWorldAutoUpdate,
   pinColorOnlyUnlitBasicRenderOrder,
   pinColorOnlyUnlitBasicShadowFlags,
   pinColorOnlyVisualFrustumCulled,
   pinColorOnlyVisualLayers,
   pinColorOnlyVisualMaterialFlags,
+  pinColorOnlyVisualMatrixWorldAutoUpdate,
   pinColorOnlyVisualRenderOrder,
   pinColorOnlyVisualShadowFlags,
   quantizePositionToFloat16,
@@ -275,6 +277,19 @@ function assertR170Object3DLayersDefault(obj, label = "r170 Object3D") {
 
 function assertQuestSafeUnlitLayers(mesh, label = "color-only MeshBasic mesh") {
   assertR170Object3DLayersDefault(mesh, label);
+}
+
+function assertR170Object3DMatrixWorldAutoUpdateDefault(obj, label = "r170 Object3D") {
+  assert.equal(obj.matrixWorldAutoUpdate, true, `${label} defaults matrixWorldAutoUpdate true`);
+  assert.equal(
+    THREE.Object3D.DEFAULT_MATRIX_WORLD_AUTO_UPDATE,
+    true,
+    "r170 Object3D.DEFAULT_MATRIX_WORLD_AUTO_UPDATE is true"
+  );
+}
+
+function assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh, label = "color-only MeshBasic mesh") {
+  assertR170Object3DMatrixWorldAutoUpdateDefault(mesh, label);
 }
 
 test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
@@ -968,6 +983,16 @@ function countVisualLayersDefault(crate) {
     else other += 1;
   }
   return { layer0Only, other, total: layer0Only + other };
+}
+
+function countVisualMatrixWorldAutoUpdate(crate) {
+  let on = 0;
+  let off = 0;
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.matrixWorldAutoUpdate) on += 1;
+    else off += 1;
+  }
+  return { on, off, total: on + off };
 }
 
 test("v0.46 disables Mesh.raycast on packed color-only visuals; colliders keep default", () => {
@@ -3578,6 +3603,7 @@ test("L4/L5 activity smoke still passes after Mesh layers pin", () => {
   assertQuestSafeUnlitFrustumCulled(fastener, "fastener after L5 drive");
   assertQuestSafeUnlitRenderOrder(fastener, "fastener after L5 drive");
   assertQuestSafeUnlitLayers(fastener, "fastener after L5 drive");
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(fastener, "fastener after L5 drive");
   assert.equal(fastener.raycast, noopColorOnlyVisualRaycast);
 });
 
@@ -3683,6 +3709,234 @@ test("pinColorOnlyUnlitBasicLayers / pinColorOnlyVisualLayers skip mapped, lit, 
   assert.equal(sharedVisual.layers.mask, sharedVisualMask, "shared collider material visual stays unpinned");
   assert.equal(sharedCollider.layers.mask, sharedColliderMask, "shared collider stays authored");
   assert.equal(std.layers.mask, stdMask, "MeshStandard stays authored via entity helper");
+});
+
+test("v0.69 pins r170 Object3D matrixWorldAutoUpdate on packed color-only visuals; envelope stays v0.68", () => {
+  const freshMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  const freshObj = new THREE.Object3D();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(freshMesh.matrixWorldAutoUpdate, true, "r170 Mesh defaults matrixWorldAutoUpdate true");
+  assert.equal(freshObj.matrixWorldAutoUpdate, true, "r170 Object3D defaults matrixWorldAutoUpdate true");
+  assert.equal(THREE.Object3D.DEFAULT_MATRIX_WORLD_AUTO_UPDATE, true, "r170 DEFAULT_MATRIX_WORLD_AUTO_UPDATE is true");
+  assertR170Object3DMatrixWorldAutoUpdateDefault(freshMesh, "r170 Mesh");
+  assertR170Object3DMatrixWorldAutoUpdateDefault(freshObj, "r170 Object3D");
+  const freshMatrixAuto = freshMesh.matrixAutoUpdate;
+  const freshVisible = freshMesh.visible;
+  const freshLayersMask = freshMesh.layers.mask;
+  const freshBlendColor = freshMesh.material.blendColor;
+  const freshBlendAlpha = freshMesh.material.blendAlpha;
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+    assert.equal(mat.blendColor.r, 0, "prior blendColor.r pin stays 0");
+    assert.equal(mat.blendColor.g, 0, "prior blendColor.g pin stays 0");
+    assert.equal(mat.blendColor.b, 0, "prior blendColor.b pin stays 0");
+    assert.equal(mat.blendAlpha, 0, "prior blendAlpha pin stays 0");
+  }
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFlags(mesh.material);
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitRenderOrder(mesh);
+    assertQuestSafeUnlitLayers(mesh);
+    assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh);
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+    assert.equal(mesh.material.blendColor.r, 0, "visual MeshBasic blendColor.r stays 0");
+    assert.equal(mesh.material.blendAlpha, 0, "visual MeshBasic blendAlpha stays 0");
+  }
+  const worldAutoCounts = countVisualMatrixWorldAutoUpdate(crate);
+  assert.equal(worldAutoCounts.on, 13, "matrixWorldAutoUpdate-on count is 13");
+  assert.equal(worldAutoCounts.off, 0);
+  const layerCounts = countVisualLayersDefault(crate);
+  assert.equal(layerCounts.layer0Only, 13, "layers-default count stays 13");
+  assert.equal(layerCounts.other, 0);
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  assert.equal(renderOrderCounts.nonzero, 0);
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(lidMesh, "lidMesh");
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(latchMesh, "latchMesh");
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(fastener, "fastenerMesh");
+  assert.equal(lidMesh.matrixAutoUpdate, true, "lidMesh stays matrix-live");
+  assert.equal(latchMesh.matrixAutoUpdate, true, "latchMesh stays matrix-live");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastenerMesh stays matrix-live");
+  assert.equal(fastener.geometry.getAttribute("position") ? cpuAttrBytes(fastener.geometry) : 0, 216, "fastener attrBytes stay 216");
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assert.equal(bodyHero.matrixWorldAutoUpdate, true, "v0.45 freeze does not stall world-matrix auto-update");
+
+  const lod0Group = crate.userData.lod.groups[0][0];
+  assert.equal(lod0Group.visible, true, "LOD0 group starts visible");
+  setToolboxLod(crate, 1);
+  assert.equal(lod0Group.visible, false, "LOD hides via group.visible, not mesh.visible");
+  assert.equal(lidMesh.visible, true, "mesh.visible is not pinned; LOD uses group.visible");
+  setToolboxLod(crate, 0);
+
+  for (const c of crate.userData.colliders) {
+    assertR170Object3DMatrixWorldAutoUpdateDefault(c, "collider Mesh keeps r170 matrixWorldAutoUpdate default");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+    assert.equal(c.matrixAutoUpdate, true, "collider matrixAutoUpdate stays live");
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(activityState(crate), "closed");
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(fastener, "fastener after L5 drive");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+  assert.equal(fastener.material.blendColor.r, 0, "fastener blendColor.r stays 0 after L5");
+  assert.equal(fastener.material.blendAlpha, 0, "fastener blendAlpha stays 0 after L5");
+  assert.equal(freshMesh.matrixAutoUpdate, freshMatrixAuto, "matrixWorldAutoUpdate pin does not touch matrixAutoUpdate");
+  assert.equal(freshMesh.visible, freshVisible, "matrixWorldAutoUpdate pin does not touch mesh.visible");
+  assert.equal(freshMesh.layers.mask, freshLayersMask, "matrixWorldAutoUpdate pin does not touch layers");
+  assert.equal(freshMesh.material.blendColor, freshBlendColor, "matrixWorldAutoUpdate pin does not replace blendColor");
+  assert.equal(freshMesh.material.blendAlpha, freshBlendAlpha, "matrixWorldAutoUpdate pin does not touch blendAlpha");
+});
+
+test("pinColorOnlyUnlitBasicMatrixWorldAutoUpdate corrects a wrong color-only Mesh that still passes isColorOnlyUnlitBasic", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assertR170Object3DMatrixWorldAutoUpdateDefault(fresh, "r170 Mesh");
+
+  const wrong = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  wrong.matrixWorldAutoUpdate = false;
+  assert.equal(isColorOnlyUnlitBasic(wrong.material), true, "color-only MeshBasic still passes the gate");
+  assert.equal(wrong.matrixWorldAutoUpdate, false, "DCC leftover is matrixWorldAutoUpdate false");
+  const matrixAutoBefore = wrong.matrixAutoUpdate;
+  const visibleBefore = wrong.visible;
+  const layersMaskBefore = wrong.layers.mask;
+  const blendColorBefore = wrong.material.blendColor;
+  const blendAlphaBefore = wrong.material.blendAlpha;
+  pinColorOnlyUnlitBasicMatrixWorldAutoUpdate(wrong);
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(wrong, "deliberately wrong color-only Mesh");
+  assert.equal(wrong.frustumCulled, true, "matrixWorldAutoUpdate pin does not change frustumCulled");
+  assert.equal(wrong.renderOrder, 0, "matrixWorldAutoUpdate pin does not change renderOrder");
+  assert.equal(wrong.castShadow, false, "matrixWorldAutoUpdate pin does not change castShadow");
+  assert.equal(wrong.receiveShadow, false, "matrixWorldAutoUpdate pin does not change receiveShadow");
+  assert.equal(wrong.visible, visibleBefore, "matrixWorldAutoUpdate pin does not change mesh.visible");
+  assert.equal(wrong.matrixAutoUpdate, matrixAutoBefore, "matrixWorldAutoUpdate pin does not change matrixAutoUpdate");
+  assert.equal(wrong.layers.mask, layersMaskBefore, "matrixWorldAutoUpdate pin does not change layers");
+  assert.equal(wrong.material.blendColor, blendColorBefore, "matrixWorldAutoUpdate pin does not replace blendColor");
+  assert.equal(wrong.material.blendAlpha, blendAlphaBefore, "matrixWorldAutoUpdate pin does not change blendAlpha");
+  assert.equal(wrong.material.fog, true, "matrixWorldAutoUpdate pin does not change fog");
+  assert.equal(wrong.material.envMapRotation.x, 0, "matrixWorldAutoUpdate pin does not change envMapRotation");
+});
+
+test("pinColorOnlyUnlitBasicMatrixWorldAutoUpdate / pinColorOnlyVisualMatrixWorldAutoUpdate skip mapped, lit, morph, colliders, shared blocked", () => {
+  const colorOnly = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  colorOnly.matrixWorldAutoUpdate = false;
+  const mapped = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } })
+  );
+  mapped.matrixWorldAutoUpdate = false;
+  const std = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshStandardMaterial()
+  );
+  std.matrixWorldAutoUpdate = false;
+  pinColorOnlyUnlitBasicMatrixWorldAutoUpdate(colorOnly);
+  pinColorOnlyUnlitBasicMatrixWorldAutoUpdate(mapped);
+  pinColorOnlyUnlitBasicMatrixWorldAutoUpdate(std);
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(colorOnly);
+  assert.equal(mapped.matrixWorldAutoUpdate, false, "mapped MeshBasic stays authored matrixWorldAutoUpdate");
+  assert.equal(std.matrixWorldAutoUpdate, false, "MeshStandard stays authored matrixWorldAutoUpdate");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = mapped;
+  const colorMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  colorMesh.matrixWorldAutoUpdate = false;
+  const morph = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xc1c3c9 })
+  );
+  morph.geometry.morphAttributes.position = [morph.geometry.getAttribute("position").clone()];
+  morph.matrixWorldAutoUpdate = false;
+  const collider = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.matrixWorldAutoUpdate = false;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedVisual.matrixWorldAutoUpdate = false;
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  sharedCollider.matrixWorldAutoUpdate = false;
+  body.add(mappedMesh, colorMesh, morph, sharedVisual);
+  root.add(body, collider, sharedCollider, std);
+  pinColorOnlyVisualMatrixWorldAutoUpdate(root);
+  assertQuestSafeUnlitMatrixWorldAutoUpdate(colorMesh, "entity helper color-only");
+  assert.equal(mapped.matrixWorldAutoUpdate, false, "mapped MeshBasic stays authored via entity helper");
+  assert.equal(morph.matrixWorldAutoUpdate, false, "morph color-only MeshBasic is skipped");
+  assert.equal(collider.matrixWorldAutoUpdate, false, "collider Mesh stays authored");
+  assert.equal(sharedVisual.matrixWorldAutoUpdate, false, "shared collider material visual stays unpinned");
+  assert.equal(sharedCollider.matrixWorldAutoUpdate, false, "shared collider stays authored");
+  assert.equal(std.matrixWorldAutoUpdate, false, "MeshStandard stays authored via entity helper");
 });
 
 test("v0.48 pins fog/toneMapped false and opaque FrontSide on unique color-only MeshBasics; envelope stays v0.47", () => {

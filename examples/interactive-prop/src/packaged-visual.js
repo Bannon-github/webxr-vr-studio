@@ -269,6 +269,26 @@
  * colliders stay untouched. Does **not** enable
  * CustomBlending or change `blending` away from
  * NormalBlending. Does **not** pin `mesh.visible`.
+ *
+ * v0.69: after that layers pin (and after the
+ * v0.68 blendColor / blendAlpha material pin),
+ * `pinColorOnlyVisualMatrixWorldAutoUpdate` sets
+ * r170 Object3D `matrixWorldAutoUpdate = true`
+ * (`Object3D.DEFAULT_MATRIX_WORLD_AUTO_UPDATE`)
+ * on packed color-only unlit MeshBasic visual
+ * meshes (same `isColorOnlyUnlitBasic` gate).
+ * Accidental DCC / GLB leftover
+ * `matrixWorldAutoUpdate = false` can stall
+ * automatic world-matrix updates from animated
+ * parents even when local `matrixAutoUpdate`
+ * policy is intentional. Does not hex-dedupe or
+ * invent meshes. Mapped / lit stay at authored /
+ * r170 Mesh defaults. Collider meshes stay
+ * untouched. Does **not** pin `mesh.visible`
+ * (LOD visibility uses it), change
+ * `matrixAutoUpdate` (v0.45 already freezes
+ * static body LOD leaves), change `layers`, or
+ * change `blendColor` / `blendAlpha`.
  */
 
 import {
@@ -282,6 +302,7 @@ import {
   pinColorOnlyVisualFrustumCulled,
   pinColorOnlyVisualRenderOrder,
   pinColorOnlyVisualLayers,
+  pinColorOnlyVisualMatrixWorldAutoUpdate,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -446,6 +467,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualFrustumCulled(root);
   pinColorOnlyVisualRenderOrder(root);
   pinColorOnlyVisualLayers(root);
+  pinColorOnlyVisualMatrixWorldAutoUpdate(root);
   return root;
 }
 
