@@ -92,6 +92,7 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.dithering, false, `${label} pins dithering false`);
   assert.equal(mat.alphaToCoverage, false, `${label} pins alphaToCoverage false`);
   assert.equal(mat.wireframe, false, `${label} pins wireframe false`);
+  assert.equal(mat.wireframeLinewidth, 1, `${label} pins wireframeLinewidth 1`);
   assert.equal(mat.colorWrite, true, `${label} pins colorWrite true`);
   assert.equal(mat.depthFunc, THREE.LessEqualDepth, `${label} pins LessEqualDepth`);
   assert.equal(mat.polygonOffset, false, `${label} pins polygonOffset false`);
@@ -739,6 +740,7 @@ test("packaged ingest pins fog/toneMapped and opaque FrontSide on color-only Mes
     refractionRatio: 0.7,
     lightMapIntensity: 0.4,
     aoMapIntensity: 0.25,
+    wireframeLinewidth: 2,
   });
   const wrongMesh = boxMesh("dccDoubleSide", wrong);
   groups[0][0].add(mappedMesh, wrongMesh);
@@ -1587,6 +1589,51 @@ test("packaged ingest pins r170 MeshBasic map-intensity companions; mapped/lit s
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.material.lightMapIntensity, 0.3, "collider MeshBasic stays authored lightMapIntensity");
   assert.equal(colliderGrab.material.aoMapIntensity, 0.4, "collider MeshBasic stays authored aoMapIntensity");
+});
+
+test("packaged ingest pins r170 MeshBasic wireframeLinewidth; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.wireframe, false, "r170 MeshBasicMaterial defaults wireframe false");
+  assert.equal(fresh.wireframeLinewidth, 1, "r170 MeshBasicMaterial defaults wireframeLinewidth 1");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    wireframeLinewidth: 3,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    wireframeLinewidth: 2,
+  });
+  const wrongMesh = boxMesh("dccWireframeLinewidth", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.wireframeLinewidth = 4;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.material.wireframe, false, "color-only pin does not enable wireframe");
+    assert.equal(mesh.material.wireframeLinewidth, 1, "color-only pin sets wireframeLinewidth 1");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC non-1 wireframeLinewidth color-only MeshBasic");
+  assert.equal(wrong.wireframe, false, "color-only leftover still has wireframe false");
+  assert.equal(wrong.wireframeLinewidth, 1, "DCC non-1 wireframeLinewidth is corrected to 1");
+  assert.equal(mapped.wireframeLinewidth, 3, "mapped MeshBasic stays authored wireframeLinewidth");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.wireframeLinewidth, 4, "collider MeshBasic stays authored wireframeLinewidth");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
