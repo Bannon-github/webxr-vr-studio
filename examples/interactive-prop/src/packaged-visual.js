@@ -225,6 +225,18 @@
  * `isColorOnlyUnlitBasic`). Mapped / lit / colliders
  * stay untouched. Does **not** enable wireframe. Does
  * **not** pin `mesh.visible`.
+ *
+ * v0.66: the same helper also pins r170 MeshBasic
+ * `envMapRotation` `(0, 0, 0)` / `order = 'XYZ'`
+ * on those color-only MeshBasics (keeps the existing
+ * Euler instance). Accidental DCC / GLB leftover
+ * non-zero `envMapRotation` still sits on the
+ * material even when `envMap` is null (still passes
+ * `isColorOnlyUnlitBasic`). Mapped / lit / colliders
+ * stay untouched. Does not force envMap or attach
+ * maps. Does not change the `isColorOnlyUnlitBasic`
+ * map / envMap gate. Does **not** enable wireframe.
+ * Does **not** pin `mesh.visible`.
  */
 
 import {

@@ -128,6 +128,12 @@ function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.refractionRatio, 0.98, `${label} pins refractionRatio 0.98`);
   assert.equal(mat.lightMapIntensity, 1, `${label} pins lightMapIntensity 1`);
   assert.equal(mat.aoMapIntensity, 1, `${label} pins aoMapIntensity 1`);
+  assert.equal(mat.envMap, null, `${label} leaves envMap null`);
+  assert.ok(mat.envMapRotation, `${label} keeps envMapRotation`);
+  assert.equal(mat.envMapRotation.x, 0, `${label} pins envMapRotation.x 0`);
+  assert.equal(mat.envMapRotation.y, 0, `${label} pins envMapRotation.y 0`);
+  assert.equal(mat.envMapRotation.z, 0, `${label} pins envMapRotation.z 0`);
+  assert.equal(mat.envMapRotation.order, "XYZ", `${label} pins envMapRotation.order XYZ`);
 }
 
 function assertQuestSafeUnlitShadowFlags(mesh, label = "color-only MeshBasic mesh") {
@@ -1691,6 +1697,77 @@ test("packaged ingest pins r170 MeshBasic wireframe line style; mapped/lit stay 
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.material.wireframeLinecap, "square", "collider MeshBasic stays authored wireframeLinecap");
   assert.equal(colliderGrab.material.wireframeLinejoin, "bevel", "collider MeshBasic stays authored wireframeLinejoin");
+});
+
+test("packaged ingest pins r170 MeshBasic envMapRotation; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.envMap, null, "r170 MeshBasicMaterial defaults envMap null");
+  assert.equal(fresh.envMapRotation.x, 0, "r170 MeshBasicMaterial defaults envMapRotation.x 0");
+  assert.equal(fresh.envMapRotation.y, 0, "r170 MeshBasicMaterial defaults envMapRotation.y 0");
+  assert.equal(fresh.envMapRotation.z, 0, "r170 MeshBasicMaterial defaults envMapRotation.z 0");
+  assert.equal(fresh.envMapRotation.order, "XYZ", "r170 MeshBasicMaterial defaults envMapRotation.order XYZ");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  mapped.envMapRotation.x = 0.4;
+  mapped.envMapRotation.y = 0.8;
+  mapped.envMapRotation.z = -0.2;
+  mapped.envMapRotation.order = "YXZ";
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongRotation = wrong.envMapRotation;
+  wrong.envMapRotation.x = 0.5;
+  wrong.envMapRotation.y = 1.2;
+  wrong.envMapRotation.z = -0.4;
+  wrong.envMapRotation.order = "ZYX";
+  const wrongMesh = boxMesh("dccEnvMapRotation", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.envMapRotation.x = 0.15;
+  colliderGrabBefore.material.envMapRotation.y = 0.25;
+  colliderGrabBefore.material.envMapRotation.z = 0.35;
+  colliderGrabBefore.material.envMapRotation.order = "YZX";
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.material.wireframe, false, "color-only pin does not enable wireframe");
+    assert.equal(mesh.material.envMap, null, "color-only pin does not force envMap");
+    assert.equal(mesh.material.envMapRotation.x, 0, "color-only pin sets envMapRotation.x 0");
+    assert.equal(mesh.material.envMapRotation.y, 0, "color-only pin sets envMapRotation.y 0");
+    assert.equal(mesh.material.envMapRotation.z, 0, "color-only pin sets envMapRotation.z 0");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC non-zero envMapRotation color-only MeshBasic");
+  assert.equal(wrong.envMapRotation, wrongRotation, "DCC leftover keeps its Euler instance");
+  assert.equal(wrong.wireframe, false, "color-only leftover still has wireframe false");
+  assert.equal(wrong.envMap, null, "DCC leftover envMap stays null");
+  assert.equal(wrong.envMapRotation.x, 0, "DCC non-zero envMapRotation.x is corrected to 0");
+  assert.equal(wrong.envMapRotation.y, 0, "DCC non-zero envMapRotation.y is corrected to 0");
+  assert.equal(wrong.envMapRotation.z, 0, "DCC non-zero envMapRotation.z is corrected to 0");
+  assert.equal(wrong.envMapRotation.order, "XYZ", "DCC leftover envMapRotation.order is corrected to XYZ");
+  assert.equal(mapped.envMapRotation.x, 0.4, "mapped MeshBasic stays authored envMapRotation.x");
+  assert.equal(mapped.envMapRotation.y, 0.8, "mapped MeshBasic stays authored envMapRotation.y");
+  assert.equal(mapped.envMapRotation.z, -0.2, "mapped MeshBasic stays authored envMapRotation.z");
+  assert.equal(mapped.envMapRotation.order, "YXZ", "mapped MeshBasic stays authored envMapRotation.order");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.envMapRotation.x, 0.15, "collider MeshBasic stays authored envMapRotation.x");
+  assert.equal(colliderGrab.material.envMapRotation.y, 0.25, "collider MeshBasic stays authored envMapRotation.y");
+  assert.equal(colliderGrab.material.envMapRotation.z, 0.35, "collider MeshBasic stays authored envMapRotation.z");
+  assert.equal(colliderGrab.material.envMapRotation.order, "YZX", "collider MeshBasic stays authored envMapRotation.order");
 });
 
 test("packaged ingest pins castShadow/receiveShadow off on color-only meshes; mapped/lit stay authored", () => {
