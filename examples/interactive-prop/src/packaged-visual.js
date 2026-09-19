@@ -215,6 +215,16 @@
  * passes `isColorOnlyUnlitBasic`). Mapped / lit /
  * colliders stay untouched. Does **not** enable
  * wireframe. Does **not** pin `mesh.visible`.
+ *
+ * v0.65: the same helper also pins r170 MeshBasic
+ * `wireframeLinecap = 'round'` /
+ * `wireframeLinejoin = 'round'` on those color-only
+ * MeshBasics. Accidental DCC / GLB `'butt'` /
+ * `'miter'` leftovers still sit on the material even
+ * when `wireframe === false` (still passes
+ * `isColorOnlyUnlitBasic`). Mapped / lit / colliders
+ * stay untouched. Does **not** enable wireframe. Does
+ * **not** pin `mesh.visible`.
  */
 
 import {
