@@ -309,6 +309,29 @@
  * freezes static body LOD leaves), change
  * `matrixWorldAutoUpdate`, change `layers`, or
  * change `blendColor` / `blendAlpha`.
+ *
+ * v0.71: after that up pin,
+ * `pinColorOnlyVisualScale` sets r170 Object3D
+ * `scale` `(1, 1, 1)` on packed color-only
+ * unlit MeshBasic visual meshes (same
+ * `isColorOnlyUnlitBasic` gate; keeps the
+ * existing Vector3 instance). Accidental DCC /
+ * GLB leftover non-unit / negative /
+ * non-uniform `scale` (common non-uniform bake,
+ * negative axis flip, or non-1 uniform
+ * leftovers) can invert face winding under
+ * FrontSide culling (missing draws) and skew
+ * world-matrix composition even when local
+ * position/rotation are intentional. Does not
+ * hex-dedupe or invent meshes. Mapped / lit
+ * stay at authored / r170 Mesh defaults.
+ * Collider meshes stay untouched. Does **not**
+ * pin `mesh.visible` (LOD visibility uses it),
+ * change `matrixAutoUpdate` (v0.45 already
+ * freezes static body LOD leaves), change
+ * `matrixWorldAutoUpdate`, change `layers`,
+ * change `up`, or change `blendColor` /
+ * `blendAlpha`.
  */
 
 import {
@@ -324,6 +347,7 @@ import {
   pinColorOnlyVisualLayers,
   pinColorOnlyVisualMatrixWorldAutoUpdate,
   pinColorOnlyVisualUp,
+  pinColorOnlyVisualScale,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -490,6 +514,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualLayers(root);
   pinColorOnlyVisualMatrixWorldAutoUpdate(root);
   pinColorOnlyVisualUp(root);
+  pinColorOnlyVisualScale(root);
   return root;
 }
 
