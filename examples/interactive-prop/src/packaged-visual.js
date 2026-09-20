@@ -355,6 +355,38 @@
  * `matrixWorldAutoUpdate` / `layers` /
  * `up` / `scale` / `blendColor` /
  * `blendAlpha`.
+ *
+ * v0.73: after that scale pin,
+ * `pinColorOnlyVisualRotationOrder` sets
+ * r170 Object3D `rotation.order = 'XYZ'`
+ * on packed color-only unlit MeshBasic
+ * visual meshes (same
+ * `isColorOnlyUnlitBasic` gate; keeps
+ * the existing Euler instance). Does
+ * **not** rewrite `rotation.x` /
+ * `rotation.y` / `rotation.z`
+ * (lid/latch/tool/fastener intentional
+ * local rotations must stay). Does
+ * **not** touch `mesh.quaternion` (Three
+ * keeps quaternion in sync from Euler
+ * when rotation is edited; do not force
+ * identity quaternion). Accidental DCC /
+ * GLB leftover non-`XYZ` Euler `order`
+ * (`YXZ`, `ZYX`, etc.) can change how
+ * subsequent local Euler edits compose
+ * even when current xyz values look
+ * fine. Does not hex-dedupe or invent
+ * meshes. Mapped / lit stay at
+ * authored / r170 Mesh defaults.
+ * Collider meshes stay untouched. Does
+ * **not** pin `mesh.visible` (LOD
+ * visibility uses it), change
+ * `matrixAutoUpdate` (v0.45 already
+ * freezes static body LOD leaves),
+ * change `matrixWorldAutoUpdate`,
+ * change `layers`, change `up`, change
+ * `scale`, or change `blendColor` /
+ * `blendAlpha` / dithering / A2C.
  */
 
 import {
@@ -371,6 +403,7 @@ import {
   pinColorOnlyVisualMatrixWorldAutoUpdate,
   pinColorOnlyVisualUp,
   pinColorOnlyVisualScale,
+  pinColorOnlyVisualRotationOrder,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -538,6 +571,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMatrixWorldAutoUpdate(root);
   pinColorOnlyVisualUp(root);
   pinColorOnlyVisualScale(root);
+  pinColorOnlyVisualRotationOrder(root);
   return root;
 }
 

@@ -203,6 +203,16 @@ function assertQuestSafeUnlitScale(mesh, label = "color-only MeshBasic mesh") {
   assertR170Object3DScaleDefault(mesh, label);
 }
 
+function assertR170Object3DRotationOrderDefault(obj, label = "r170 Object3D") {
+  assert.ok(obj.rotation, `${label} has rotation`);
+  assert.equal(obj.rotation.isEuler, true, `${label} rotation is Euler`);
+  assert.equal(obj.rotation.order, "XYZ", `${label} rotation.order is XYZ`);
+}
+
+function assertQuestSafeUnlitRotationOrder(mesh, label = "color-only MeshBasic mesh") {
+  assertR170Object3DRotationOrderDefault(mesh, label);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -2460,4 +2470,117 @@ test("packaged ingest without lod groups still pins color-only Mesh scale", () =
   assertQuestSafeUnlitScale(fastener, "fail-soft fastener");
   const colliderGrab = root.getObjectByName("collider_grab");
   assertR170Object3DScaleDefault(colliderGrab, "fail-soft collider keeps r170 scale default");
+});
+
+test("packaged ingest pins r170 Object3D rotation.order XYZ; mapped/lit stay authored", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  const freshObj = new THREE.Object3D();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(fresh.rotation.order, "XYZ", "r170 Mesh.rotation.order is XYZ");
+  assert.equal(freshObj.rotation.order, "XYZ", "r170 Object3D.rotation.order is XYZ");
+  assertR170Object3DRotationOrderDefault(fresh, "r170 Mesh");
+  assertR170Object3DRotationOrderDefault(freshObj, "r170 Object3D");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  mappedMesh.rotation.set(0.1, 0.2, 0.3, "YXZ");
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccRotationOrder", wrong);
+  const rotationBefore = wrongMesh.rotation;
+  const quatBefore = wrongMesh.quaternion;
+  wrongMesh.rotation.set(0.25, -0.5, 0.75, "YXZ");
+  const visibleBefore = wrongMesh.visible;
+  const layersMaskBefore = wrongMesh.layers.mask;
+  const worldAutoBefore = wrongMesh.matrixWorldAutoUpdate;
+  const upBefore = wrongMesh.up.clone();
+  const scaleBefore = wrongMesh.scale.clone();
+  const blendColorBefore = wrong.blendColor;
+  const blendAlphaBefore = wrong.blendAlpha;
+  const ditheringBefore = wrong.dithering;
+  const a2cBefore = wrong.alphaToCoverage;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.rotation.order = "ZYX";
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitRotationOrder(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitScale(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitUp(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitLayers(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRenderOrder(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFrustumCulled(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowFlags(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+    assert.equal(mesh.material.dithering, false, "prior dithering pin stays intact");
+    assert.equal(mesh.material.alphaToCoverage, false, "prior A2C pin stays intact");
+    assert.equal(mesh.material.blendColor.r, 0, "prior blendColor pin stays intact");
+    assert.equal(mesh.material.blendAlpha, 0, "prior blendAlpha pin stays intact");
+  }
+  assertQuestSafeUnlitRotationOrder(wrongMesh, "packaged DCC leftover rotation.order color-only Mesh");
+  assert.equal(wrongMesh.rotation, rotationBefore, "DCC leftover keeps its Euler instance");
+  assert.equal(wrongMesh.quaternion, quatBefore, "DCC leftover keeps its quaternion instance");
+  assert.equal(wrongMesh.rotation.x, 0.25, "DCC leftover keeps authored rotation.x");
+  assert.equal(wrongMesh.rotation.y, -0.5, "DCC leftover keeps authored rotation.y");
+  assert.equal(wrongMesh.rotation.z, 0.75, "DCC leftover keeps authored rotation.z");
+  assert.ok(
+    wrongMesh.quaternion.x !== 0 || wrongMesh.quaternion.y !== 0 || wrongMesh.quaternion.z !== 0 || wrongMesh.quaternion.w !== 1,
+    "rotation-order pin does not force identity quaternion"
+  );
+  assert.equal(wrongMesh.matrixAutoUpdate, false, "body LOD leaf still frozen by v0.45; rotation-order pin does not unfreeze");
+  assert.equal(wrongMesh.matrixWorldAutoUpdate, worldAutoBefore, "rotation-order pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrongMesh.visible, visibleBefore, "rotation-order pin does not change mesh.visible");
+  assert.equal(wrongMesh.layers.mask, layersMaskBefore, "rotation-order pin does not change layers");
+  assert.equal(wrongMesh.up.x, upBefore.x, "rotation-order pin does not change up.x");
+  assert.equal(wrongMesh.up.y, upBefore.y, "rotation-order pin does not change up.y");
+  assert.equal(wrongMesh.up.z, upBefore.z, "rotation-order pin does not change up.z");
+  assert.equal(wrongMesh.scale.x, scaleBefore.x, "rotation-order pin does not change scale.x");
+  assert.equal(wrongMesh.scale.y, scaleBefore.y, "rotation-order pin does not change scale.y");
+  assert.equal(wrongMesh.scale.z, scaleBefore.z, "rotation-order pin does not change scale.z");
+  assert.equal(wrong.blendColor, blendColorBefore, "rotation-order pin does not replace blendColor");
+  assert.equal(wrong.blendAlpha, blendAlphaBefore, "rotation-order pin does not change blendAlpha");
+  assert.equal(wrong.dithering, ditheringBefore, "rotation-order pin does not change dithering");
+  assert.equal(wrong.alphaToCoverage, a2cBefore, "rotation-order pin does not change alphaToCoverage");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live; rotation-order pin does not freeze it");
+  assert.equal(fastener.matrixWorldAutoUpdate, true, "fastener world-matrix auto-update stays on");
+  assertQuestSafeUnlitRotationOrder(fastener, "fastener");
+  assert.equal(mappedMesh.rotation.order, "YXZ", "mapped MeshBasic stays authored rotation.order");
+  assert.equal(mappedMesh.rotation.x, 0.1, "mapped MeshBasic stays authored rotation.x");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.rotation.order, "ZYX", "collider Mesh stays authored rotation.order");
+});
+
+test("packaged ingest without lod groups still pins color-only Mesh rotation.order", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  visualMeshes(body)[0].rotation.set(0.1, 0.2, 0.3, "YXZ");
+  visualMeshes(lid)[0].rotation.order = "ZYX";
+  visualMeshes(latch)[0].rotation.order = "YZX";
+  visualMeshes(tool)[0].rotation.order = "XZY";
+  fastener.rotation.order = "YXZ";
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitRotationOrder(visualMeshes(body)[0], "fail-soft body");
+  assert.equal(visualMeshes(body)[0].rotation.x, 0.1, "fail-soft body keeps authored rotation.x");
+  assert.equal(visualMeshes(body)[0].rotation.y, 0.2, "fail-soft body keeps authored rotation.y");
+  assert.equal(visualMeshes(body)[0].rotation.z, 0.3, "fail-soft body keeps authored rotation.z");
+  assertQuestSafeUnlitRotationOrder(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitRotationOrder(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitRotationOrder(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitRotationOrder(fastener, "fail-soft fastener");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assertR170Object3DRotationOrderDefault(colliderGrab, "fail-soft collider keeps r170 rotation.order default");
 });
