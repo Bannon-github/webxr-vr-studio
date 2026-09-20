@@ -488,6 +488,41 @@
  * stencil companions / polygonOffset
  * companions / dithering / A2C /
  * `blendColor` / `blendAlpha`.
+ *
+ * v0.77: after that customDepth/Distance
+ * clear,
+ * `pinColorOnlyVisualRenderCallbacks`
+ * deletes leftover own-property
+ * `onBeforeRender` / `onAfterRender` so
+ * the r170 Object3D prototype empty
+ * no-ops remain on packed color-only
+ * unlit MeshBasic visual meshes (same
+ * `isColorOnlyUnlitBasic` gate). Does
+ * **not** invent replacement callbacks.
+ * Does **not** assign `undefined`
+ * (WebGLRenderer always invokes these).
+ * Does **not** enable shadows or touch
+ * `customDepthMaterial` /
+ * `customDistanceMaterial`. Accidental
+ * DCC / GLB leftover own-property
+ * render callbacks become per-draw JS
+ * work on Quest Browser / TBDR.
+ * Does not hex-dedupe or invent meshes.
+ * Mapped / lit stay at authored / r170
+ * Mesh defaults. Collider meshes stay
+ * untouched. Does **not** pin
+ * `mesh.visible` (LOD visibility uses
+ * it), change `matrixAutoUpdate`
+ * (v0.45 already freezes static body
+ * LOD leaves), change
+ * `matrixWorldAutoUpdate`, change
+ * `layers`, change `up`, change
+ * `scale`, change `rotation.order`, or
+ * change prior material pins including
+ * stencil companions / polygonOffset
+ * companions / dithering / A2C /
+ * `blendColor` / `blendAlpha` / the
+ * v0.76 customDepth/Distance clear.
  */
 
 import {
@@ -506,6 +541,7 @@ import {
   pinColorOnlyVisualScale,
   pinColorOnlyVisualRotationOrder,
   pinColorOnlyVisualCustomShadowMaterials,
+  pinColorOnlyVisualRenderCallbacks,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -675,6 +711,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualScale(root);
   pinColorOnlyVisualRotationOrder(root);
   pinColorOnlyVisualCustomShadowMaterials(root);
+  pinColorOnlyVisualRenderCallbacks(root);
   return root;
 }
 
