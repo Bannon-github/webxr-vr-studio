@@ -414,6 +414,44 @@
  * `up` / `scale` / `rotation.order` /
  * `blendColor` / `blendAlpha` /
  * dithering / A2C.
+ *
+ * v0.75: the same material helper also pins
+ * r170 Material `stencilRef = 0` /
+ * `stencilWriteMask = 0xff` /
+ * `stencilFuncMask = 0xff` /
+ * `stencilZFail = KeepStencilOp` /
+ * `stencilZPass = KeepStencilOp` on
+ * those color-only MeshBasics as
+ * first-class measured flags (v0.53
+ * already assigned the full stencil
+ * suite and measured `stencilWrite` /
+ * `stencilFunc` / `stencilFail` in the
+ * short form). Accidental DCC / GLB
+ * leftover non-zero `stencilRef` /
+ * non-0xff masks / non-Keep
+ * `stencilZFail` / `stencilZPass` can
+ * still sit on color-only unlit
+ * midtone stand-ins even when
+ * `stencilWrite === false`. When
+ * stencil write is off they are unused
+ * GPU state noise and can confuse DCC
+ * round-trips; if stencil write were
+ * later flipped on, leftovers would
+ * test/write the stencil buffer on a
+ * TBDR mobile GPU. Mapped / lit /
+ * colliders stay untouched. Does
+ * **not** enable stencil write. Does
+ * **not** invent non-Always func /
+ * non-Keep ops / non-zero ref /
+ * non-0xff masks. Does **not** pin
+ * `mesh.visible`. Does not change
+ * `matrixAutoUpdate` /
+ * `matrixWorldAutoUpdate` / `layers` /
+ * `up` / `scale` / `rotation.order` /
+ * prior material pins including
+ * polygonOffset companions /
+ * dithering / A2C / `blendColor` /
+ * `blendAlpha`.
  */
 
 import {
