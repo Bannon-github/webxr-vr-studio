@@ -196,6 +196,11 @@ function assertR170MeshBasicBlendColorAlphaDefaults(mat, label = "r170 MeshBasic
   assert.equal(mat.blendAlpha, 0, `${label} defaults blendAlpha 0`);
 }
 
+function assertR170MeshBasicDitheringAlphaToCoverageDefaults(mat, label = "r170 MeshBasicMaterial") {
+  assert.equal(mat.dithering, false, `${label} defaults dithering false`);
+  assert.equal(mat.alphaToCoverage, false, `${label} defaults alphaToCoverage false`);
+}
+
 function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.fog, false, `${label} pins fog false`);
   assert.equal(mat.toneMapped, false, `${label} pins toneMapped false`);
@@ -4390,6 +4395,161 @@ test("v0.71 pins r170 Object3D scale on packed color-only visuals; envelope stay
   assert.equal(freshMesh.material.blendAlpha, freshBlendAlpha, "scale pin does not touch blendAlpha");
 });
 
+test("v0.72 pins r170 Material dithering/alphaToCoverage on unique color-only MeshBasics; envelope stays v0.71", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
+  assertR170MeshBasicBlendingAlphaDefaults(fresh);
+  assertR170MeshBasicGpuStateDefaults(fresh);
+  assertR170MeshBasicStencilDefaults(fresh);
+  assertR170MeshBasicClippingDefaults(fresh);
+  assertR170MeshBasicAlphaHashForceSinglePassDefaults(fresh);
+  assertR170MeshBasicNormalBlendingCompanions(fresh);
+  assertR170MeshBasicVertexColorsDefault(fresh);
+  assertR170MeshBasicPrecisionDefault(fresh);
+  assertR170MeshBasicShadowSideDefault(fresh);
+  assertR170MeshBasicVisibleDefault(fresh);
+  assertR170MeshBasicEnvMapCompanions(fresh);
+  assertR170MeshBasicMapIntensityCompanions(fresh);
+  assertR170MeshBasicWireframeLinewidthDefault(fresh);
+  assertR170MeshBasicWireframeLineStyleDefaults(fresh);
+  assertR170MeshBasicEnvMapRotationDefault(fresh);
+  assertR170MeshBasicBlendColorAlphaDefaults(fresh);
+  assertR170MeshBasicDitheringAlphaToCoverageDefaults(fresh);
+  assert.equal(fresh.dithering, false, "r170 MeshBasicMaterial defaults dithering false");
+  assert.equal(fresh.alphaToCoverage, false, "r170 MeshBasicMaterial defaults alphaToCoverage false");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+    assert.equal(mat.dithering, false, "color-only MeshBasic pins dithering false");
+    assert.equal(mat.alphaToCoverage, false, "color-only MeshBasic pins alphaToCoverage false");
+    assert.equal(mat.blendColor.r, 0, "prior blendColor.r pin stays 0");
+    assert.equal(mat.blendColor.g, 0, "prior blendColor.g pin stays 0");
+    assert.equal(mat.blendColor.b, 0, "prior blendColor.b pin stays 0");
+    assert.equal(mat.blendAlpha, 0, "prior blendAlpha pin stays 0");
+  }
+  const named = crate.userData.materials.lod0;
+  assertQuestSafeUnlitFlags(named.wood, "wood");
+  assertQuestSafeUnlitFlags(named.brass, "brass");
+  assertQuestSafeUnlitFlags(named.steel, "steel");
+  assert.equal(named.wood.dithering, false, "wood pins dithering false");
+  assert.equal(named.brass.dithering, false, "brass pins dithering false");
+  assert.equal(named.steel.dithering, false, "steel pins dithering false");
+  assert.equal(named.wood.alphaToCoverage, false, "wood pins alphaToCoverage false");
+  assert.equal(named.brass.alphaToCoverage, false, "brass pins alphaToCoverage false");
+  assert.equal(named.steel.alphaToCoverage, false, "steel pins alphaToCoverage false");
+  assert.equal(named.wood, crate.userData.materials.lod1.wood);
+  assert.equal(named.brass, crate.userData.materials.lod1.brass);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFlags(mesh.material);
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitRenderOrder(mesh);
+    assertQuestSafeUnlitLayers(mesh);
+    assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh);
+    assertQuestSafeUnlitUp(mesh);
+    assertQuestSafeUnlitScale(mesh);
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+    assert.equal(mesh.material.dithering, false, "visual MeshBasic dithering stays false");
+    assert.equal(mesh.material.alphaToCoverage, false, "visual MeshBasic alphaToCoverage stays false");
+    assert.equal(mesh.material.blendColor.r, 0, "visual MeshBasic blendColor.r stays 0");
+    assert.equal(mesh.material.blendAlpha, 0, "visual MeshBasic blendAlpha stays 0");
+  }
+  const scaleCounts = countVisualScaleDefault(crate);
+  assert.equal(scaleCounts.unit, 13, "scale-default count stays 13");
+  assert.equal(scaleCounts.other, 0);
+  const upCounts = countVisualUpDefault(crate);
+  assert.equal(upCounts.yUp, 13, "up-default count stays 13");
+  assert.equal(upCounts.other, 0);
+  const worldAutoCounts = countVisualMatrixWorldAutoUpdate(crate);
+  assert.equal(worldAutoCounts.on, 13, "matrixWorldAutoUpdate-on count stays 13");
+  assert.equal(worldAutoCounts.off, 0);
+  const layerCounts = countVisualLayersDefault(crate);
+  assert.equal(layerCounts.layer0Only, 13, "layers-default count stays 13");
+  assert.equal(layerCounts.other, 0);
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  assert.equal(renderOrderCounts.nonzero, 0);
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitFlags(lidMesh.material, "lidMesh");
+  assertQuestSafeUnlitFlags(latchMesh.material, "latchMesh");
+  assertQuestSafeUnlitFlags(fastener.material, "fastenerMesh");
+  assert.equal(fastener.material.dithering, false, "fastenerMesh pins dithering false");
+  assert.equal(fastener.material.alphaToCoverage, false, "fastenerMesh pins alphaToCoverage false");
+  assert.equal(fastener.geometry.getAttribute("position") ? cpuAttrBytes(fastener.geometry) : 0, 216, "fastener attrBytes stay 216");
+
+  const lod0Group = crate.userData.lod.groups[0][0];
+  assert.equal(lod0Group.visible, true, "LOD0 group starts visible");
+  setToolboxLod(crate, 1);
+  assert.equal(lod0Group.visible, false, "LOD hides via group.visible, not mesh.visible");
+  assert.equal(lidMesh.visible, true, "mesh.visible is not pinned; LOD uses group.visible");
+  setToolboxLod(crate, 0);
+
+  for (const c of crate.userData.colliders) {
+    assert.equal(c.material.dithering, false, "collider MeshBasic keeps r170 dithering default");
+    assert.equal(c.material.alphaToCoverage, false, "collider MeshBasic keeps r170 alphaToCoverage default");
+    assert.equal(c.material.wireframe, true, "collider MeshBasic keeps authored wireframe");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(activityState(crate), "closed");
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assert.equal(fastener.material.dithering, false, "fastener dithering stays false after L5");
+  assert.equal(fastener.material.alphaToCoverage, false, "fastener alphaToCoverage stays false after L5");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+});
+
 test("pinColorOnlyUnlitBasicScale corrects a wrong color-only Mesh that still passes isColorOnlyUnlitBasic", () => {
   const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
   assertR170Object3DScaleDefault(fresh, "r170 Mesh");
@@ -4656,6 +4816,21 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assert.equal(blendOnly.blendAlpha, 0, "non-zero leftover blendAlpha is corrected to r170 default 0");
   assert.equal(blendOnly.blending, THREE.NormalBlending, "blendColor pin does not enable CustomBlending");
 
+  const ditherOnly = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    dithering: true,
+    alphaToCoverage: true,
+  });
+  assert.equal(isColorOnlyUnlitBasic(ditherOnly), true, "dithering leftover still passes isColorOnlyUnlitBasic");
+  assert.equal(ditherOnly.dithering, true, "DCC leftover is dithering true");
+  assert.equal(ditherOnly.alphaToCoverage, true, "DCC leftover is alphaToCoverage true");
+  assert.equal(ditherOnly.blending, THREE.NormalBlending, "r170 leftover keeps NormalBlending");
+  pinColorOnlyUnlitBasicFlags(ditherOnly);
+  assert.equal(ditherOnly.dithering, false, "dithering leftover is corrected to r170 default false");
+  assert.equal(ditherOnly.alphaToCoverage, false, "alphaToCoverage leftover is corrected to r170 default false");
+  assert.equal(ditherOnly.blending, THREE.NormalBlending, "dithering pin does not change blending");
+  assertQuestSafeUnlitFlags(ditherOnly, "dithering leftover color-only MeshBasic");
+
   const wrong = new THREE.MeshBasicMaterial({
     color: 0x633318,
     transparent: true,
@@ -4801,6 +4976,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
     blending: THREE.AdditiveBlending,
     premultipliedAlpha: true,
     alphaTest: 0.25,
+    dithering: true,
+    alphaToCoverage: true,
     wireframe: true,
     colorWrite: false,
     depthFunc: THREE.AlwaysDepth,
@@ -4855,6 +5032,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
     blending: THREE.CustomBlending,
     premultipliedAlpha: true,
     alphaTest: 0.25,
+    dithering: true,
+    alphaToCoverage: true,
     wireframe: true,
     colorWrite: false,
     depthFunc: THREE.AlwaysDepth,
@@ -4915,6 +5094,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(mapped.blending, THREE.AdditiveBlending, "mapped MeshBasic stays authored blending");
   assert.equal(mapped.premultipliedAlpha, true, "mapped MeshBasic stays authored premultipliedAlpha");
   assert.equal(mapped.alphaTest, 0.25, "mapped MeshBasic stays authored alphaTest");
+  assert.equal(mapped.dithering, true, "mapped MeshBasic stays authored dithering");
+  assert.equal(mapped.alphaToCoverage, true, "mapped MeshBasic stays authored alphaToCoverage");
   assert.equal(mapped.wireframe, true, "mapped MeshBasic stays authored wireframe");
   assert.equal(mapped.colorWrite, false, "mapped MeshBasic stays authored colorWrite");
   assert.equal(mapped.depthFunc, THREE.AlwaysDepth, "mapped MeshBasic stays authored depthFunc");
@@ -4963,6 +5144,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(std.blending, THREE.CustomBlending, "MeshStandard stays authored blending");
   assert.equal(std.premultipliedAlpha, true, "MeshStandard stays authored premultipliedAlpha");
   assert.equal(std.alphaTest, 0.25, "MeshStandard stays authored alphaTest");
+  assert.equal(std.dithering, true, "MeshStandard stays authored dithering");
+  assert.equal(std.alphaToCoverage, true, "MeshStandard stays authored alphaToCoverage");
   assert.equal(std.wireframe, true, "MeshStandard stays authored wireframe");
   assert.equal(std.colorWrite, false, "MeshStandard stays authored colorWrite");
   assert.equal(std.depthFunc, THREE.AlwaysDepth, "MeshStandard stays authored depthFunc");
@@ -5038,6 +5221,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   collider.material.blendColor.g = 0.22;
   collider.material.blendColor.b = 0.32;
   collider.material.blendAlpha = 0.18;
+  collider.material.dithering = true;
+  collider.material.alphaToCoverage = true;
   const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
   sharedBlocked.visible = false;
   sharedBlocked.combine = THREE.MixOperation;
@@ -5056,6 +5241,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   sharedBlocked.blendColor.g = 0.16;
   sharedBlocked.blendColor.b = 0.24;
   sharedBlocked.blendAlpha = 0.28;
+  sharedBlocked.dithering = true;
+  sharedBlocked.alphaToCoverage = true;
   const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
   const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
   sharedCollider.name = "collider_shared";
@@ -5071,6 +5258,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(mapped.blending, THREE.AdditiveBlending, "mapped MeshBasic stays authored blending via entity helper");
   assert.equal(mapped.premultipliedAlpha, true, "mapped MeshBasic stays authored premultipliedAlpha via entity helper");
   assert.equal(mapped.alphaTest, 0.25, "mapped MeshBasic stays authored alphaTest via entity helper");
+  assert.equal(mapped.dithering, true, "mapped MeshBasic stays authored dithering via entity helper");
+  assert.equal(mapped.alphaToCoverage, true, "mapped MeshBasic stays authored alphaToCoverage via entity helper");
   assert.equal(mapped.wireframe, true, "mapped MeshBasic stays authored wireframe via entity helper");
   assert.equal(mapped.colorWrite, false, "mapped MeshBasic stays authored colorWrite via entity helper");
   assert.equal(mapped.depthFunc, THREE.AlwaysDepth, "mapped MeshBasic stays authored depthFunc via entity helper");
@@ -5197,6 +5386,8 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(sharedVisual.material.blendColor.g, 0.16, "shared collider material stays unpinned blendColor.g");
   assert.equal(sharedVisual.material.blendColor.b, 0.24, "shared collider material stays unpinned blendColor.b");
   assert.equal(sharedVisual.material.blendAlpha, 0.28, "shared collider material stays unpinned blendAlpha");
+  assert.equal(sharedVisual.material.dithering, true, "shared collider material stays unpinned dithering");
+  assert.equal(sharedVisual.material.alphaToCoverage, true, "shared collider material stays unpinned alphaToCoverage");
   assert.equal(collider.material.stencilWrite, false, "collider MeshBasic keeps r170 stencilWrite default");
   assert.equal(collider.material.stencilFunc, THREE.AlwaysStencilFunc, "collider MeshBasic keeps r170 stencilFunc default");
   assert.equal(collider.material.clippingPlanes, null, "collider MeshBasic keeps r170 clippingPlanes default");
@@ -5230,4 +5421,6 @@ test("pinColorOnlyUnlitBasicFlags / pinColorOnlyVisualMaterialFlags skip mapped,
   assert.equal(collider.material.blendColor.g, 0.22, "collider MeshBasic stays authored blendColor.g");
   assert.equal(collider.material.blendColor.b, 0.32, "collider MeshBasic stays authored blendColor.b");
   assert.equal(collider.material.blendAlpha, 0.18, "collider MeshBasic stays authored blendAlpha");
+  assert.equal(collider.material.dithering, true, "collider MeshBasic stays authored dithering");
+  assert.equal(collider.material.alphaToCoverage, true, "collider MeshBasic stays authored alphaToCoverage");
 });

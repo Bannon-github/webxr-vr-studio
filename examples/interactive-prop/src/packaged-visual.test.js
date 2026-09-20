@@ -2130,6 +2130,86 @@ test("packaged ingest pins r170 Material blendColor/blendAlpha; mapped/lit stay 
   assert.equal(colliderGrab.material.blendAlpha, 0.18, "collider MeshBasic stays authored blendAlpha");
 });
 
+test("packaged ingest pins r170 Material dithering/alphaToCoverage; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.dithering, false, "r170 MeshBasicMaterial defaults dithering false");
+  assert.equal(fresh.alphaToCoverage, false, "r170 MeshBasicMaterial defaults alphaToCoverage false");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    dithering: true,
+    alphaToCoverage: true,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    dithering: true,
+    alphaToCoverage: true,
+  });
+  const wrongMesh = boxMesh("dccDithering", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.dithering = true;
+  colliderGrabBefore.material.alphaToCoverage = true;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.material.dithering, false, "color-only pin sets dithering false");
+    assert.equal(mesh.material.alphaToCoverage, false, "color-only pin sets alphaToCoverage false");
+    assert.equal(mesh.material.blendColor.r, 0, "prior blendColor pin stays intact");
+    assert.equal(mesh.material.blendAlpha, 0, "prior blendAlpha pin stays intact");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC leftover dithering/A2C color-only MeshBasic");
+  assert.equal(wrong.dithering, false, "DCC leftover dithering is corrected to false");
+  assert.equal(wrong.alphaToCoverage, false, "DCC leftover alphaToCoverage is corrected to false");
+  assert.equal(mapped.dithering, true, "mapped MeshBasic stays authored dithering");
+  assert.equal(mapped.alphaToCoverage, true, "mapped MeshBasic stays authored alphaToCoverage");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.dithering, true, "collider MeshBasic stays authored dithering");
+  assert.equal(colliderGrab.material.alphaToCoverage, true, "collider MeshBasic stays authored alphaToCoverage");
+});
+
+test("packaged ingest without lod groups still pins color-only MeshBasic dithering/alphaToCoverage", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  visualMeshes(body)[0].material.dithering = true;
+  visualMeshes(body)[0].material.alphaToCoverage = true;
+  visualMeshes(lid)[0].material.dithering = true;
+  visualMeshes(lid)[0].material.alphaToCoverage = true;
+  visualMeshes(latch)[0].material.dithering = true;
+  visualMeshes(latch)[0].material.alphaToCoverage = true;
+  visualMeshes(tool)[0].material.dithering = true;
+  visualMeshes(tool)[0].material.alphaToCoverage = true;
+  fastener.material.dithering = true;
+  fastener.material.alphaToCoverage = true;
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitFlags(visualMeshes(body)[0].material, "fail-soft body");
+  assertQuestSafeUnlitFlags(visualMeshes(lid)[0].material, "fail-soft lid");
+  assertQuestSafeUnlitFlags(visualMeshes(latch)[0].material, "fail-soft latch");
+  assertQuestSafeUnlitFlags(visualMeshes(tool)[0].material, "fail-soft tool");
+  assertQuestSafeUnlitFlags(fastener.material, "fail-soft fastener");
+  assert.equal(visualMeshes(body)[0].material.dithering, false, "fail-soft body pins dithering false");
+  assert.equal(visualMeshes(body)[0].material.alphaToCoverage, false, "fail-soft body pins alphaToCoverage false");
+  assert.equal(fastener.material.dithering, false, "fail-soft fastener pins dithering false");
+  assert.equal(fastener.material.alphaToCoverage, false, "fail-soft fastener pins alphaToCoverage false");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.dithering, false, "fail-soft collider stays r170 dithering default");
+  assert.equal(colliderGrab.material.alphaToCoverage, false, "fail-soft collider stays r170 alphaToCoverage default");
+});
+
 test("packaged ingest pins r170 Object3D matrixWorldAutoUpdate; mapped/lit stay authored", () => {
   const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
   const freshObj = new THREE.Object3D();
