@@ -203,6 +203,12 @@ function assertR170MeshBasicDitheringAlphaToCoverageDefaults(mat, label = "r170 
   assert.equal(mat.alphaToCoverage, false, `${label} defaults alphaToCoverage false`);
 }
 
+function assertR170MeshBasicPolygonOffsetCompanionDefaults(mat, label = "r170 MeshBasicMaterial") {
+  assert.equal(mat.polygonOffset, false, `${label} defaults polygonOffset false`);
+  assert.equal(mat.polygonOffsetFactor, 0, `${label} defaults polygonOffsetFactor 0`);
+  assert.equal(mat.polygonOffsetUnits, 0, `${label} defaults polygonOffsetUnits 0`);
+}
+
 function assertQuestSafeUnlitFlags(mat, label = "color-only MeshBasic") {
   assert.equal(mat.fog, false, `${label} pins fog false`);
   assert.equal(mat.toneMapped, false, `${label} pins toneMapped false`);
@@ -4990,6 +4996,181 @@ test("pinColorOnlyUnlitBasicRotationOrder / pinColorOnlyVisualRotationOrder skip
   assert.equal(std.rotation.order, "YXZ", "MeshStandard stays authored via entity helper");
 });
 
+test("v0.74 pins r170 Material polygonOffset companions on unique color-only MeshBasics; envelope stays v0.73", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assertR170MeshBasicOpaqueFrontSideDefaults(fresh);
+  assertR170MeshBasicBlendingAlphaDefaults(fresh);
+  assertR170MeshBasicGpuStateDefaults(fresh);
+  assertR170MeshBasicStencilDefaults(fresh);
+  assertR170MeshBasicClippingDefaults(fresh);
+  assertR170MeshBasicAlphaHashForceSinglePassDefaults(fresh);
+  assertR170MeshBasicNormalBlendingCompanions(fresh);
+  assertR170MeshBasicVertexColorsDefault(fresh);
+  assertR170MeshBasicPrecisionDefault(fresh);
+  assertR170MeshBasicShadowSideDefault(fresh);
+  assertR170MeshBasicVisibleDefault(fresh);
+  assertR170MeshBasicEnvMapCompanions(fresh);
+  assertR170MeshBasicMapIntensityCompanions(fresh);
+  assertR170MeshBasicWireframeLinewidthDefault(fresh);
+  assertR170MeshBasicWireframeLineStyleDefaults(fresh);
+  assertR170MeshBasicEnvMapRotationDefault(fresh);
+  assertR170MeshBasicBlendColorAlphaDefaults(fresh);
+  assertR170MeshBasicDitheringAlphaToCoverageDefaults(fresh);
+  assertR170MeshBasicPolygonOffsetCompanionDefaults(fresh);
+  assert.equal(fresh.polygonOffset, false, "r170 MeshBasicMaterial defaults polygonOffset false");
+  assert.equal(fresh.polygonOffsetFactor, 0, "r170 MeshBasicMaterial defaults polygonOffsetFactor 0");
+  assert.equal(fresh.polygonOffsetUnits, 0, "r170 MeshBasicMaterial defaults polygonOffsetUnits 0");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+    assert.equal(mat.polygonOffset, false, "color-only MeshBasic pins polygonOffset false");
+    assert.equal(mat.polygonOffsetFactor, 0, "color-only MeshBasic pins polygonOffsetFactor 0");
+    assert.equal(mat.polygonOffsetUnits, 0, "color-only MeshBasic pins polygonOffsetUnits 0");
+    assert.equal(mat.dithering, false, "prior dithering pin stays false");
+    assert.equal(mat.alphaToCoverage, false, "prior alphaToCoverage pin stays false");
+    assert.equal(mat.blendColor.r, 0, "prior blendColor.r pin stays 0");
+    assert.equal(mat.blendColor.g, 0, "prior blendColor.g pin stays 0");
+    assert.equal(mat.blendColor.b, 0, "prior blendColor.b pin stays 0");
+    assert.equal(mat.blendAlpha, 0, "prior blendAlpha pin stays 0");
+  }
+  const named = crate.userData.materials.lod0;
+  assertQuestSafeUnlitFlags(named.wood, "wood");
+  assertQuestSafeUnlitFlags(named.brass, "brass");
+  assertQuestSafeUnlitFlags(named.steel, "steel");
+  assert.equal(named.wood.polygonOffset, false, "wood pins polygonOffset false");
+  assert.equal(named.brass.polygonOffset, false, "brass pins polygonOffset false");
+  assert.equal(named.steel.polygonOffset, false, "steel pins polygonOffset false");
+  assert.equal(named.wood.polygonOffsetFactor, 0, "wood pins polygonOffsetFactor 0");
+  assert.equal(named.brass.polygonOffsetFactor, 0, "brass pins polygonOffsetFactor 0");
+  assert.equal(named.steel.polygonOffsetFactor, 0, "steel pins polygonOffsetFactor 0");
+  assert.equal(named.wood.polygonOffsetUnits, 0, "wood pins polygonOffsetUnits 0");
+  assert.equal(named.brass.polygonOffsetUnits, 0, "brass pins polygonOffsetUnits 0");
+  assert.equal(named.steel.polygonOffsetUnits, 0, "steel pins polygonOffsetUnits 0");
+  assert.equal(named.wood, crate.userData.materials.lod1.wood);
+  assert.equal(named.brass, crate.userData.materials.lod1.brass);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFlags(mesh.material);
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitRenderOrder(mesh);
+    assertQuestSafeUnlitLayers(mesh);
+    assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh);
+    assertQuestSafeUnlitUp(mesh);
+    assertQuestSafeUnlitScale(mesh);
+    assertQuestSafeUnlitRotationOrder(mesh);
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+    assert.equal(mesh.material.polygonOffset, false, "visual MeshBasic polygonOffset stays false");
+    assert.equal(mesh.material.polygonOffsetFactor, 0, "visual MeshBasic polygonOffsetFactor stays 0");
+    assert.equal(mesh.material.polygonOffsetUnits, 0, "visual MeshBasic polygonOffsetUnits stays 0");
+    assert.equal(mesh.material.dithering, false, "visual MeshBasic dithering stays false");
+    assert.equal(mesh.material.alphaToCoverage, false, "visual MeshBasic alphaToCoverage stays false");
+    assert.equal(mesh.material.blendColor.r, 0, "visual MeshBasic blendColor.r stays 0");
+    assert.equal(mesh.material.blendAlpha, 0, "visual MeshBasic blendAlpha stays 0");
+  }
+  const rotationCounts = countVisualRotationOrderXYZ(crate);
+  assert.equal(rotationCounts.xyz, 13, "rotation-order-XYZ count stays 13");
+  assert.equal(rotationCounts.other, 0);
+  const scaleCounts = countVisualScaleDefault(crate);
+  assert.equal(scaleCounts.unit, 13, "scale-default count stays 13");
+  assert.equal(scaleCounts.other, 0);
+  const upCounts = countVisualUpDefault(crate);
+  assert.equal(upCounts.yUp, 13, "up-default count stays 13");
+  assert.equal(upCounts.other, 0);
+  const worldAutoCounts = countVisualMatrixWorldAutoUpdate(crate);
+  assert.equal(worldAutoCounts.on, 13, "matrixWorldAutoUpdate-on count stays 13");
+  assert.equal(worldAutoCounts.off, 0);
+  const layerCounts = countVisualLayersDefault(crate);
+  assert.equal(layerCounts.layer0Only, 13, "layers-default count stays 13");
+  assert.equal(layerCounts.other, 0);
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  assert.equal(renderOrderCounts.nonzero, 0);
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitFlags(lidMesh.material, "lidMesh");
+  assertQuestSafeUnlitFlags(latchMesh.material, "latchMesh");
+  assertQuestSafeUnlitFlags(fastener.material, "fastenerMesh");
+  assert.equal(fastener.material.polygonOffset, false, "fastenerMesh pins polygonOffset false");
+  assert.equal(fastener.material.polygonOffsetFactor, 0, "fastenerMesh pins polygonOffsetFactor 0");
+  assert.equal(fastener.material.polygonOffsetUnits, 0, "fastenerMesh pins polygonOffsetUnits 0");
+  assert.equal(fastener.geometry.getAttribute("position") ? cpuAttrBytes(fastener.geometry) : 0, 216, "fastener attrBytes stay 216");
+
+  const lod0Group = crate.userData.lod.groups[0][0];
+  assert.equal(lod0Group.visible, true, "LOD0 group starts visible");
+  setToolboxLod(crate, 1);
+  assert.equal(lod0Group.visible, false, "LOD hides via group.visible, not mesh.visible");
+  assert.equal(lidMesh.visible, true, "mesh.visible is not pinned; LOD uses group.visible");
+  setToolboxLod(crate, 0);
+
+  for (const c of crate.userData.colliders) {
+    assert.equal(c.material.polygonOffset, false, "collider MeshBasic keeps r170 polygonOffset default");
+    assert.equal(c.material.polygonOffsetFactor, 0, "collider MeshBasic keeps r170 polygonOffsetFactor default");
+    assert.equal(c.material.polygonOffsetUnits, 0, "collider MeshBasic keeps r170 polygonOffsetUnits default");
+    assert.equal(c.material.wireframe, true, "collider MeshBasic keeps authored wireframe");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(activityState(crate), "closed");
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assert.equal(fastener.material.polygonOffset, false, "fastener polygonOffset stays false after L5");
+  assert.equal(fastener.material.polygonOffsetFactor, 0, "fastener polygonOffsetFactor stays 0 after L5");
+  assert.equal(fastener.material.polygonOffsetUnits, 0, "fastener polygonOffsetUnits stays 0 after L5");
+  assert.equal(fastener.material.dithering, false, "fastener dithering stays false after L5");
+  assert.equal(fastener.material.alphaToCoverage, false, "fastener alphaToCoverage stays false after L5");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+});
+
 test("v0.48 pins fog/toneMapped false and opaque FrontSide on unique color-only MeshBasics; envelope stays v0.47", () => {
   const fresh = new THREE.MeshBasicMaterial();
   assert.equal(fresh.fog, true, "r170 MeshBasicMaterial defaults fog true");
@@ -5165,6 +5346,22 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assert.equal(ditherOnly.alphaToCoverage, false, "alphaToCoverage leftover is corrected to r170 default false");
   assert.equal(ditherOnly.blending, THREE.NormalBlending, "dithering pin does not change blending");
   assertQuestSafeUnlitFlags(ditherOnly, "dithering leftover color-only MeshBasic");
+
+  const offsetCompanionsOnly = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    polygonOffset: false,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+  assert.equal(isColorOnlyUnlitBasic(offsetCompanionsOnly), true, "polygonOffset companion leftover still passes isColorOnlyUnlitBasic");
+  assert.equal(offsetCompanionsOnly.polygonOffset, false, "DCC leftover keeps polygonOffset false");
+  assert.equal(offsetCompanionsOnly.polygonOffsetFactor, 1, "DCC leftover is polygonOffsetFactor 1");
+  assert.equal(offsetCompanionsOnly.polygonOffsetUnits, 1, "DCC leftover is polygonOffsetUnits 1");
+  pinColorOnlyUnlitBasicFlags(offsetCompanionsOnly);
+  assert.equal(offsetCompanionsOnly.polygonOffset, false, "polygonOffset companion pin does not enable polygonOffset");
+  assert.equal(offsetCompanionsOnly.polygonOffsetFactor, 0, "non-zero leftover factor is corrected to r170 default 0");
+  assert.equal(offsetCompanionsOnly.polygonOffsetUnits, 0, "non-zero leftover units is corrected to r170 default 0");
+  assertQuestSafeUnlitFlags(offsetCompanionsOnly, "polygonOffset companion leftover color-only MeshBasic");
 
   const wrong = new THREE.MeshBasicMaterial({
     color: 0x633318,

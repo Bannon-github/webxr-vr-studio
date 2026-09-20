@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.76.0] — 2026-09-20
+
+### Changed
+
+- `crate-toolbox` **v0.74.0** L3 packaging/perf UPGRADE: after the v0.73 Object3D rotation.order pin (and after the v0.72 Material dithering/A2C pin), also pin r170 Material `polygonOffsetFactor = 0` / `polygonOffsetUnits = 0` on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances; first-class measured flags after the v0.52 GPU-state companions, with `polygonOffset = false`). Mapped / lit / colliders stay authored / r170 defaults. Does not enable `polygonOffset` or invent non-zero factors/units. Does not pin `mesh.visible` or change `matrixAutoUpdate` / `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `rotation.order` / `blendColor` / `blendAlpha` / dithering / A2C. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13, matrixWorldAutoUpdate-on 13, up-default 13, scale-default 13, rotation-order-XYZ 13 unchanged vs v0.73. Headset ms / FFR still unmeasured.
+
 ## [0.75.0] — 2026-09-20
 
 ### Changed

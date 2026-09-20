@@ -387,6 +387,33 @@
  * change `layers`, change `up`, change
  * `scale`, or change `blendColor` /
  * `blendAlpha` / dithering / A2C.
+ *
+ * v0.74: the same material helper also pins
+ * r170 Material `polygonOffsetFactor = 0` /
+ * `polygonOffsetUnits = 0` on those
+ * color-only MeshBasics as first-class
+ * measured flags (v0.52 already assigned
+ * them as polygonOffset companions, with
+ * `polygonOffset = false`). Accidental
+ * DCC / GLB leftover non-zero
+ * `polygonOffsetFactor` /
+ * `polygonOffsetUnits` can still sit on
+ * color-only unlit midtone stand-ins even
+ * when `polygonOffset === false`. When
+ * offset is off they are unused GPU state
+ * noise and can confuse DCC round-trips;
+ * if offset were later flipped on,
+ * leftovers would bias depth on a TBDR
+ * mobile GPU. Mapped / lit / colliders
+ * stay untouched. Does **not** enable
+ * `polygonOffset`. Does **not** invent
+ * non-zero factors/units. Does **not**
+ * pin `mesh.visible`. Does not change
+ * `matrixAutoUpdate` /
+ * `matrixWorldAutoUpdate` / `layers` /
+ * `up` / `scale` / `rotation.order` /
+ * `blendColor` / `blendAlpha` /
+ * dithering / A2C.
  */
 
 import {

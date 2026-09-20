@@ -2584,3 +2584,96 @@ test("packaged ingest without lod groups still pins color-only Mesh rotation.ord
   const colliderGrab = root.getObjectByName("collider_grab");
   assertR170Object3DRotationOrderDefault(colliderGrab, "fail-soft collider keeps r170 rotation.order default");
 });
+
+test("packaged ingest pins r170 Material polygonOffset companions; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(fresh.polygonOffset, false, "r170 MeshBasicMaterial defaults polygonOffset false");
+  assert.equal(fresh.polygonOffsetFactor, 0, "r170 MeshBasicMaterial defaults polygonOffsetFactor 0");
+  assert.equal(fresh.polygonOffsetUnits, 0, "r170 MeshBasicMaterial defaults polygonOffsetUnits 0");
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    polygonOffset: false,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
+  });
+  const wrongMesh = boxMesh("dccPolygonOffsetCompanions", wrong);
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.material.polygonOffset = true;
+  colliderGrabBefore.material.polygonOffsetFactor = 1;
+  colliderGrabBefore.material.polygonOffsetUnits = 1;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.material.polygonOffset, false, "color-only pin sets polygonOffset false");
+    assert.equal(mesh.material.polygonOffsetFactor, 0, "color-only pin sets polygonOffsetFactor 0");
+    assert.equal(mesh.material.polygonOffsetUnits, 0, "color-only pin sets polygonOffsetUnits 0");
+    assert.equal(mesh.material.dithering, false, "prior dithering pin stays intact");
+    assert.equal(mesh.material.alphaToCoverage, false, "prior alphaToCoverage pin stays intact");
+    assert.equal(mesh.material.blendColor.r, 0, "prior blendColor pin stays intact");
+    assert.equal(mesh.material.blendAlpha, 0, "prior blendAlpha pin stays intact");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+  }
+  assertQuestSafeUnlitFlags(wrong, "packaged DCC leftover polygonOffset companions color-only MeshBasic");
+  assert.equal(wrong.polygonOffset, false, "DCC leftover polygonOffset stays false; pin does not enable it");
+  assert.equal(wrong.polygonOffsetFactor, 0, "DCC leftover polygonOffsetFactor is corrected to 0");
+  assert.equal(wrong.polygonOffsetUnits, 0, "DCC leftover polygonOffsetUnits is corrected to 0");
+  assert.equal(mapped.polygonOffset, true, "mapped MeshBasic stays authored polygonOffset");
+  assert.equal(mapped.polygonOffsetFactor, 1, "mapped MeshBasic stays authored polygonOffsetFactor");
+  assert.equal(mapped.polygonOffsetUnits, 1, "mapped MeshBasic stays authored polygonOffsetUnits");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.polygonOffset, true, "collider MeshBasic stays authored polygonOffset");
+  assert.equal(colliderGrab.material.polygonOffsetFactor, 1, "collider MeshBasic stays authored polygonOffsetFactor");
+  assert.equal(colliderGrab.material.polygonOffsetUnits, 1, "collider MeshBasic stays authored polygonOffsetUnits");
+});
+
+test("packaged ingest without lod groups still pins color-only MeshBasic polygonOffset companions", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  visualMeshes(body)[0].material.polygonOffsetFactor = 1;
+  visualMeshes(body)[0].material.polygonOffsetUnits = 1;
+  visualMeshes(lid)[0].material.polygonOffsetFactor = 2;
+  visualMeshes(lid)[0].material.polygonOffsetUnits = 2;
+  visualMeshes(latch)[0].material.polygonOffsetFactor = 1;
+  visualMeshes(latch)[0].material.polygonOffsetUnits = 1;
+  visualMeshes(tool)[0].material.polygonOffsetFactor = 3;
+  visualMeshes(tool)[0].material.polygonOffsetUnits = 3;
+  fastener.material.polygonOffsetFactor = 1;
+  fastener.material.polygonOffsetUnits = 1;
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitFlags(visualMeshes(body)[0].material, "fail-soft body");
+  assertQuestSafeUnlitFlags(visualMeshes(lid)[0].material, "fail-soft lid");
+  assertQuestSafeUnlitFlags(visualMeshes(latch)[0].material, "fail-soft latch");
+  assertQuestSafeUnlitFlags(visualMeshes(tool)[0].material, "fail-soft tool");
+  assertQuestSafeUnlitFlags(fastener.material, "fail-soft fastener");
+  assert.equal(visualMeshes(body)[0].material.polygonOffset, false, "fail-soft body pins polygonOffset false");
+  assert.equal(visualMeshes(body)[0].material.polygonOffsetFactor, 0, "fail-soft body pins polygonOffsetFactor 0");
+  assert.equal(visualMeshes(body)[0].material.polygonOffsetUnits, 0, "fail-soft body pins polygonOffsetUnits 0");
+  assert.equal(fastener.material.polygonOffset, false, "fail-soft fastener pins polygonOffset false");
+  assert.equal(fastener.material.polygonOffsetFactor, 0, "fail-soft fastener pins polygonOffsetFactor 0");
+  assert.equal(fastener.material.polygonOffsetUnits, 0, "fail-soft fastener pins polygonOffsetUnits 0");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.polygonOffset, false, "fail-soft collider stays r170 polygonOffset default");
+  assert.equal(colliderGrab.material.polygonOffsetFactor, 0, "fail-soft collider stays r170 polygonOffsetFactor default");
+  assert.equal(colliderGrab.material.polygonOffsetUnits, 0, "fail-soft collider stays r170 polygonOffsetUnits default");
+});
