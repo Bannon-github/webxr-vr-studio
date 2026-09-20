@@ -332,6 +332,29 @@
  * `matrixWorldAutoUpdate`, change `layers`,
  * change `up`, or change `blendColor` /
  * `blendAlpha`.
+ *
+ * v0.72: the same material helper also pins
+ * r170 Material `dithering = false` /
+ * `alphaToCoverage = false` on those
+ * color-only MeshBasics as first-class
+ * measured flags (v0.51 already assigned
+ * them as blending/alpha companions).
+ * Accidental DCC / GLB leftover
+ * `dithering = true` can add fragment
+ * cost on a TBDR mobile GPU for opaque
+ * unlit midtones that do not need it.
+ * Accidental `alphaToCoverage = true`
+ * expects MSAA coverage samples and can
+ * produce wrong edges / wasted work on
+ * Quest Browser paths that are not
+ * relying on A2C for these stand-ins.
+ * Mapped / lit / colliders stay
+ * untouched. Does **not** pin
+ * `mesh.visible`. Does not change
+ * `matrixAutoUpdate` /
+ * `matrixWorldAutoUpdate` / `layers` /
+ * `up` / `scale` / `blendColor` /
+ * `blendAlpha`.
  */
 
 import {
