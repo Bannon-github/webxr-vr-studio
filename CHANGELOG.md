@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.75.0] — 2026-09-20
+
+### Changed
+
+- `crate-toolbox` **v0.73.0** L3 packaging/perf UPGRADE: after the v0.72 Material dithering/A2C pin (and after the v0.71 Object3D scale pin), also pin r170 Object3D `rotation.order = 'XYZ'` on packed color-only unlit MeshBasic visual meshes (13 visual meshes; keeps the existing Euler instance; does not rewrite rotation.xyz; does not touch quaternion). Mapped / lit / colliders stay authored / r170 Mesh defaults. Does not pin `mesh.visible` or change `matrixAutoUpdate` (v0.45 static-body freeze stays). Does not change `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `blendColor` / `blendAlpha` / dithering / A2C. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13, matrixWorldAutoUpdate-on 13, up-default 13, scale-default 13, rotation-order-XYZ 13 unchanged vs v0.72 except the new rotation-order-XYZ count. Headset ms / FFR still unmeasured.
+
 ## [0.74.0] — 2026-09-20
 
 ### Changed

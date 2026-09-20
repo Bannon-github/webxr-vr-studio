@@ -56,6 +56,7 @@ const {
   pinColorOnlyUnlitBasicMatrixWorldAutoUpdate,
   pinColorOnlyUnlitBasicRenderOrder,
   pinColorOnlyUnlitBasicShadowFlags,
+  pinColorOnlyUnlitBasicRotationOrder,
   pinColorOnlyUnlitBasicScale,
   pinColorOnlyUnlitBasicUp,
   pinColorOnlyVisualFrustumCulled,
@@ -63,6 +64,7 @@ const {
   pinColorOnlyVisualMaterialFlags,
   pinColorOnlyVisualMatrixWorldAutoUpdate,
   pinColorOnlyVisualRenderOrder,
+  pinColorOnlyVisualRotationOrder,
   pinColorOnlyVisualScale,
   pinColorOnlyVisualShadowFlags,
   pinColorOnlyVisualUp,
@@ -324,6 +326,16 @@ function assertR170Object3DScaleDefault(obj, label = "r170 Object3D") {
 
 function assertQuestSafeUnlitScale(mesh, label = "color-only MeshBasic mesh") {
   assertR170Object3DScaleDefault(mesh, label);
+}
+
+function assertR170Object3DRotationOrderDefault(obj, label = "r170 Object3D") {
+  assert.ok(obj.rotation, `${label} has rotation`);
+  assert.equal(obj.rotation.isEuler, true, `${label} rotation is Euler`);
+  assert.equal(obj.rotation.order, "XYZ", `${label} rotation.order is XYZ`);
+}
+
+function assertQuestSafeUnlitRotationOrder(mesh, label = "color-only MeshBasic mesh") {
+  assertR170Object3DRotationOrderDefault(mesh, label);
 }
 
 test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
@@ -1047,6 +1059,16 @@ function countVisualScaleDefault(crate) {
     else other += 1;
   }
   return { unit, other, total: unit + other };
+}
+
+function countVisualRotationOrderXYZ(crate) {
+  let xyz = 0;
+  let other = 0;
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.rotation && mesh.rotation.order === "XYZ") xyz += 1;
+    else other += 1;
+  }
+  return { xyz, other, total: xyz + other };
 }
 
 test("v0.46 disables Mesh.raycast on packed color-only visuals; colliders keep default", () => {
@@ -4653,6 +4675,319 @@ test("pinColorOnlyUnlitBasicScale / pinColorOnlyVisualScale skip mapped, lit, mo
   assert.equal(sharedVisual.scale.x, 2, "shared collider material visual stays unpinned");
   assert.equal(sharedCollider.scale.x, 2, "shared collider stays authored");
   assert.equal(std.scale.x, 2, "MeshStandard stays authored via entity helper");
+});
+
+test("v0.73 pins r170 Object3D rotation.order XYZ on packed color-only visuals; envelope stays v0.72", () => {
+  const freshMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  const freshObj = new THREE.Object3D();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(freshMesh.rotation.order, "XYZ", "r170 Mesh.rotation.order is XYZ");
+  assert.equal(freshObj.rotation.order, "XYZ", "r170 Object3D.rotation.order is XYZ");
+  assertR170Object3DRotationOrderDefault(freshMesh, "r170 Mesh");
+  assertR170Object3DRotationOrderDefault(freshObj, "r170 Object3D");
+  const freshRotation = freshMesh.rotation;
+  const freshQuat = freshMesh.quaternion;
+  const freshScale = freshMesh.scale;
+  const freshUp = freshMesh.up;
+  const freshMatrixAuto = freshMesh.matrixAutoUpdate;
+  const freshWorldAuto = freshMesh.matrixWorldAutoUpdate;
+  const freshVisible = freshMesh.visible;
+  const freshLayersMask = freshMesh.layers.mask;
+  const freshBlendColor = freshMesh.material.blendColor;
+  const freshBlendAlpha = freshMesh.material.blendAlpha;
+  const freshDithering = freshMesh.material.dithering;
+  const freshA2C = freshMesh.material.alphaToCoverage;
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+    assert.equal(mat.dithering, false, "prior dithering pin stays false");
+    assert.equal(mat.alphaToCoverage, false, "prior alphaToCoverage pin stays false");
+    assert.equal(mat.blendColor.r, 0, "prior blendColor.r pin stays 0");
+    assert.equal(mat.blendColor.g, 0, "prior blendColor.g pin stays 0");
+    assert.equal(mat.blendColor.b, 0, "prior blendColor.b pin stays 0");
+    assert.equal(mat.blendAlpha, 0, "prior blendAlpha pin stays 0");
+  }
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFlags(mesh.material);
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitRenderOrder(mesh);
+    assertQuestSafeUnlitLayers(mesh);
+    assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh);
+    assertQuestSafeUnlitUp(mesh);
+    assertQuestSafeUnlitScale(mesh);
+    assertQuestSafeUnlitRotationOrder(mesh);
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+    assert.equal(mesh.material.dithering, false, "visual MeshBasic dithering stays false");
+    assert.equal(mesh.material.alphaToCoverage, false, "visual MeshBasic alphaToCoverage stays false");
+    assert.equal(mesh.material.blendColor.r, 0, "visual MeshBasic blendColor.r stays 0");
+    assert.equal(mesh.material.blendAlpha, 0, "visual MeshBasic blendAlpha stays 0");
+  }
+  const rotationCounts = countVisualRotationOrderXYZ(crate);
+  assert.equal(rotationCounts.xyz, 13, "rotation-order-XYZ count is 13");
+  assert.equal(rotationCounts.other, 0);
+  const scaleCounts = countVisualScaleDefault(crate);
+  assert.equal(scaleCounts.unit, 13, "scale-default count stays 13");
+  assert.equal(scaleCounts.other, 0);
+  const upCounts = countVisualUpDefault(crate);
+  assert.equal(upCounts.yUp, 13, "up-default count stays 13");
+  assert.equal(upCounts.other, 0);
+  const worldAutoCounts = countVisualMatrixWorldAutoUpdate(crate);
+  assert.equal(worldAutoCounts.on, 13, "matrixWorldAutoUpdate-on count stays 13");
+  assert.equal(worldAutoCounts.off, 0);
+  const layerCounts = countVisualLayersDefault(crate);
+  assert.equal(layerCounts.layer0Only, 13, "layers-default count stays 13");
+  assert.equal(layerCounts.other, 0);
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  assert.equal(renderOrderCounts.nonzero, 0);
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitRotationOrder(lidMesh, "lidMesh");
+  assertQuestSafeUnlitRotationOrder(latchMesh, "latchMesh");
+  assertQuestSafeUnlitRotationOrder(fastener, "fastenerMesh");
+  assertQuestSafeUnlitScale(lidMesh, "lidMesh");
+  assertQuestSafeUnlitUp(lidMesh, "lidMesh");
+  assert.equal(lidMesh.matrixAutoUpdate, true, "lidMesh stays matrix-live");
+  assert.equal(latchMesh.matrixAutoUpdate, true, "latchMesh stays matrix-live");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastenerMesh stays matrix-live");
+  assert.equal(lidMesh.matrixWorldAutoUpdate, true, "lidMesh world-matrix auto-update stays on");
+  assert.equal(fastener.geometry.getAttribute("position") ? cpuAttrBytes(fastener.geometry) : 0, 216, "fastener attrBytes stay 216");
+
+  const tool = crate.userData.parts.tool;
+  const toolMeshes = [];
+  tool.traverse((o) => {
+    if (o.isMesh && !o.userData.collider) toolMeshes.push(o);
+  });
+  assert.ok(toolMeshes.length >= 2, "tool shaft/grip stay present");
+  const shaftOrGrip = toolMeshes.find((m) => Math.abs(m.rotation.z - Math.PI / 2) < 1e-6);
+  assert.ok(shaftOrGrip, "tool shaft/grip keep intentional local rotation.z");
+  assert.equal(shaftOrGrip.rotation.order, "XYZ", "tool mesh pin keeps XYZ without rewriting xyz");
+  assert.ok(Math.abs(shaftOrGrip.rotation.z - Math.PI / 2) < 1e-6, "tool mesh rotation.z stays PI/2");
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assert.equal(bodyHero.matrixWorldAutoUpdate, true, "v0.45 freeze does not stall world-matrix auto-update");
+  assertQuestSafeUnlitRotationOrder(bodyHero, "body LOD leaf");
+  assertQuestSafeUnlitScale(bodyHero, "body LOD leaf");
+  assertQuestSafeUnlitUp(bodyHero, "body LOD leaf");
+
+  const lod0Group = crate.userData.lod.groups[0][0];
+  assert.equal(lod0Group.visible, true, "LOD0 group starts visible");
+  setToolboxLod(crate, 1);
+  assert.equal(lod0Group.visible, false, "LOD hides via group.visible, not mesh.visible");
+  assert.equal(lidMesh.visible, true, "mesh.visible is not pinned; LOD uses group.visible");
+  setToolboxLod(crate, 0);
+
+  for (const c of crate.userData.colliders) {
+    assertR170Object3DRotationOrderDefault(c, "collider Mesh keeps r170 rotation.order default");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+    assert.equal(c.matrixAutoUpdate, true, "collider matrixAutoUpdate stays live");
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(activityState(crate), "closed");
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(fastener.rotation.order, "XYZ", "fastener rotation.order stays XYZ after L5");
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitRotationOrder(fastener, "fastener after L5 drive");
+  assertQuestSafeUnlitScale(fastener, "fastener after L5 drive");
+  assertQuestSafeUnlitUp(fastener, "fastener after L5 drive");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+  assert.equal(fastener.material.dithering, false, "fastener dithering stays false after L5");
+  assert.equal(fastener.material.alphaToCoverage, false, "fastener alphaToCoverage stays false after L5");
+  assert.equal(fastener.material.blendColor.r, 0, "fastener blendColor.r stays 0 after L5");
+  assert.equal(fastener.material.blendAlpha, 0, "fastener blendAlpha stays 0 after L5");
+  assert.equal(freshMesh.rotation, freshRotation, "rotation-order pin does not replace a fresh Mesh.rotation instance");
+  assert.equal(freshMesh.quaternion, freshQuat, "rotation-order pin does not replace a fresh Mesh.quaternion instance");
+  assert.equal(freshMesh.scale, freshScale, "rotation-order pin does not replace a fresh Mesh.scale instance");
+  assert.equal(freshMesh.up, freshUp, "rotation-order pin does not replace a fresh Mesh.up instance");
+  assert.equal(freshMesh.matrixAutoUpdate, freshMatrixAuto, "rotation-order pin does not touch matrixAutoUpdate");
+  assert.equal(freshMesh.matrixWorldAutoUpdate, freshWorldAuto, "rotation-order pin does not touch matrixWorldAutoUpdate");
+  assert.equal(freshMesh.visible, freshVisible, "rotation-order pin does not touch mesh.visible");
+  assert.equal(freshMesh.layers.mask, freshLayersMask, "rotation-order pin does not touch layers");
+  assert.equal(freshMesh.material.blendColor, freshBlendColor, "rotation-order pin does not replace blendColor");
+  assert.equal(freshMesh.material.blendAlpha, freshBlendAlpha, "rotation-order pin does not touch blendAlpha");
+  assert.equal(freshMesh.material.dithering, freshDithering, "rotation-order pin does not touch dithering");
+  assert.equal(freshMesh.material.alphaToCoverage, freshA2C, "rotation-order pin does not touch alphaToCoverage");
+});
+
+test("pinColorOnlyUnlitBasicRotationOrder corrects a wrong color-only Mesh that still passes isColorOnlyUnlitBasic", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assertR170Object3DRotationOrderDefault(fresh, "r170 Mesh");
+
+  const wrong = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  const rotationBefore = wrong.rotation;
+  const quatBefore = wrong.quaternion;
+  wrong.rotation.set(0.25, -0.5, 0.75, "YXZ");
+  assert.equal(isColorOnlyUnlitBasic(wrong.material), true, "color-only MeshBasic still passes the gate");
+  assert.equal(wrong.rotation.order, "YXZ", "DCC leftover is non-XYZ Euler order");
+  assert.equal(wrong.rotation.x, 0.25, "DCC leftover keeps authored rotation.x");
+  assert.equal(wrong.rotation.y, -0.5, "DCC leftover keeps authored rotation.y");
+  assert.equal(wrong.rotation.z, 0.75, "DCC leftover keeps authored rotation.z");
+  const matrixAutoBefore = wrong.matrixAutoUpdate;
+  const worldAutoBefore = wrong.matrixWorldAutoUpdate;
+  const visibleBefore = wrong.visible;
+  const layersMaskBefore = wrong.layers.mask;
+  const upBefore = wrong.up.clone();
+  const scaleBefore = wrong.scale.clone();
+  const blendColorBefore = wrong.material.blendColor;
+  const blendAlphaBefore = wrong.material.blendAlpha;
+  const ditheringBefore = wrong.material.dithering;
+  const a2cBefore = wrong.material.alphaToCoverage;
+  pinColorOnlyUnlitBasicRotationOrder(wrong);
+  assertQuestSafeUnlitRotationOrder(wrong, "deliberately wrong color-only Mesh");
+  assert.equal(wrong.rotation, rotationBefore, "rotation-order pin keeps the existing Euler instance");
+  assert.equal(wrong.quaternion, quatBefore, "rotation-order pin does not replace quaternion");
+  assert.equal(wrong.rotation.x, 0.25, "rotation-order pin does not rewrite rotation.x");
+  assert.equal(wrong.rotation.y, -0.5, "rotation-order pin does not rewrite rotation.y");
+  assert.equal(wrong.rotation.z, 0.75, "rotation-order pin does not rewrite rotation.z");
+  assert.ok(
+    wrong.quaternion.x !== 0 || wrong.quaternion.y !== 0 || wrong.quaternion.z !== 0 || wrong.quaternion.w !== 1,
+    "rotation-order pin does not force identity quaternion"
+  );
+  assert.equal(wrong.scale.x, scaleBefore.x, "rotation-order pin does not change scale.x");
+  assert.equal(wrong.scale.y, scaleBefore.y, "rotation-order pin does not change scale.y");
+  assert.equal(wrong.scale.z, scaleBefore.z, "rotation-order pin does not change scale.z");
+  assert.equal(wrong.up.x, upBefore.x, "rotation-order pin does not change up.x");
+  assert.equal(wrong.up.y, upBefore.y, "rotation-order pin does not change up.y");
+  assert.equal(wrong.up.z, upBefore.z, "rotation-order pin does not change up.z");
+  assert.equal(wrong.frustumCulled, true, "rotation-order pin does not change frustumCulled");
+  assert.equal(wrong.renderOrder, 0, "rotation-order pin does not change renderOrder");
+  assert.equal(wrong.castShadow, false, "rotation-order pin does not change castShadow");
+  assert.equal(wrong.receiveShadow, false, "rotation-order pin does not change receiveShadow");
+  assert.equal(wrong.visible, visibleBefore, "rotation-order pin does not change mesh.visible");
+  assert.equal(wrong.matrixAutoUpdate, matrixAutoBefore, "rotation-order pin does not change matrixAutoUpdate");
+  assert.equal(wrong.matrixWorldAutoUpdate, worldAutoBefore, "rotation-order pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrong.layers.mask, layersMaskBefore, "rotation-order pin does not change layers");
+  assert.equal(wrong.material.blendColor, blendColorBefore, "rotation-order pin does not replace blendColor");
+  assert.equal(wrong.material.blendAlpha, blendAlphaBefore, "rotation-order pin does not change blendAlpha");
+  assert.equal(wrong.material.dithering, ditheringBefore, "rotation-order pin does not change dithering");
+  assert.equal(wrong.material.alphaToCoverage, a2cBefore, "rotation-order pin does not change alphaToCoverage");
+  assert.equal(wrong.material.fog, true, "rotation-order pin does not change fog");
+  assert.equal(wrong.material.envMapRotation.x, 0, "rotation-order pin does not change envMapRotation");
+});
+
+test("pinColorOnlyUnlitBasicRotationOrder / pinColorOnlyVisualRotationOrder skip mapped, lit, morph, colliders, shared blocked", () => {
+  const colorOnly = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  colorOnly.rotation.set(0.1, 0.2, 0.3, "ZYX");
+  const mapped = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } })
+  );
+  mapped.rotation.order = "YXZ";
+  mapped.rotation.set(0.1, 0.2, 0.3);
+  const std = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshStandardMaterial()
+  );
+  std.rotation.order = "YXZ";
+  std.rotation.set(0.1, 0.2, 0.3);
+  pinColorOnlyUnlitBasicRotationOrder(colorOnly);
+  pinColorOnlyUnlitBasicRotationOrder(mapped);
+  pinColorOnlyUnlitBasicRotationOrder(std);
+  assertQuestSafeUnlitRotationOrder(colorOnly);
+  assert.equal(colorOnly.rotation.x, 0.1, "color-only keeps authored rotation.x");
+  assert.equal(mapped.rotation.order, "YXZ", "mapped MeshBasic stays authored rotation.order");
+  assert.equal(std.rotation.order, "YXZ", "MeshStandard stays authored rotation.order");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = mapped;
+  const colorMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  colorMesh.rotation.set(0.4, 0.5, 0.6, "YXZ");
+  const morph = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xc1c3c9 })
+  );
+  morph.geometry.morphAttributes.position = [morph.geometry.getAttribute("position").clone()];
+  morph.rotation.order = "YXZ";
+  const collider = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.rotation.order = "YXZ";
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedVisual.rotation.order = "YXZ";
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  sharedCollider.rotation.order = "YXZ";
+  body.add(mappedMesh, colorMesh, morph, sharedVisual);
+  root.add(body, collider, sharedCollider, std);
+  pinColorOnlyVisualRotationOrder(root);
+  assertQuestSafeUnlitRotationOrder(colorMesh, "entity helper color-only");
+  assert.equal(colorMesh.rotation.x, 0.4, "entity helper keeps authored rotation.x");
+  assert.equal(colorMesh.rotation.y, 0.5, "entity helper keeps authored rotation.y");
+  assert.equal(colorMesh.rotation.z, 0.6, "entity helper keeps authored rotation.z");
+  assert.equal(mapped.rotation.order, "YXZ", "mapped MeshBasic stays authored via entity helper");
+  assert.equal(morph.rotation.order, "YXZ", "morph color-only MeshBasic is skipped");
+  assert.equal(collider.rotation.order, "YXZ", "collider Mesh stays authored");
+  assert.equal(sharedVisual.rotation.order, "YXZ", "shared collider material visual stays unpinned");
+  assert.equal(sharedCollider.rotation.order, "YXZ", "shared collider stays authored");
+  assert.equal(std.rotation.order, "YXZ", "MeshStandard stays authored via entity helper");
 });
 
 test("v0.48 pins fog/toneMapped false and opaque FrontSide on unique color-only MeshBasics; envelope stays v0.47", () => {
