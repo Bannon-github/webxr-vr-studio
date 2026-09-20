@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.74.0] — 2026-09-20
+
+### Changed
+
+- `crate-toolbox` **v0.72.0** L3 packaging/perf UPGRADE: after the v0.71 Object3D scale pin (and after the v0.68 blendColor/blendAlpha / v0.53 stencil suite), also pin r170 Material `dithering = false` / `alphaToCoverage = false` on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances; first-class measured flags after the v0.51 blending/alpha companions). Mapped / lit / colliders stay authored / r170 defaults. Does not pin `mesh.visible` or change `matrixAutoUpdate` / `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `blendColor` / `blendAlpha`. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13, matrixWorldAutoUpdate-on 13, up-default 13, scale-default 13 unchanged vs v0.71. Headset ms / FFR still unmeasured.
+
 ## [0.73.0] — 2026-09-19
 
 ### Changed
