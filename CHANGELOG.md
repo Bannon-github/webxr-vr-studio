@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.77.0] — 2026-09-20
+
+### Changed
+
+- `crate-toolbox` **v0.75.0** L3 packaging/perf UPGRADE: after the v0.74 Material polygonOffsetFactor/Units pin (and after v0.53 already assigned the full r170 Material stencil suite), also pin r170 Material `stencilRef = 0` / `stencilWriteMask = 0xff` / `stencilFuncMask = 0xff` / `stencilZFail = KeepStencilOp` / `stencilZPass = KeepStencilOp` on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances; first-class measured flags after the v0.53 short-form `stencilWrite` / `stencilFunc` / `stencilFail` companions). Mapped / lit / colliders stay authored / r170 defaults. Does not enable stencil write or invent non-Always func / non-Keep ops / non-zero ref / non-0xff masks. Does not pin `mesh.visible` or change `matrixAutoUpdate` / `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `rotation.order` / prior material pins including polygonOffset companions / dithering / A2C / blendColor / blendAlpha. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13, matrixWorldAutoUpdate-on 13, up-default 13, scale-default 13, rotation-order-XYZ 13 unchanged vs v0.74. Headset ms / FFR still unmeasured.
+
 ## [0.76.0] — 2026-09-20
 
 ### Changed
