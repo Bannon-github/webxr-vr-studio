@@ -452,6 +452,42 @@
  * polygonOffset companions /
  * dithering / A2C / `blendColor` /
  * `blendAlpha`.
+ *
+ * v0.76: after that rotation.order pin
+ * (and after the v0.75 Material stencil
+ * companions),
+ * `pinColorOnlyVisualCustomShadowMaterials`
+ * clears leftover Mesh
+ * `customDepthMaterial` /
+ * `customDistanceMaterial` to the r170
+ * Mesh default absence on packed
+ * color-only unlit MeshBasic visual
+ * meshes (same
+ * `isColorOnlyUnlitBasic` gate). Does
+ * **not** invent replacement materials.
+ * Does **not** enable `castShadow` /
+ * `receiveShadow`. Accidental DCC /
+ * GLB leftover custom depth/distance
+ * materials force extra shadow-material
+ * compiles/paths if shadow casting is
+ * later enabled on a TBDR mobile GPU,
+ * and are unused GPU/state noise while
+ * `castShadow === false`. Does not
+ * hex-dedupe or invent meshes. Mapped /
+ * lit stay at authored / r170 Mesh
+ * defaults. Collider meshes stay
+ * untouched. Does **not** pin
+ * `mesh.visible` (LOD visibility uses
+ * it), change `matrixAutoUpdate`
+ * (v0.45 already freezes static body
+ * LOD leaves), change
+ * `matrixWorldAutoUpdate`, change
+ * `layers`, change `up`, change
+ * `scale`, change `rotation.order`, or
+ * change prior material pins including
+ * stencil companions / polygonOffset
+ * companions / dithering / A2C /
+ * `blendColor` / `blendAlpha`.
  */
 
 import {
@@ -469,6 +505,7 @@ import {
   pinColorOnlyVisualUp,
   pinColorOnlyVisualScale,
   pinColorOnlyVisualRotationOrder,
+  pinColorOnlyVisualCustomShadowMaterials,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -637,6 +674,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualUp(root);
   pinColorOnlyVisualScale(root);
   pinColorOnlyVisualRotationOrder(root);
+  pinColorOnlyVisualCustomShadowMaterials(root);
   return root;
 }
 

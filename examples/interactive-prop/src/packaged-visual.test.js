@@ -213,6 +213,17 @@ function assertQuestSafeUnlitRotationOrder(mesh, label = "color-only MeshBasic m
   assertR170Object3DRotationOrderDefault(mesh, label);
 }
 
+function assertR170MeshCustomShadowMaterialsAbsent(mesh, label = "r170 Mesh") {
+  assert.equal(mesh.customDepthMaterial == null, true, `${label} customDepthMaterial is absent`);
+  assert.equal(mesh.customDistanceMaterial == null, true, `${label} customDistanceMaterial is absent`);
+  assert.equal(mesh.customDepthMaterial, undefined, `${label} customDepthMaterial is undefined`);
+  assert.equal(mesh.customDistanceMaterial, undefined, `${label} customDistanceMaterial is undefined`);
+}
+
+function assertQuestSafeUnlitCustomShadowMaterials(mesh, label = "color-only MeshBasic mesh") {
+  assertR170MeshCustomShadowMaterialsAbsent(mesh, label);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -2819,4 +2830,113 @@ test("packaged ingest without lod groups still pins color-only MeshBasic stencil
   assert.equal(colliderGrab.material.stencilFuncMask, 0xff, "fail-soft collider stays r170 stencilFuncMask default");
   assert.equal(colliderGrab.material.stencilZFail, THREE.KeepStencilOp, "fail-soft collider stays r170 stencilZFail default");
   assert.equal(colliderGrab.material.stencilZPass, THREE.KeepStencilOp, "fail-soft collider stays r170 stencilZPass default");
+});
+
+test("packaged ingest clears leftover Mesh customDepth/Distance; mapped/lit stay authored", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal("customDepthMaterial" in fresh, false, "r170 Mesh does not define customDepthMaterial on the instance");
+  assert.equal("customDistanceMaterial" in fresh, false, "r170 Mesh does not define customDistanceMaterial on the instance");
+  assertR170MeshCustomShadowMaterialsAbsent(fresh, "r170 Mesh");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const mappedDepth = { isMaterial: true, name: "mappedDepth" };
+  const mappedDistance = { isMaterial: true, name: "mappedDistance" };
+  mappedMesh.customDepthMaterial = mappedDepth;
+  mappedMesh.customDistanceMaterial = mappedDistance;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccCustomShadowMaterials", wrong);
+  const leftoverDepth = { isMaterial: true, name: "leftoverDepth" };
+  const leftoverDistance = { isMaterial: true, name: "leftoverDistance" };
+  wrongMesh.customDepthMaterial = leftoverDepth;
+  wrongMesh.customDistanceMaterial = leftoverDistance;
+  const visibleBefore = wrongMesh.visible;
+  const layersMaskBefore = wrongMesh.layers.mask;
+  const worldAutoBefore = wrongMesh.matrixWorldAutoUpdate;
+  const rotationOrderBefore = wrongMesh.rotation.order;
+  const blendColorBefore = wrong.blendColor;
+  const blendAlphaBefore = wrong.blendAlpha;
+  const ditheringBefore = wrong.dithering;
+  const a2cBefore = wrong.alphaToCoverage;
+  const stencilRefBefore = wrong.stencilRef;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  const colliderDepth = { isMaterial: true, name: "colliderDepth" };
+  const colliderDistance = { isMaterial: true, name: "colliderDistance" };
+  colliderGrabBefore.customDepthMaterial = colliderDepth;
+  colliderGrabBefore.customDistanceMaterial = colliderDistance;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitCustomShadowMaterials(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowFlags(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRotationOrder(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.castShadow, false, "color-only pin does not enable castShadow");
+    assert.equal(mesh.receiveShadow, false, "color-only pin does not enable receiveShadow");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+    assert.equal(mesh.material.stencilRef, 0, "prior stencilRef pin stays intact");
+    assert.equal(mesh.material.dithering, false, "prior dithering pin stays intact");
+    assert.equal(mesh.material.alphaToCoverage, false, "prior A2C pin stays intact");
+  }
+  assertQuestSafeUnlitCustomShadowMaterials(wrongMesh, "packaged DCC leftover customDepth/Distance color-only Mesh");
+  assert.notEqual(wrongMesh.customDepthMaterial, leftoverDepth, "DCC leftover customDepthMaterial stub is cleared");
+  assert.notEqual(wrongMesh.customDistanceMaterial, leftoverDistance, "DCC leftover customDistanceMaterial stub is cleared");
+  assert.equal(wrongMesh.matrixAutoUpdate, false, "body LOD leaf still frozen by v0.45; custom-shadow pin does not unfreeze");
+  assert.equal(wrongMesh.matrixWorldAutoUpdate, worldAutoBefore, "custom-shadow pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrongMesh.visible, visibleBefore, "custom-shadow pin does not change mesh.visible");
+  assert.equal(wrongMesh.layers.mask, layersMaskBefore, "custom-shadow pin does not change layers");
+  assert.equal(wrongMesh.rotation.order, rotationOrderBefore, "custom-shadow pin does not change rotation.order");
+  assert.equal(wrong.blendColor, blendColorBefore, "custom-shadow pin does not replace blendColor");
+  assert.equal(wrong.blendAlpha, blendAlphaBefore, "custom-shadow pin does not change blendAlpha");
+  assert.equal(wrong.dithering, ditheringBefore, "custom-shadow pin does not change dithering");
+  assert.equal(wrong.alphaToCoverage, a2cBefore, "custom-shadow pin does not change alphaToCoverage");
+  assert.equal(wrong.stencilRef, stencilRefBefore, "custom-shadow pin does not change stencilRef");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live; custom-shadow pin does not freeze it");
+  assertQuestSafeUnlitCustomShadowMaterials(fastener, "fastener");
+  assert.equal(mappedMesh.customDepthMaterial, mappedDepth, "mapped MeshBasic stays authored customDepthMaterial");
+  assert.equal(mappedMesh.customDistanceMaterial, mappedDistance, "mapped MeshBasic stays authored customDistanceMaterial");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.customDepthMaterial, colliderDepth, "collider Mesh stays authored customDepthMaterial");
+  assert.equal(colliderGrab.customDistanceMaterial, colliderDistance, "collider Mesh stays authored customDistanceMaterial");
+});
+
+test("packaged ingest without lod groups still clears leftover Mesh customDepth/Distance", () => {
+  const leftover = () => ({ isMaterial: true });
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  visualMeshes(body)[0].customDepthMaterial = leftover();
+  visualMeshes(body)[0].customDistanceMaterial = leftover();
+  visualMeshes(lid)[0].customDepthMaterial = leftover();
+  visualMeshes(lid)[0].customDistanceMaterial = leftover();
+  visualMeshes(latch)[0].customDepthMaterial = leftover();
+  visualMeshes(latch)[0].customDistanceMaterial = leftover();
+  visualMeshes(tool)[0].customDepthMaterial = leftover();
+  visualMeshes(tool)[0].customDistanceMaterial = leftover();
+  fastener.customDepthMaterial = leftover();
+  fastener.customDistanceMaterial = leftover();
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitCustomShadowMaterials(visualMeshes(body)[0], "fail-soft body");
+  assertQuestSafeUnlitCustomShadowMaterials(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitCustomShadowMaterials(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitCustomShadowMaterials(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitCustomShadowMaterials(fastener, "fail-soft fastener");
+  assertQuestSafeUnlitFlags(visualMeshes(body)[0].material, "fail-soft body");
+  assert.equal(visualMeshes(body)[0].castShadow, false, "fail-soft body does not enable castShadow");
+  assert.equal(fastener.castShadow, false, "fail-soft fastener does not enable castShadow");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assertR170MeshCustomShadowMaterialsAbsent(colliderGrab, "fail-soft collider keeps r170 customDepth/Distance absence");
 });
