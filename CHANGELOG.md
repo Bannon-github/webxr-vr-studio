@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.81.0] — 2026-09-21
+
+### Changed
+
+- `crate-toolbox` **v0.79.0** L3 packaging/perf UPGRADE: after the v0.78 Material `onBeforeCompile` / `onBeforeRender` clear (and after the v0.77 Mesh `onBeforeRender` / `onAfterRender` clear / v0.76 customDepth/Distance clear / v0.49 Mesh `castShadow`/`receiveShadow` false), also delete leftover own-property Mesh `onBeforeShadow` / `onAfterShadow` so the r170 Object3D prototype empty no-ops remain on packed color-only unlit MeshBasic visual meshes (13 visual meshes; first-class measured shadow-callbacks-absent; does not invent replacement callbacks; does not assign `undefined`; does not enable shadows; does not touch Mesh `onBeforeRender` / `onAfterRender` or Material `onBeforeCompile` / `onBeforeRender`; does not touch customDepth/Distance). Mapped / lit / colliders stay authored / r170 Mesh defaults. Does not pin `mesh.visible` or change `matrixAutoUpdate` / `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `rotation.order` / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear / Mesh+Material render-callback clears. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13, matrixWorldAutoUpdate-on 13, up-default 13, scale-default 13, rotation-order-XYZ 13, customDepth/Distance-absent 13, render-callbacks-absent 13, material-render-callbacks-absent 3 unchanged vs v0.78. Shadow-callbacks-absent 13 is the new count. Headset ms / FFR still unmeasured.
+
 ## [0.80.0] — 2026-09-20
 
 ### Changed

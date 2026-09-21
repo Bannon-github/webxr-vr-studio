@@ -574,6 +574,59 @@
  * v0.76 customDepth/Distance clear /
  * the v0.77 Mesh render-callback
  * clear.
+ *
+ * v0.79: after that Mesh
+ * render-callback clear (and after
+ * the v0.78 Material compile/render
+ * callback clear),
+ * `pinColorOnlyVisualShadowCallbacks`
+ * deletes leftover own-property
+ * `onBeforeShadow` / `onAfterShadow`
+ * so the r170 Object3D prototype
+ * empty no-ops remain on packed
+ * color-only unlit MeshBasic visual
+ * meshes (same
+ * `isColorOnlyUnlitBasic` gate). Does
+ * **not** invent replacement callbacks.
+ * Does **not** assign `undefined`
+ * (WebGLShadowMap always invokes
+ * these when a mesh is selected for a
+ * shadow-map pass). Does **not**
+ * enable `castShadow` /
+ * `receiveShadow`. Does **not** touch
+ * Mesh `onBeforeRender` /
+ * `onAfterRender` (v0.77) or Material
+ * `onBeforeCompile` /
+ * `onBeforeRender` (v0.78). Does
+ * **not** touch `customDepthMaterial`
+ * / `customDistanceMaterial`.
+ * Accidental DCC / GLB leftover
+ * own-property shadow callbacks
+ * become per-shadow-draw JS work on
+ * Quest Browser / TBDR if a light
+ * later has `castShadow`, and are
+ * leftover callback noise while
+ * `castShadow === false`. Does not
+ * hex-dedupe or invent meshes.
+ * Mapped / lit stay at authored /
+ * r170 Mesh defaults. Collider meshes
+ * stay untouched. Does **not** pin
+ * `mesh.visible` (LOD visibility uses
+ * it), change `matrixAutoUpdate`
+ * (v0.45 already freezes static body
+ * LOD leaves), change
+ * `matrixWorldAutoUpdate`, change
+ * `layers`, change `up`, change
+ * `scale`, change `rotation.order`,
+ * or change prior material pins
+ * including stencil companions /
+ * polygonOffset companions /
+ * dithering / A2C / `blendColor` /
+ * `blendAlpha` / the v0.76
+ * customDepth/Distance clear / the
+ * v0.77 Mesh render-callback clear /
+ * the v0.78 Material compile/render
+ * callback clear.
  */
 
 import {
@@ -593,6 +646,7 @@ import {
   pinColorOnlyVisualRotationOrder,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
+  pinColorOnlyVisualShadowCallbacks,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -763,6 +817,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualRotationOrder(root);
   pinColorOnlyVisualCustomShadowMaterials(root);
   pinColorOnlyVisualRenderCallbacks(root);
+  pinColorOnlyVisualShadowCallbacks(root);
   return root;
 }
 
