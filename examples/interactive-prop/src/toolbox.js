@@ -878,6 +878,56 @@ export function pinColorOnlyUnlitBasicDefines(material) {
 }
 
 /**
+ * Pin Material `flatShading = false` on a packed color-only unlit
+ * MeshBasic so leftover DCC/GLB `flatShading = true` cannot select
+ * a FLAT_SHADED program variant.
+ *
+ * **Verified r170 API (three@0.170.0 in this repo):** the Material
+ * constructor does **not** assign `flatShading`, and
+ * `MeshBasicMaterial` does not either. A fresh
+ * `new MeshBasicMaterial()` / `new Material()` has
+ * `flatShading === undefined` (`Object.hasOwn` is false). Lit
+ * materials (`MeshStandardMaterial`, `MeshPhongMaterial`,
+ * `MeshLambertMaterial`, `MeshNormalMaterial`, `MeshMatcapMaterial`)
+ * assign `this.flatShading = false` in their own constructors.
+ * `Material.setValues` skips keys whose current value is
+ * `undefined`, so constructor options do not stick `flatShading`
+ * onto MeshBasic. GLTFLoader assigns `material.flatShading = true`
+ * directly when a primitive asks for flat shading.
+ * `WebGLPrograms.getParameters` copies
+ * `flatShading: material.flatShading === true` into program
+ * parameters (not the raw property). The program cache key enables
+ * layer bit 2 when `parameters.flatShading` is true, and
+ * `WebGLProgram` emits `#define FLAT_SHADED` when that parameter
+ * is truthy. `undefined` and `false` both keep the non-flat
+ * variant; leftover `true` fragments the cache and can force a
+ * separate FLAT_SHADED program on Quest Browser / TBDR even for
+ * color-only unlit MeshBasic stand-ins. After v0.81 cleared
+ * leftover Material `defines` so `defines === undefined` remains
+ * (and after the long Material flag fence through v0.80
+ * `customProgramCacheKey` / v0.78 `onBeforeCompile` +
+ * `onBeforeRender` / v0.75 stencil companions), assign
+ * `flatShading = false` so the measured contract is
+ * `material.flatShading === false`. Still passes
+ * `isColorOnlyUnlitBasic`. Do **not** invent custom shaders.
+ * Do **not** enable flat shading. Do **not** touch Material
+ * `defines` (v0.81). Do **not** touch Material
+ * `customProgramCacheKey` (v0.80). Do **not** touch Material
+ * `onBeforeCompile` / `onBeforeRender` (v0.78). Do **not** touch
+ * Mesh `onBeforeRender` / `onAfterRender` (v0.77). Do **not**
+ * touch Mesh `onBeforeShadow` / `onAfterShadow` (v0.79). Do
+ * **not** pin `mesh.visible`. Load-time only — not per-frame.
+ *
+ * Same `isColorOnlyUnlitBasic` gate as the pack pipeline. Does not
+ * invent materials or hex-dedupe.
+ */
+export function pinColorOnlyUnlitBasicFlatShading(material) {
+  if (!isColorOnlyUnlitBasic(material)) return material;
+  material.flatShading = false;
+  return material;
+}
+
+/**
  * Pin Quest-safe Material flags on a packed color-only unlit MeshBasic
  * visual material, then run
  * `pinColorOnlyUnlitBasicMaterialRenderCallbacks` so leftover
@@ -885,7 +935,11 @@ export function pinColorOnlyUnlitBasicDefines(material) {
  * then `pinColorOnlyUnlitBasicCustomProgramCacheKey` so leftover
  * own-property `customProgramCacheKey` is deleted, then
  * `pinColorOnlyUnlitBasicDefines` so leftover Material `defines`
- * is cleared to the r170 absence (`undefined`).
+ * is cleared to the r170 absence (`undefined`), then
+ * `pinColorOnlyUnlitBasicFlatShading` so Material `flatShading`
+ * is `false` (r170 `WebGLPrograms` treats only
+ * `material.flatShading === true` as the FLAT_SHADED program
+ * variant).
  *
  * Same `isColorOnlyUnlitBasic` gate as the pack pipeline. Does not
  * invent materials or hex-dedupe. Load-time only — not per-frame.
@@ -958,6 +1012,7 @@ export function pinColorOnlyUnlitBasicFlags(material) {
   pinColorOnlyUnlitBasicMaterialRenderCallbacks(material);
   pinColorOnlyUnlitBasicCustomProgramCacheKey(material);
   pinColorOnlyUnlitBasicDefines(material);
+  pinColorOnlyUnlitBasicFlatShading(material);
   return material;
 }
 
@@ -1024,7 +1079,30 @@ export function pinColorOnlyUnlitBasicFlags(material) {
  * map; does not assign a sentinel
  * empty `{}` — r170 WebGLPrograms
  * treats `parameters.defines !==
- * undefined` as present)
+ * undefined` as present), and r170
+ * Material `flatShading = false`
+ * (`pinColorOnlyUnlitBasicFlatShading`;
+ * fresh r170 Material /
+ * MeshBasicMaterial leave
+ * `flatShading` unset /
+ * `undefined`; WebGLPrograms copies
+ * `flatShading: material.flatShading
+ * === true` into program parameters
+ * and the program cache key;
+ * WebGLProgram emits
+ * `#define FLAT_SHADED` only when
+ * that parameter is true; does not
+ * invent custom shaders; does not
+ * enable flat shading; does not
+ * touch Material `defines`; does not
+ * touch Material
+ * `customProgramCacheKey`; does not
+ * touch Material `onBeforeCompile` /
+ * `onBeforeRender`; does not touch
+ * Mesh `onBeforeRender` /
+ * `onAfterRender`; does not touch
+ * Mesh `onBeforeShadow` /
+ * `onAfterShadow`)
  * on every unique packed color-only unlit MeshBasic visual material.
  *
  * Skip colliders (even MeshBasic debug hulls). Skip mapped / lit.
@@ -2159,7 +2237,7 @@ export function createToolbox() {
     lod1Color: { wood: L3_LOD1_WOOD_COLOR, brass: L3_LOD1_BRASS_COLOR },
     lod2Color: L3_LOD2_WOOD_COLOR,
     uniqueMaterials: colorOnlyByHex.size,
-    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. v0.46 disables Mesh.raycast on packed color-only MeshBasic visuals (body + lid/latch/tool + fastener); colliders keep Mesh.prototype.raycast. v0.47 pins fog = false and toneMapped = false on packed color-only unlit MeshBasic materials (3 unique shared instances; mapped/lit/colliders stay r170 defaults). v0.48 also pins opaque FrontSide draw-state (transparent = false, opacity = 1, depthWrite = true, depthTest = true, side = FrontSide) on those same materials. v0.49 pins castShadow = false and receiveShadow = false on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults). v0.50 pins frustumCulled = true on those same visual meshes (colliders stay r170 Mesh defaults). v0.51 also pins NormalBlending / premultipliedAlpha false / alphaTest 0 (plus dithering false / alphaToCoverage false) on those same materials. v0.52 also pins wireframe false / colorWrite true / depthFunc LessEqualDepth / polygonOffset off on those same materials. v0.53 also pins r170 stencil defaults (stencilWrite false / AlwaysStencilFunc / Keep ops) on those same materials. v0.54 also pins r170 clipping defaults (clippingPlanes null / clipIntersection false / clipShadows false) on those same materials. v0.55 also pins r170 alphaHash / forceSinglePass defaults (alphaHash false / forceSinglePass false) on those same materials. v0.56 also pins r170 NormalBlending factor/equation companions (blendSrc SrcAlphaFactor / blendDst OneMinusSrcAlphaFactor / blendEquation AddEquation / blendSrcAlpha null / blendDstAlpha null / blendEquationAlpha null) on those same materials. v0.57 also pins r170 vertexColors false on those same materials. v0.58 also pins r170 precision null on those same materials. v0.59 also pins r170 shadowSide null on those same materials. v0.60 pins renderOrder = 0 on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults). v0.61 also pins r170 Material visible true on those same materials (does not pin mesh.visible — LOD visibility uses it). v0.62 also pins r170 MeshBasic envMap companions (combine MultiplyOperation / reflectivity 1 / refractionRatio 0.98) on those same materials (does not force envMap or attach maps). v0.63 also pins r170 MeshBasic map-intensity companions (lightMapIntensity 1 / aoMapIntensity 1) on those same materials (does not force lightMap / aoMap or attach maps). v0.64 also pins r170 MeshBasic wireframeLinewidth 1 on those same materials (does not enable wireframe; does not pin mesh.visible). v0.65 also pins r170 MeshBasic wireframeLinecap round / wireframeLinejoin round on those same materials (does not enable wireframe; does not pin mesh.visible). v0.66 also pins r170 MeshBasic envMapRotation (0, 0, 0) / order XYZ on those same materials (keeps the existing Euler instance; does not force envMap or attach maps; does not enable wireframe; does not pin mesh.visible). v0.67 pins r170 Object3D layers default (layer 0 only / mask 1) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; keeps the existing Layers instance; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixWorldAutoUpdate / matrixAutoUpdate). v0.68 also pins r170 Material CustomBlending color/alpha companions (blendColor (0, 0, 0) / blendAlpha 0) on those same materials (keeps the existing Color instance; does not enable CustomBlending or change blending away from NormalBlending; does not pin mesh.visible). v0.69 pins r170 Object3D matrixWorldAutoUpdate true (DEFAULT_MATRIX_WORLD_AUTO_UPDATE) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / layers / blendColor / blendAlpha). v0.70 pins r170 Object3D up (0, 1, 0) (DEFAULT_UP) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; keeps the existing Vector3 instance; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / blendColor / blendAlpha). v0.71 pins r170 Object3D scale (1, 1, 1) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; keeps the existing Vector3 instance; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / blendColor / blendAlpha). v0.72 also pins r170 Material dithering false / alphaToCoverage false on those same materials as first-class measured flags (v0.51 already assigned them as blending/alpha companions; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / blendColor / blendAlpha). v0.73 pins r170 Object3D rotation.order XYZ on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; keeps the existing Euler instance; does not rewrite rotation.xyz; does not touch quaternion; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / blendColor / blendAlpha / dithering / A2C). v0.74 also pins r170 Material polygonOffsetFactor 0 / polygonOffsetUnits 0 on those same materials as first-class measured flags (v0.52 already assigned them as polygonOffset companions; does not enable polygonOffset; does not invent non-zero factors/units; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / blendColor / blendAlpha / dithering / A2C). v0.75 also pins r170 Material stencilRef 0 / stencilWriteMask 0xff / stencilFuncMask 0xff / stencilZFail KeepStencilOp / stencilZPass KeepStencilOp on those same materials as first-class measured flags (v0.53 already assigned the full stencil suite and measured stencilWrite / stencilFunc / stencilFail in the short form; does not enable stencil write; does not invent non-Always func / non-Keep ops / non-zero ref / non-0xff masks; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including polygonOffset companions / dithering / A2C / blendColor / blendAlpha). v0.76 pins r170 Mesh customDepthMaterial / customDistanceMaterial absence (undefined/absent) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; does not invent replacement materials; does not enable castShadow / receiveShadow; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha). v0.77 pins r170 Object3D/Mesh onBeforeRender / onAfterRender instance absence (delete leftover own-property stubs so the r170 Object3D prototype empty no-ops remain; does not assign undefined; does not invent replacement callbacks) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; does not enable shadows or touch customDepth/Distance; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear). v0.78 pins r170 Material onBeforeCompile / onBeforeRender instance absence (delete leftover own-property stubs so the r170 Material.prototype empty no-ops remain; does not assign undefined; does not invent replacement callbacks or custom shaders) on packed color-only MeshBasic materials (3 unique shared wood/brass/steel instances; does not touch Mesh onBeforeRender / onAfterRender; does not touch onBeforeShadow / onAfterShadow; does not enable shadows; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / the v0.77 Mesh render-callback clear). v0.79 pins r170 Object3D/Mesh onBeforeShadow / onAfterShadow instance absence (delete leftover own-property stubs so the r170 Object3D prototype empty no-ops remain; does not assign undefined; does not invent replacement callbacks) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; does not enable shadows or touch customDepth/Distance; does not touch Mesh onBeforeRender / onAfterRender or Material onBeforeCompile / onBeforeRender; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear / the v0.77 Mesh render-callback clear / the v0.78 Material compile/render callback clear). v0.80 pins r170 Material customProgramCacheKey instance absence (delete leftover own-property stubs so the r170 Material.prototype method remains; does not assign undefined; does not invent a replacement function) on packed color-only MeshBasic materials (3 unique shared wood/brass/steel instances; does not touch Material onBeforeCompile / onBeforeRender; does not touch Mesh onBeforeRender / onAfterRender; does not touch Mesh onBeforeShadow / onAfterShadow; does not enable shadows; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear / Mesh+Material render-callback clears / the v0.79 Mesh shadow-callback clear). v0.81 pins r170 Material defines absence (delete leftover defines objects so defines === undefined remains; does not invent a replacement #define map; does not assign a sentinel empty {} — r170 WebGLPrograms treats parameters.defines !== undefined as present) on packed color-only MeshBasic materials (3 unique shared wood/brass/steel instances; does not touch Material customProgramCacheKey; does not touch Material onBeforeCompile / onBeforeRender; does not touch Mesh onBeforeRender / onAfterRender; does not touch Mesh onBeforeShadow / onAfterShadow; does not enable shadows; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear / Mesh+Material render-callback clears / Mesh shadow-callback clear / the v0.80 customProgramCacheKey clear). Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
+    note: "procedural color-only stand-in; LOD0/1/2 color-only unlit MeshBasic (no map; wood/brass/steel midtones). v0.37 woodDark/handleMat alias wood within a LOD; v0.42 one shared wood instance across LOD0/1/2 and one shared brass across LOD0/1 (+ fastener) when midtone hex matches (steel stays LOD0-only). same-material merge within each lodGroup (v0.37; not across body/lid/latch/tool) then coincident-vertex weld (v0.39) then unused uv/normal strip on color-only MeshBasic (v0.40) then Uint16 index compact (v0.41) then Float16 position quantize (v0.44) then StaticDrawUsage + onUpload CPU-array release (v0.43); fastener (not an LOD mesh) gets the same unused-attr strip + compact + Float16 + upload-release. v0.45 freezes matrixAutoUpdate on static color-only MeshBasic body LOD leaves after one updateMatrixWorld(true); lid/latch/tool/fastener stay live. v0.46 disables Mesh.raycast on packed color-only MeshBasic visuals (body + lid/latch/tool + fastener); colliders keep Mesh.prototype.raycast. v0.47 pins fog = false and toneMapped = false on packed color-only unlit MeshBasic materials (3 unique shared instances; mapped/lit/colliders stay r170 defaults). v0.48 also pins opaque FrontSide draw-state (transparent = false, opacity = 1, depthWrite = true, depthTest = true, side = FrontSide) on those same materials. v0.49 pins castShadow = false and receiveShadow = false on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults). v0.50 pins frustumCulled = true on those same visual meshes (colliders stay r170 Mesh defaults). v0.51 also pins NormalBlending / premultipliedAlpha false / alphaTest 0 (plus dithering false / alphaToCoverage false) on those same materials. v0.52 also pins wireframe false / colorWrite true / depthFunc LessEqualDepth / polygonOffset off on those same materials. v0.53 also pins r170 stencil defaults (stencilWrite false / AlwaysStencilFunc / Keep ops) on those same materials. v0.54 also pins r170 clipping defaults (clippingPlanes null / clipIntersection false / clipShadows false) on those same materials. v0.55 also pins r170 alphaHash / forceSinglePass defaults (alphaHash false / forceSinglePass false) on those same materials. v0.56 also pins r170 NormalBlending factor/equation companions (blendSrc SrcAlphaFactor / blendDst OneMinusSrcAlphaFactor / blendEquation AddEquation / blendSrcAlpha null / blendDstAlpha null / blendEquationAlpha null) on those same materials. v0.57 also pins r170 vertexColors false on those same materials. v0.58 also pins r170 precision null on those same materials. v0.59 also pins r170 shadowSide null on those same materials. v0.60 pins renderOrder = 0 on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults). v0.61 also pins r170 Material visible true on those same materials (does not pin mesh.visible — LOD visibility uses it). v0.62 also pins r170 MeshBasic envMap companions (combine MultiplyOperation / reflectivity 1 / refractionRatio 0.98) on those same materials (does not force envMap or attach maps). v0.63 also pins r170 MeshBasic map-intensity companions (lightMapIntensity 1 / aoMapIntensity 1) on those same materials (does not force lightMap / aoMap or attach maps). v0.64 also pins r170 MeshBasic wireframeLinewidth 1 on those same materials (does not enable wireframe; does not pin mesh.visible). v0.65 also pins r170 MeshBasic wireframeLinecap round / wireframeLinejoin round on those same materials (does not enable wireframe; does not pin mesh.visible). v0.66 also pins r170 MeshBasic envMapRotation (0, 0, 0) / order XYZ on those same materials (keeps the existing Euler instance; does not force envMap or attach maps; does not enable wireframe; does not pin mesh.visible). v0.67 pins r170 Object3D layers default (layer 0 only / mask 1) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; keeps the existing Layers instance; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixWorldAutoUpdate / matrixAutoUpdate). v0.68 also pins r170 Material CustomBlending color/alpha companions (blendColor (0, 0, 0) / blendAlpha 0) on those same materials (keeps the existing Color instance; does not enable CustomBlending or change blending away from NormalBlending; does not pin mesh.visible). v0.69 pins r170 Object3D matrixWorldAutoUpdate true (DEFAULT_MATRIX_WORLD_AUTO_UPDATE) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / layers / blendColor / blendAlpha). v0.70 pins r170 Object3D up (0, 1, 0) (DEFAULT_UP) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; keeps the existing Vector3 instance; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / blendColor / blendAlpha). v0.71 pins r170 Object3D scale (1, 1, 1) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; keeps the existing Vector3 instance; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / blendColor / blendAlpha). v0.72 also pins r170 Material dithering false / alphaToCoverage false on those same materials as first-class measured flags (v0.51 already assigned them as blending/alpha companions; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / blendColor / blendAlpha). v0.73 pins r170 Object3D rotation.order XYZ on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; keeps the existing Euler instance; does not rewrite rotation.xyz; does not touch quaternion; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / blendColor / blendAlpha / dithering / A2C). v0.74 also pins r170 Material polygonOffsetFactor 0 / polygonOffsetUnits 0 on those same materials as first-class measured flags (v0.52 already assigned them as polygonOffset companions; does not enable polygonOffset; does not invent non-zero factors/units; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / blendColor / blendAlpha / dithering / A2C). v0.75 also pins r170 Material stencilRef 0 / stencilWriteMask 0xff / stencilFuncMask 0xff / stencilZFail KeepStencilOp / stencilZPass KeepStencilOp on those same materials as first-class measured flags (v0.53 already assigned the full stencil suite and measured stencilWrite / stencilFunc / stencilFail in the short form; does not enable stencil write; does not invent non-Always func / non-Keep ops / non-zero ref / non-0xff masks; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including polygonOffset companions / dithering / A2C / blendColor / blendAlpha). v0.76 pins r170 Mesh customDepthMaterial / customDistanceMaterial absence (undefined/absent) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; does not invent replacement materials; does not enable castShadow / receiveShadow; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha). v0.77 pins r170 Object3D/Mesh onBeforeRender / onAfterRender instance absence (delete leftover own-property stubs so the r170 Object3D prototype empty no-ops remain; does not assign undefined; does not invent replacement callbacks) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; does not enable shadows or touch customDepth/Distance; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear). v0.78 pins r170 Material onBeforeCompile / onBeforeRender instance absence (delete leftover own-property stubs so the r170 Material.prototype empty no-ops remain; does not assign undefined; does not invent replacement callbacks or custom shaders) on packed color-only MeshBasic materials (3 unique shared wood/brass/steel instances; does not touch Mesh onBeforeRender / onAfterRender; does not touch onBeforeShadow / onAfterShadow; does not enable shadows; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / the v0.77 Mesh render-callback clear). v0.79 pins r170 Object3D/Mesh onBeforeShadow / onAfterShadow instance absence (delete leftover own-property stubs so the r170 Object3D prototype empty no-ops remain; does not assign undefined; does not invent replacement callbacks) on packed color-only MeshBasic visual meshes (body + lid/latch/tool + fastener; does not enable shadows or touch customDepth/Distance; does not touch Mesh onBeforeRender / onAfterRender or Material onBeforeCompile / onBeforeRender; colliders stay r170 Mesh defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear / the v0.77 Mesh render-callback clear / the v0.78 Material compile/render callback clear). v0.80 pins r170 Material customProgramCacheKey instance absence (delete leftover own-property stubs so the r170 Material.prototype method remains; does not assign undefined; does not invent a replacement function) on packed color-only MeshBasic materials (3 unique shared wood/brass/steel instances; does not touch Material onBeforeCompile / onBeforeRender; does not touch Mesh onBeforeRender / onAfterRender; does not touch Mesh onBeforeShadow / onAfterShadow; does not enable shadows; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear / Mesh+Material render-callback clears / the v0.79 Mesh shadow-callback clear). v0.81 pins r170 Material defines absence (delete leftover defines objects so defines === undefined remains; does not invent a replacement #define map; does not assign a sentinel empty {} — r170 WebGLPrograms treats parameters.defines !== undefined as present) on packed color-only MeshBasic materials (3 unique shared wood/brass/steel instances; does not touch Material customProgramCacheKey; does not touch Material onBeforeCompile / onBeforeRender; does not touch Mesh onBeforeRender / onAfterRender; does not touch Mesh onBeforeShadow / onAfterShadow; does not enable shadows; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear / Mesh+Material render-callback clears / Mesh shadow-callback clear / the v0.80 customProgramCacheKey clear). v0.82 pins Material flatShading = false on packed color-only MeshBasic materials (3 unique shared wood/brass/steel instances; first-class measured flatShading-off; fresh r170 Material / MeshBasicMaterial leave flatShading unset so a fresh instance is undefined; WebGLPrograms copies flatShading: material.flatShading === true into program parameters and the program cache key and WebGLProgram emits #define FLAT_SHADED when that parameter is true; does not invent custom shaders; does not enable flat shading; does not touch Material defines; does not touch Material customProgramCacheKey; does not touch Material onBeforeCompile / onBeforeRender; does not touch Mesh onBeforeRender / onAfterRender; does not touch Mesh onBeforeShadow / onAfterShadow; does not enable shadows; mapped/lit/colliders stay authored / r170 defaults; does not pin mesh.visible; does not change matrixAutoUpdate / matrixWorldAutoUpdate / layers / up / scale / rotation.order / prior material pins including defines / customProgramCacheKey / stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha). Collider CPU arrays stay. lod.stats.attrBytes is the pre-upload envelope",
   };
   root.userData.materials = {
     lod0: { wood, woodDark, brass, steel, handleMat },
@@ -2497,6 +2575,49 @@ export function createToolbox() {
   // shadow-callback clear / the
   // v0.80 customProgramCacheKey
   // clear.
+  // v0.82: after that Material defines
+  // clear (and after the long Material
+  // flag fence through v0.80
+  // customProgramCacheKey / v0.78
+  // onBeforeCompile+onBeforeRender /
+  // v0.75 stencil companions), pin
+  // Material flatShading = false on
+  // the 3 shared color-only MeshBasics
+  // (wired through
+  // pinColorOnlyUnlitBasicFlags /
+  // pinColorOnlyVisualMaterialFlags,
+  // same place the v0.81 defines
+  // clear and the other color-only
+  // MeshBasic material pins run).
+  // Fresh r170 Material /
+  // MeshBasicMaterial leave
+  // flatShading unset (undefined);
+  // WebGLPrograms copies
+  // flatShading: material.flatShading
+  // === true into program parameters
+  // and the program cache key.
+  // Does not invent custom shaders;
+  // does not enable flat shading;
+  // does not touch Material defines;
+  // does not touch Material
+  // customProgramCacheKey; does not
+  // touch Material onBeforeCompile /
+  // onBeforeRender; does not touch
+  // Mesh onBeforeRender /
+  // onAfterRender; does not touch
+  // Mesh onBeforeShadow /
+  // onAfterShadow; does not enable
+  // shadows or pin mesh.visible;
+  // does not change
+  // matrixAutoUpdate /
+  // matrixWorldAutoUpdate / layers /
+  // up / scale / rotation.order /
+  // prior material pins including
+  // defines / customProgramCacheKey /
+  // stencil companions /
+  // polygonOffset companions /
+  // dithering / A2C / blendColor /
+  // blendAlpha.
   // Pivots stay separate. Fastener is packed above, not merged here.
   mergeSameMaterialMeshes(bodyL0);
   mergeSameMaterialMeshes(lidL0);
