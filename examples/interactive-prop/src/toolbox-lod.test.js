@@ -54,6 +54,7 @@ const {
   pinColorOnlyUnlitBasicCustomProgramCacheKey,
   pinColorOnlyUnlitBasicDefines,
   pinColorOnlyUnlitBasicFlatShading,
+  pinColorOnlyUnlitBasicGlslVersion,
   pinColorOnlyUnlitBasicMaterialRenderCallbacks,
   pinColorOnlyUnlitBasicRenderCallbacks,
   pinColorOnlyUnlitBasicShadowCallbacks,
@@ -432,6 +433,15 @@ function assertR170MaterialFlatShadingUnset(mat, label = "r170 Material") {
 
 function assertQuestSafeUnlitFlatShading(mat, label = "color-only MeshBasic") {
   assert.equal(mat.flatShading, false, `${label} flatShading is false`);
+}
+
+function assertR170MaterialGlslVersionAbsent(mat, label = "r170 Material") {
+  assert.equal(mat.glslVersion, undefined, `${label} glslVersion is undefined`);
+  assert.equal(Object.hasOwn(mat, "glslVersion"), false, `${label} glslVersion is not an own property`);
+}
+
+function assertQuestSafeUnlitGlslVersion(mat, label = "color-only MeshBasic") {
+  assertR170MaterialGlslVersionAbsent(mat, label);
 }
 
 test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
@@ -1257,6 +1267,16 @@ function countVisualFlatShading(crate) {
     else leftover += 1;
   }
   return { off, leftover, total: off + leftover };
+}
+
+function countVisualGlslVersion(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (mat.glslVersion === undefined) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
 }
 
 test("v0.46 disables Mesh.raycast on packed color-only visuals; colliders keep default", () => {
@@ -5815,6 +5835,20 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assertQuestSafeUnlitDefines(flatShadingOnly, "flatShading leftover color-only MeshBasic");
   assertQuestSafeUnlitCustomProgramCacheKey(flatShadingOnly, "flatShading leftover color-only MeshBasic");
 
+  const glslVersionOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  glslVersionOnly.glslVersion = "300 es";
+  assert.equal(isColorOnlyUnlitBasic(glslVersionOnly), true, "glslVersion leftover still passes isColorOnlyUnlitBasic");
+  assert.equal(glslVersionOnly.glslVersion, THREE.GLSL3, "DCC leftover is GLSL3 / '300 es'");
+  assert.equal(Object.hasOwn(glslVersionOnly, "glslVersion"), true, "DCC leftover glslVersion is an own property");
+  pinColorOnlyUnlitBasicFlags(glslVersionOnly);
+  assertQuestSafeUnlitGlslVersion(glslVersionOnly, "glslVersion leftover color-only MeshBasic");
+  assert.equal(glslVersionOnly.glslVersion, undefined, "leftover glslVersion is cleared via flags pin");
+  assert.equal(Object.hasOwn(glslVersionOnly, "glslVersion"), false, "leftover glslVersion own property is deleted");
+  assertQuestSafeUnlitFlags(glslVersionOnly, "glslVersion leftover color-only MeshBasic");
+  assertQuestSafeUnlitFlatShading(glslVersionOnly, "glslVersion leftover color-only MeshBasic");
+  assertQuestSafeUnlitDefines(glslVersionOnly, "glslVersion leftover color-only MeshBasic");
+  assertQuestSafeUnlitCustomProgramCacheKey(glslVersionOnly, "glslVersion leftover color-only MeshBasic");
+
   const wrong = new THREE.MeshBasicMaterial({
     color: 0x633318,
     transparent: true,
@@ -5933,15 +5967,19 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   const leftoverWrongDefines = { USE_UV: "", DCC_LEFTOVER: 1 };
   wrong.defines = leftoverWrongDefines;
   wrong.flatShading = true;
+  wrong.glslVersion = THREE.GLSL3;
   pinColorOnlyUnlitBasicFlags(wrong);
   assertQuestSafeUnlitFlags(wrong, "deliberately wrong color-only MeshBasic");
   assertQuestSafeUnlitCustomProgramCacheKey(wrong, "deliberately wrong color-only MeshBasic");
   assertQuestSafeUnlitDefines(wrong, "deliberately wrong color-only MeshBasic");
   assertQuestSafeUnlitFlatShading(wrong, "deliberately wrong color-only MeshBasic");
+  assertQuestSafeUnlitGlslVersion(wrong, "deliberately wrong color-only MeshBasic");
   assert.notEqual(wrong.customProgramCacheKey, leftoverWrongKey, "wrong color-only MeshBasic leftover customProgramCacheKey is cleared");
   assert.notEqual(wrong.defines, leftoverWrongDefines, "wrong color-only MeshBasic leftover defines is cleared");
   assert.equal(wrong.defines, undefined, "wrong color-only MeshBasic defines is restored to r170 absence");
   assert.equal(wrong.flatShading, false, "wrong color-only MeshBasic flatShading is pinned false");
+  assert.equal(wrong.glslVersion, undefined, "wrong color-only MeshBasic glslVersion is restored to r170 absence");
+  assert.equal(Object.hasOwn(wrong, "glslVersion"), false, "wrong color-only MeshBasic glslVersion own property is deleted");
   assert.equal(wrong.envMapRotation, wrongRotation, "wrong color-only MeshBasic keeps its Euler instance");
   assert.equal(wrong.blendColor, wrongBlendColor, "wrong color-only MeshBasic keeps its Color instance");
   assert.equal(wrong.wireframe, false, "wireframe line-style pin does not enable wireframe");
@@ -8523,4 +8561,341 @@ test("pinColorOnlyUnlitBasicFlatShading / pinColorOnlyVisualMaterialFlags skip m
   assert.equal(collider.material.flatShading, true, "collider Mesh stays authored");
   assert.equal(sharedBlocked.flatShading, true, "shared collider material stays unpinned");
   assert.equal(std.flatShading, true, "MeshStandard stays authored via entity helper");
+});
+
+test("v0.83 clears leftover Material glslVersion on unique color-only MeshBasics; envelope stays v0.82", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  const freshMaterial = new THREE.Material();
+  const freshShader = new THREE.ShaderMaterial();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(THREE.GLSL3, "300 es", "r170 GLSL3 is '300 es'");
+  assert.equal(THREE.GLSL1, "100", "r170 GLSL1 is '100'");
+  assertR170MaterialGlslVersionAbsent(fresh, "r170 MeshBasicMaterial");
+  assertR170MaterialGlslVersionAbsent(freshMaterial, "r170 Material");
+  assert.equal(Object.hasOwn(THREE.Material.prototype, "glslVersion"), false, "r170 Material.prototype does not define glslVersion");
+  assert.equal(freshShader.glslVersion, null, "r170 ShaderMaterial constructor sets glslVersion null");
+  assert.equal(Object.hasOwn(freshShader, "glslVersion"), true, "r170 ShaderMaterial defines glslVersion on the instance");
+  assert.equal(freshShader.isMeshBasicMaterial, undefined, "ShaderMaterial is not MeshBasic");
+  assertR170MaterialFlatShadingUnset(fresh, "r170 MeshBasicMaterial");
+  assertR170MaterialDefinesAbsent(fresh, "r170 MeshBasicMaterial");
+  assertR170MaterialCustomProgramCacheKeyDefault(fresh, "r170 MeshBasicMaterial");
+  assertR170MaterialRenderCallbacksAbsent(fresh, "r170 MeshBasicMaterial");
+  assertR170MeshBasicStencilCompanionDefaults(fresh);
+  assertR170MeshBasicPolygonOffsetCompanionDefaults(fresh);
+  assertR170MeshBasicDitheringAlphaToCoverageDefaults(fresh);
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+    assertQuestSafeUnlitGlslVersion(mat);
+    assertQuestSafeUnlitFlatShading(mat);
+    assertQuestSafeUnlitDefines(mat);
+    assertQuestSafeUnlitCustomProgramCacheKey(mat);
+    assertQuestSafeUnlitMaterialRenderCallbacks(mat);
+    assert.equal(mat.stencilWrite, false, "prior stencilWrite pin stays false");
+    assert.equal(mat.stencilRef, 0, "prior stencilRef pin stays 0");
+    assert.equal(mat.dithering, false, "prior dithering pin stays false");
+    assert.equal(mat.alphaToCoverage, false, "prior alphaToCoverage pin stays false");
+    assert.equal(mat.flatShading, false, "prior flatShading pin stays false");
+  }
+  const named = crate.userData.materials.lod0;
+  assertQuestSafeUnlitGlslVersion(named.wood, "wood");
+  assertQuestSafeUnlitGlslVersion(named.brass, "brass");
+  assertQuestSafeUnlitGlslVersion(named.steel, "steel");
+  assert.equal(named.wood, crate.userData.materials.lod1.wood);
+  assert.equal(named.brass, crate.userData.materials.lod1.brass);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFlags(mesh.material);
+    assertQuestSafeUnlitGlslVersion(mesh.material);
+    assertQuestSafeUnlitFlatShading(mesh.material);
+    assertQuestSafeUnlitDefines(mesh.material);
+    assertQuestSafeUnlitCustomProgramCacheKey(mesh.material);
+    assertQuestSafeUnlitMaterialRenderCallbacks(mesh.material);
+    assertQuestSafeUnlitShadowCallbacks(mesh);
+    assertQuestSafeUnlitRenderCallbacks(mesh);
+    assertQuestSafeUnlitCustomShadowMaterials(mesh);
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitRenderOrder(mesh);
+    assertQuestSafeUnlitLayers(mesh);
+    assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh);
+    assertQuestSafeUnlitUp(mesh);
+    assertQuestSafeUnlitScale(mesh);
+    assertQuestSafeUnlitRotationOrder(mesh);
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+    assert.equal(mesh.castShadow, false, "glslVersion pin does not enable castShadow");
+    assert.equal(mesh.receiveShadow, false, "glslVersion pin does not enable receiveShadow");
+    assert.equal(Object.hasOwn(mesh, "onBeforeRender"), false, "glslVersion pin does not touch Mesh onBeforeRender");
+    assert.equal(Object.hasOwn(mesh, "onAfterRender"), false, "glslVersion pin does not touch Mesh onAfterRender");
+    assert.equal(Object.hasOwn(mesh, "onBeforeShadow"), false, "glslVersion pin does not touch Mesh onBeforeShadow");
+    assert.equal(Object.hasOwn(mesh, "onAfterShadow"), false, "glslVersion pin does not touch Mesh onAfterShadow");
+    assert.equal(Object.hasOwn(mesh.material, "onBeforeCompile"), false, "glslVersion pin does not touch Material onBeforeCompile");
+    assert.equal(Object.hasOwn(mesh.material, "onBeforeRender"), false, "glslVersion pin does not touch Material onBeforeRender");
+    assert.equal(Object.hasOwn(mesh.material, "customProgramCacheKey"), false, "glslVersion pin does not touch Material customProgramCacheKey");
+    assert.equal(mesh.material.defines, undefined, "glslVersion pin does not touch Material defines");
+    assert.equal(mesh.material.flatShading, false, "glslVersion pin does not touch Material flatShading");
+    assert.equal(mesh.customDepthMaterial, undefined, "glslVersion pin does not invent customDepthMaterial");
+    assert.equal(mesh.customDistanceMaterial, undefined, "glslVersion pin does not invent customDistanceMaterial");
+    assert.equal(mesh.material.isShaderMaterial, undefined, "glslVersion pin does not convert MeshBasic to ShaderMaterial");
+  }
+  const glslCounts = countVisualGlslVersion(crate);
+  assert.equal(glslCounts.absent, 3, "glslVersion-absent count is 3");
+  assert.equal(glslCounts.leftover, 0);
+  const flatCounts = countVisualFlatShading(crate);
+  assert.equal(flatCounts.off, 3, "flatShading-off count stays 3");
+  assert.equal(flatCounts.leftover, 0);
+  const definesCounts = countVisualDefines(crate);
+  assert.equal(definesCounts.absent, 3, "defines-absent count stays 3");
+  assert.equal(definesCounts.leftover, 0);
+  const cacheKeyCounts = countVisualCustomProgramCacheKey(crate);
+  assert.equal(cacheKeyCounts.defaults, 3, "customProgramCacheKey-default count stays 3");
+  assert.equal(cacheKeyCounts.leftover, 0);
+  const materialCallbackCounts = countVisualMaterialRenderCallbacks(crate);
+  assert.equal(materialCallbackCounts.absent, 3, "material-render-callbacks-absent count stays 3");
+  assert.equal(materialCallbackCounts.leftover, 0);
+  const shadowCallbackCounts = countVisualShadowCallbacks(crate);
+  assert.equal(shadowCallbackCounts.absent, 13, "shadow-callbacks-absent count stays 13");
+  assert.equal(shadowCallbackCounts.leftover, 0);
+  const callbackCounts = countVisualRenderCallbacks(crate);
+  assert.equal(callbackCounts.absent, 13, "render-callbacks-absent count stays 13");
+  assert.equal(callbackCounts.leftover, 0);
+  const customCounts = countVisualCustomShadowMaterials(crate);
+  assert.equal(customCounts.absent, 13, "customDepth/Distance-absent count stays 13");
+  assert.equal(customCounts.leftover, 0);
+  const rotationCounts = countVisualRotationOrderXYZ(crate);
+  assert.equal(rotationCounts.xyz, 13, "rotation-order-XYZ count stays 13");
+  assert.equal(rotationCounts.other, 0);
+  const scaleCounts = countVisualScaleDefault(crate);
+  assert.equal(scaleCounts.unit, 13, "scale-default count stays 13");
+  assert.equal(scaleCounts.other, 0);
+  const upCounts = countVisualUpDefault(crate);
+  assert.equal(upCounts.yUp, 13, "up-default count stays 13");
+  assert.equal(upCounts.other, 0);
+  const worldAutoCounts = countVisualMatrixWorldAutoUpdate(crate);
+  assert.equal(worldAutoCounts.on, 13, "matrixWorldAutoUpdate-on count stays 13");
+  assert.equal(worldAutoCounts.off, 0);
+  const layerCounts = countVisualLayersDefault(crate);
+  assert.equal(layerCounts.layer0Only, 13, "layers-default count stays 13");
+  assert.equal(layerCounts.other, 0);
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  assert.equal(renderOrderCounts.nonzero, 0);
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitGlslVersion(lidMesh.material, "lidMesh");
+  assertQuestSafeUnlitGlslVersion(latchMesh.material, "latchMesh");
+  assertQuestSafeUnlitGlslVersion(fastener.material, "fastenerMesh");
+  assert.equal(fastener.geometry.getAttribute("position") ? cpuAttrBytes(fastener.geometry) : 0, 216, "fastener attrBytes stay 216");
+
+  const lod0Group = crate.userData.lod.groups[0][0];
+  assert.equal(lod0Group.visible, true, "LOD0 group starts visible");
+  setToolboxLod(crate, 1);
+  assert.equal(lod0Group.visible, false, "LOD hides via group.visible, not mesh.visible");
+  assert.equal(lidMesh.visible, true, "mesh.visible is not pinned; LOD uses group.visible");
+  setToolboxLod(crate, 0);
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assertQuestSafeUnlitGlslVersion(bodyHero.material, "body LOD leaf");
+
+  for (const c of crate.userData.colliders) {
+    assertR170MaterialGlslVersionAbsent(c.material, "collider MeshBasic keeps r170 glslVersion unset");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+    assert.equal(c.matrixAutoUpdate, true, "collider matrixAutoUpdate stays live");
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(activityState(crate), "closed");
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitGlslVersion(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitFlatShading(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitDefines(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitCustomProgramCacheKey(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitMaterialRenderCallbacks(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitShadowCallbacks(fastener, "fastener after L5 drive");
+  assert.equal(fastener.castShadow, false, "fastener castShadow stays false after L5");
+  assert.equal(fastener.receiveShadow, false, "fastener receiveShadow stays false after L5");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+});
+
+test("pinColorOnlyUnlitBasicGlslVersion corrects a wrong color-only MeshBasic that still passes isColorOnlyUnlitBasic", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assertR170MaterialGlslVersionAbsent(fresh, "r170 MeshBasicMaterial");
+
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  wrong.glslVersion = "300 es";
+  wrong.flatShading = true;
+  wrong.defines = { USE_UV: "" };
+  wrong.fog = true;
+  wrong.dithering = true;
+  wrong.stencilRef = 1;
+  const leftoverKey = () => "dcc-unique-program-key";
+  wrong.customProgramCacheKey = leftoverKey;
+  const compileBefore = () => {};
+  const beforeRenderBefore = () => {};
+  wrong.onBeforeCompile = compileBefore;
+  wrong.onBeforeRender = beforeRenderBefore;
+  assert.equal(isColorOnlyUnlitBasic(wrong), true, "color-only MeshBasic still passes the gate");
+  assert.equal(wrong.glslVersion, THREE.GLSL3, "DCC leftover is GLSL3 / '300 es'");
+  const fogBefore = wrong.fog;
+  const blendColorBefore = wrong.blendColor;
+  const blendAlphaBefore = wrong.blendAlpha;
+  const ditheringBefore = wrong.dithering;
+  const a2cBefore = wrong.alphaToCoverage;
+  const stencilRefBefore = wrong.stencilRef;
+  const polygonOffsetFactorBefore = wrong.polygonOffsetFactor;
+  const definesBefore = wrong.defines;
+  const flatShadingBefore = wrong.flatShading;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), wrong);
+  const meshBefore = () => {};
+  const meshAfter = () => {};
+  const meshShadowBefore = () => {};
+  const meshShadowAfter = () => {};
+  mesh.onBeforeRender = meshBefore;
+  mesh.onAfterRender = meshAfter;
+  mesh.onBeforeShadow = meshShadowBefore;
+  mesh.onAfterShadow = meshShadowAfter;
+  const customDepthBefore = new THREE.MeshBasicMaterial({ color: 0x111111 });
+  const customDistanceBefore = new THREE.MeshBasicMaterial({ color: 0x222222 });
+  mesh.customDepthMaterial = customDepthBefore;
+  mesh.customDistanceMaterial = customDistanceBefore;
+  pinColorOnlyUnlitBasicGlslVersion(wrong);
+  assertQuestSafeUnlitGlslVersion(wrong, "deliberately wrong color-only MeshBasic");
+  assert.equal(wrong.glslVersion, undefined, "glslVersion is deleted back to r170 absence");
+  assert.equal(Object.hasOwn(wrong, "glslVersion"), false, "glslVersion own property is deleted");
+  assert.notEqual(wrong.glslVersion, "300 es", "leftover '300 es' is not left assigned");
+  assert.notEqual(wrong.glslVersion, null, "glslVersion is not assigned the ShaderMaterial null sentinel");
+  assert.equal(wrong.fog, fogBefore, "glslVersion pin does not change fog");
+  assert.equal(wrong.blendColor, blendColorBefore, "glslVersion pin does not replace blendColor");
+  assert.equal(wrong.blendAlpha, blendAlphaBefore, "glslVersion pin does not change blendAlpha");
+  assert.equal(wrong.dithering, ditheringBefore, "glslVersion pin does not change dithering");
+  assert.equal(wrong.alphaToCoverage, a2cBefore, "glslVersion pin does not change alphaToCoverage");
+  assert.equal(wrong.stencilRef, stencilRefBefore, "glslVersion pin does not change stencilRef");
+  assert.equal(wrong.polygonOffsetFactor, polygonOffsetFactorBefore, "glslVersion pin does not change polygonOffsetFactor");
+  assert.equal(wrong.defines, definesBefore, "glslVersion pin does not touch Material defines");
+  assert.equal(wrong.flatShading, flatShadingBefore, "glslVersion pin does not touch Material flatShading");
+  assert.equal(wrong.onBeforeCompile, compileBefore, "glslVersion pin does not touch Material onBeforeCompile");
+  assert.equal(wrong.onBeforeRender, beforeRenderBefore, "glslVersion pin does not touch Material onBeforeRender");
+  assert.equal(wrong.customProgramCacheKey, leftoverKey, "glslVersion pin does not touch Material customProgramCacheKey");
+  assert.equal(mesh.onBeforeRender, meshBefore, "glslVersion pin does not touch Mesh onBeforeRender");
+  assert.equal(mesh.onAfterRender, meshAfter, "glslVersion pin does not touch Mesh onAfterRender");
+  assert.equal(mesh.onBeforeShadow, meshShadowBefore, "glslVersion pin does not touch Mesh onBeforeShadow");
+  assert.equal(mesh.onAfterShadow, meshShadowAfter, "glslVersion pin does not touch Mesh onAfterShadow");
+  assert.equal(mesh.customDepthMaterial, customDepthBefore, "glslVersion pin does not touch customDepthMaterial");
+  assert.equal(mesh.customDistanceMaterial, customDistanceBefore, "glslVersion pin does not touch customDistanceMaterial");
+  assert.equal(wrong.isShaderMaterial, undefined, "glslVersion pin does not convert MeshBasic to ShaderMaterial");
+
+  const hundred = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  hundred.glslVersion = "100";
+  pinColorOnlyUnlitBasicGlslVersion(hundred);
+  assertQuestSafeUnlitGlslVersion(hundred, "leftover glslVersion '100'");
+});
+
+test("pinColorOnlyUnlitBasicGlslVersion / pinColorOnlyVisualMaterialFlags skip mapped, lit, morph, colliders, shared blocked", () => {
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  colorOnly.glslVersion = THREE.GLSL3;
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  mapped.glslVersion = "300 es";
+  const std = new THREE.MeshStandardMaterial();
+  std.glslVersion = "300 es";
+  const shader = new THREE.ShaderMaterial();
+  shader.glslVersion = THREE.GLSL3;
+  pinColorOnlyUnlitBasicGlslVersion(colorOnly);
+  pinColorOnlyUnlitBasicGlslVersion(mapped);
+  pinColorOnlyUnlitBasicGlslVersion(std);
+  pinColorOnlyUnlitBasicGlslVersion(shader);
+  assertQuestSafeUnlitGlslVersion(colorOnly);
+  assert.equal(mapped.glslVersion, "300 es", "mapped MeshBasic stays authored glslVersion");
+  assert.equal(std.glslVersion, "300 es", "MeshStandard stays authored glslVersion");
+  assert.equal(shader.glslVersion, THREE.GLSL3, "ShaderMaterial stays authored glslVersion");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mapped);
+  const colorMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  colorMesh.material.glslVersion = "100";
+  const morph = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xc1c3c9 })
+  );
+  morph.geometry.morphAttributes.position = [morph.geometry.getAttribute("position").clone()];
+  morph.material.glslVersion = THREE.GLSL3;
+  const collider = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.material.glslVersion = "300 es";
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedBlocked.glslVersion = "100";
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  body.add(mappedMesh, colorMesh, morph, sharedVisual);
+  root.add(body, collider, sharedCollider, new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), std));
+  pinColorOnlyVisualMaterialFlags(root);
+  assertQuestSafeUnlitGlslVersion(colorMesh.material, "entity helper color-only");
+  assert.equal(mapped.glslVersion, "300 es", "mapped MeshBasic stays authored via entity helper");
+  assert.equal(morph.material.glslVersion, THREE.GLSL3, "morph color-only MeshBasic is skipped");
+  assert.equal(collider.material.glslVersion, "300 es", "collider Mesh stays authored");
+  assert.equal(sharedBlocked.glslVersion, "100", "shared collider material stays unpinned");
+  assert.equal(std.glslVersion, "300 es", "MeshStandard stays authored via entity helper");
 });
