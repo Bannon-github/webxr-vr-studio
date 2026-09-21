@@ -800,6 +800,82 @@
  * companions / polygonOffset
  * companions / dithering / A2C /
  * `blendColor` / `blendAlpha`.
+ *
+ * v0.83: after that Material
+ * `flatShading` pin (and after the
+ * Material program-cache fence
+ * through v0.81 `defines` / v0.80
+ * `customProgramCacheKey` / v0.78
+ * `onBeforeCompile` +
+ * `onBeforeRender`),
+ * `pinColorOnlyUnlitBasicGlslVersion`
+ * (via `pinColorOnlyUnlitBasicFlags`
+ * / `pinColorOnlyVisualMaterialFlags`)
+ * deletes leftover Material
+ * `glslVersion` so the r170
+ * MeshBasicMaterial / Material
+ * default absence remains
+ * (`glslVersion === undefined`) on
+ * packed color-only unlit MeshBasic
+ * materials (same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Verified r170 (three@0.170.0):**
+ * Material / MeshBasicMaterial leave
+ * `glslVersion` unset (`undefined`;
+ * `Object.hasOwn` false).
+ * `ShaderMaterial` assigns
+ * `glslVersion = null` in its own
+ * constructor — do not convert
+ * MeshBasic to ShaderMaterial.
+ * `WebGLPrograms.getParameters`
+ * copies `glslVersion:
+ * material.glslVersion` into program
+ * parameters. `WebGLProgram` emits
+ * `#version ${parameters.glslVersion}`
+ * when that parameter is truthy, and
+ * omits the `pc_fragColor` /
+ * `gl_FragColor` defines when
+ * `parameters.glslVersion === GLSL3`
+ * (`'300 es'`). Leftover DCC/GLB
+ * `glslVersion = GLSL3` (or `'100'` /
+ * `'300 es'`) can force the wrong
+ * shader preamble on Quest Browser /
+ * TBDR. Does **not** assign a
+ * sentinel string. Does **not**
+ * assign `GLSL3` / `GLSL1` /
+ * `'300 es'` / `'100'`. Does **not**
+ * invent custom shaders. Does **not**
+ * touch Material `flatShading`
+ * (v0.82). Does **not** touch
+ * Material `defines` (v0.81). Does
+ * **not** touch Material
+ * `customProgramCacheKey` (v0.80).
+ * Does **not** touch Material
+ * `onBeforeCompile` /
+ * `onBeforeRender` (v0.78). Does
+ * **not** touch Mesh
+ * `onBeforeRender` / `onAfterRender`
+ * (v0.77). Does **not** touch Mesh
+ * `onBeforeShadow` / `onAfterShadow`
+ * (v0.79). Does not hex-dedupe or
+ * invent materials. Mapped / lit stay
+ * at authored / r170 Material
+ * defaults. Collider materials stay
+ * untouched. Does **not** pin
+ * `mesh.visible` (LOD visibility uses
+ * it), change `matrixAutoUpdate`
+ * (v0.45 already freezes static body
+ * LOD leaves), change
+ * `matrixWorldAutoUpdate`, change
+ * `layers`, change `up`, change
+ * `scale`, change `rotation.order`,
+ * or change prior material pins
+ * including `flatShading` /
+ * `defines` / `customProgramCacheKey`
+ * / stencil companions /
+ * polygonOffset companions /
+ * dithering / A2C / `blendColor` /
+ * `blendAlpha`.
  */
 
 import {
