@@ -682,6 +682,65 @@
  * compile/render callback clear /
  * the v0.79 Mesh shadow-callback
  * clear.
+ *
+ * v0.81: after that Material
+ * customProgramCacheKey clear (and
+ * after the v0.78 Material
+ * compile/render callback clear),
+ * `pinColorOnlyUnlitBasicDefines`
+ * (via `pinColorOnlyUnlitBasicFlags`
+ * / `pinColorOnlyVisualMaterialFlags`)
+ * clears leftover Material `defines`
+ * so the r170 MeshBasicMaterial /
+ * Material default absence remains
+ * (`defines === undefined`) on packed
+ * color-only unlit MeshBasic
+ * materials (same
+ * `isColorOnlyUnlitBasic` gate).
+ * Does **not** invent a replacement
+ * `#define` map. Does **not** assign
+ * a sentinel empty `{}` (r170
+ * `WebGLPrograms` treats
+ * `parameters.defines !== undefined`
+ * as present and walks keys into the
+ * program cache key). Does **not**
+ * touch Material
+ * `customProgramCacheKey` (v0.80).
+ * Does **not** touch Material
+ * `onBeforeCompile` /
+ * `onBeforeRender` (v0.78). Does
+ * **not** touch Mesh
+ * `onBeforeRender` / `onAfterRender`
+ * (v0.77). Does **not** touch Mesh
+ * `onBeforeShadow` / `onAfterShadow`
+ * (v0.79). Accidental DCC / GLB
+ * leftover Material `defines`
+ * objects fragment the program cache
+ * and can force extra compiles on
+ * Quest Browser / TBDR. Does not
+ * hex-dedupe or invent materials.
+ * Mapped / lit stay at authored /
+ * r170 Material defaults. Collider
+ * materials stay untouched. Does
+ * **not** pin `mesh.visible` (LOD
+ * visibility uses it), change
+ * `matrixAutoUpdate` (v0.45 already
+ * freezes static body LOD leaves),
+ * change `matrixWorldAutoUpdate`,
+ * change `layers`, change `up`,
+ * change `scale`, change
+ * `rotation.order`, or change prior
+ * material pins including stencil
+ * companions / polygonOffset
+ * companions / dithering / A2C /
+ * `blendColor` / `blendAlpha` / the
+ * v0.76 customDepth/Distance clear /
+ * the v0.77 Mesh render-callback
+ * clear / the v0.78 Material
+ * compile/render callback clear /
+ * the v0.79 Mesh shadow-callback
+ * clear / the v0.80 Material
+ * customProgramCacheKey clear.
  */
 
 import {

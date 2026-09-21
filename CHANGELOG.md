@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.83.0] — 2026-09-21
+
+### Changed
+
+- `crate-toolbox` **v0.81.0** L3 packaging/perf UPGRADE: after the v0.80 Material `customProgramCacheKey` clear (and after the v0.78 Material `onBeforeCompile` / `onBeforeRender` clear), also clear leftover Material `defines` so the r170 MeshBasicMaterial / Material default absence remains (`defines === undefined`) on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances; first-class measured defines-absent; does not invent a replacement `#define` map; does not assign a sentinel empty `{}`; does not touch Material `customProgramCacheKey`; does not touch Material `onBeforeCompile` / `onBeforeRender`; does not touch Mesh `onBeforeRender` / `onAfterRender`; does not touch Mesh `onBeforeShadow` / `onAfterShadow`; does not touch customDepth/Distance; does not enable shadows). Mapped / lit / colliders stay authored / r170 defaults. Does not pin `mesh.visible` or change `matrixAutoUpdate` / `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `rotation.order` / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear / Mesh+Material render-callback clears / Mesh shadow-callback clear / customProgramCacheKey clear. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13, matrixWorldAutoUpdate-on 13, up-default 13, scale-default 13, rotation-order-XYZ 13, customDepth/Distance-absent 13, render-callbacks-absent 13, material-render-callbacks-absent 3, shadow-callbacks-absent 13, customProgramCacheKey-default 3 unchanged vs v0.80. defines-absent 3 is the new count. Headset ms / FFR still unmeasured.
+
 ## [0.82.0] — 2026-09-21
 
 ### Changed

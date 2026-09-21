@@ -52,6 +52,7 @@ const {
   packColorOnlyGeometry,
   pinColorOnlyUnlitBasicCustomShadowMaterials,
   pinColorOnlyUnlitBasicCustomProgramCacheKey,
+  pinColorOnlyUnlitBasicDefines,
   pinColorOnlyUnlitBasicMaterialRenderCallbacks,
   pinColorOnlyUnlitBasicRenderCallbacks,
   pinColorOnlyUnlitBasicShadowCallbacks,
@@ -412,6 +413,15 @@ function assertR170MaterialCustomProgramCacheKeyDefault(mat, label = "r170 Mater
 
 function assertQuestSafeUnlitCustomProgramCacheKey(mat, label = "color-only MeshBasic") {
   assertR170MaterialCustomProgramCacheKeyDefault(mat, label);
+}
+
+function assertR170MaterialDefinesAbsent(mat, label = "r170 Material") {
+  assert.equal(mat.defines, undefined, `${label} defines is undefined`);
+  assert.equal(Object.hasOwn(mat, "defines"), false, `${label} defines is not an own property`);
+}
+
+function assertQuestSafeUnlitDefines(mat, label = "color-only MeshBasic") {
+  assertR170MaterialDefinesAbsent(mat, label);
 }
 
 test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
@@ -1217,6 +1227,16 @@ function countVisualCustomProgramCacheKey(crate) {
     } else leftover += 1;
   }
   return { defaults, leftover, total: defaults + leftover };
+}
+
+function countVisualDefines(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (mat.defines === undefined) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
 }
 
 test("v0.46 disables Mesh.raycast on packed color-only visuals; colliders keep default", () => {
@@ -5751,6 +5771,19 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assert.notEqual(cacheKeyOnly.customProgramCacheKey, leftoverCacheKey, "leftover customProgramCacheKey stub is cleared via flags pin");
   assertQuestSafeUnlitFlags(cacheKeyOnly, "customProgramCacheKey leftover color-only MeshBasic");
 
+  const definesOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const leftoverDefines = { USE_UV: "", DCC_LEFTOVER: 1 };
+  definesOnly.defines = leftoverDefines;
+  assert.equal(isColorOnlyUnlitBasic(definesOnly), true, "defines leftover still passes isColorOnlyUnlitBasic");
+  assert.equal(definesOnly.defines, leftoverDefines, "DCC leftover is a non-empty defines map");
+  assert.notEqual(definesOnly.defines, undefined, "DCC leftover defines is present");
+  pinColorOnlyUnlitBasicFlags(definesOnly);
+  assertQuestSafeUnlitDefines(definesOnly, "defines leftover color-only MeshBasic");
+  assert.notEqual(definesOnly.defines, leftoverDefines, "leftover defines map is cleared via flags pin");
+  assert.equal(definesOnly.defines, undefined, "leftover defines is restored to r170 absence");
+  assertQuestSafeUnlitFlags(definesOnly, "defines leftover color-only MeshBasic");
+  assertQuestSafeUnlitCustomProgramCacheKey(definesOnly, "defines leftover color-only MeshBasic");
+
   const wrong = new THREE.MeshBasicMaterial({
     color: 0x633318,
     transparent: true,
@@ -5866,10 +5899,15 @@ test("pinColorOnlyUnlitBasicFlags corrects a wrong color-only MeshBasic that sti
   assert.equal(wrong.blendAlpha, 0.35);
   const leftoverWrongKey = () => "dcc-unique-program-key";
   wrong.customProgramCacheKey = leftoverWrongKey;
+  const leftoverWrongDefines = { USE_UV: "", DCC_LEFTOVER: 1 };
+  wrong.defines = leftoverWrongDefines;
   pinColorOnlyUnlitBasicFlags(wrong);
   assertQuestSafeUnlitFlags(wrong, "deliberately wrong color-only MeshBasic");
   assertQuestSafeUnlitCustomProgramCacheKey(wrong, "deliberately wrong color-only MeshBasic");
+  assertQuestSafeUnlitDefines(wrong, "deliberately wrong color-only MeshBasic");
   assert.notEqual(wrong.customProgramCacheKey, leftoverWrongKey, "wrong color-only MeshBasic leftover customProgramCacheKey is cleared");
+  assert.notEqual(wrong.defines, leftoverWrongDefines, "wrong color-only MeshBasic leftover defines is cleared");
+  assert.equal(wrong.defines, undefined, "wrong color-only MeshBasic defines is restored to r170 absence");
   assert.equal(wrong.envMapRotation, wrongRotation, "wrong color-only MeshBasic keeps its Euler instance");
   assert.equal(wrong.blendColor, wrongBlendColor, "wrong color-only MeshBasic keeps its Color instance");
   assert.equal(wrong.wireframe, false, "wireframe line-style pin does not enable wireframe");
@@ -7838,4 +7876,314 @@ test("pinColorOnlyUnlitBasicCustomProgramCacheKey / pinColorOnlyVisualMaterialFl
   assert.equal(collider.material.customProgramCacheKey, colliderKey, "collider Mesh stays authored");
   assert.equal(sharedBlocked.customProgramCacheKey, sharedVisualKey, "shared collider material stays unpinned");
   assert.equal(std.customProgramCacheKey, stdKey, "MeshStandard stays authored via entity helper");
+});
+
+test("v0.81 clears leftover Material defines on unique color-only MeshBasics; envelope stays v0.80", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  const freshMaterial = new THREE.Material();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(fresh.defines, undefined, "r170 MeshBasicMaterial does not set defines");
+  assert.equal(Object.hasOwn(fresh, "defines"), false, "r170 MeshBasicMaterial does not define defines on the instance");
+  assert.equal(freshMaterial.defines, undefined, "r170 Material does not set defines");
+  assert.equal(Object.hasOwn(freshMaterial, "defines"), false, "r170 Material does not define defines on the instance");
+  assert.equal(Object.hasOwn(THREE.Material.prototype, "defines"), false, "r170 Material.prototype does not define defines");
+  assertR170MaterialDefinesAbsent(fresh, "r170 MeshBasicMaterial");
+  assertR170MaterialCustomProgramCacheKeyDefault(fresh, "r170 MeshBasicMaterial");
+  assertR170MaterialRenderCallbacksAbsent(fresh, "r170 MeshBasicMaterial");
+  assertR170MeshBasicStencilCompanionDefaults(fresh);
+  assertR170MeshBasicPolygonOffsetCompanionDefaults(fresh);
+  assertR170MeshBasicDitheringAlphaToCoverageDefaults(fresh);
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+    assertQuestSafeUnlitDefines(mat);
+    assertQuestSafeUnlitCustomProgramCacheKey(mat);
+    assertQuestSafeUnlitMaterialRenderCallbacks(mat);
+    assert.equal(mat.stencilWrite, false, "prior stencilWrite pin stays false");
+    assert.equal(mat.stencilRef, 0, "prior stencilRef pin stays 0");
+    assert.equal(mat.stencilWriteMask, 0xff, "prior stencilWriteMask pin stays 0xff");
+    assert.equal(mat.stencilFuncMask, 0xff, "prior stencilFuncMask pin stays 0xff");
+    assert.equal(mat.stencilZFail, THREE.KeepStencilOp, "prior stencilZFail pin stays Keep");
+    assert.equal(mat.stencilZPass, THREE.KeepStencilOp, "prior stencilZPass pin stays Keep");
+    assert.equal(mat.polygonOffsetFactor, 0, "prior polygonOffsetFactor pin stays 0");
+    assert.equal(mat.polygonOffsetUnits, 0, "prior polygonOffsetUnits pin stays 0");
+    assert.equal(mat.dithering, false, "prior dithering pin stays false");
+    assert.equal(mat.alphaToCoverage, false, "prior alphaToCoverage pin stays false");
+  }
+  const named = crate.userData.materials.lod0;
+  assertQuestSafeUnlitDefines(named.wood, "wood");
+  assertQuestSafeUnlitDefines(named.brass, "brass");
+  assertQuestSafeUnlitDefines(named.steel, "steel");
+  assert.equal(named.wood, crate.userData.materials.lod1.wood);
+  assert.equal(named.brass, crate.userData.materials.lod1.brass);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitFlags(mesh.material);
+    assertQuestSafeUnlitDefines(mesh.material);
+    assertQuestSafeUnlitCustomProgramCacheKey(mesh.material);
+    assertQuestSafeUnlitMaterialRenderCallbacks(mesh.material);
+    assertQuestSafeUnlitShadowCallbacks(mesh);
+    assertQuestSafeUnlitRenderCallbacks(mesh);
+    assertQuestSafeUnlitCustomShadowMaterials(mesh);
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitRenderOrder(mesh);
+    assertQuestSafeUnlitLayers(mesh);
+    assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh);
+    assertQuestSafeUnlitUp(mesh);
+    assertQuestSafeUnlitScale(mesh);
+    assertQuestSafeUnlitRotationOrder(mesh);
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+    assert.equal(mesh.castShadow, false, "defines pin does not enable castShadow");
+    assert.equal(mesh.receiveShadow, false, "defines pin does not enable receiveShadow");
+    assert.equal(Object.hasOwn(mesh, "onBeforeRender"), false, "defines pin does not touch Mesh onBeforeRender");
+    assert.equal(Object.hasOwn(mesh, "onAfterRender"), false, "defines pin does not touch Mesh onAfterRender");
+    assert.equal(Object.hasOwn(mesh, "onBeforeShadow"), false, "defines pin does not touch Mesh onBeforeShadow");
+    assert.equal(Object.hasOwn(mesh, "onAfterShadow"), false, "defines pin does not touch Mesh onAfterShadow");
+    assert.equal(Object.hasOwn(mesh.material, "onBeforeCompile"), false, "defines pin does not touch Material onBeforeCompile");
+    assert.equal(Object.hasOwn(mesh.material, "onBeforeRender"), false, "defines pin does not touch Material onBeforeRender");
+    assert.equal(Object.hasOwn(mesh.material, "customProgramCacheKey"), false, "defines pin does not touch Material customProgramCacheKey");
+    assert.equal(mesh.customDepthMaterial, undefined, "defines pin does not invent customDepthMaterial");
+    assert.equal(mesh.customDistanceMaterial, undefined, "defines pin does not invent customDistanceMaterial");
+  }
+  const definesCounts = countVisualDefines(crate);
+  assert.equal(definesCounts.absent, 3, "defines-absent count is 3");
+  assert.equal(definesCounts.leftover, 0);
+  const cacheKeyCounts = countVisualCustomProgramCacheKey(crate);
+  assert.equal(cacheKeyCounts.defaults, 3, "customProgramCacheKey-default count stays 3");
+  assert.equal(cacheKeyCounts.leftover, 0);
+  const materialCallbackCounts = countVisualMaterialRenderCallbacks(crate);
+  assert.equal(materialCallbackCounts.absent, 3, "material-render-callbacks-absent count stays 3");
+  assert.equal(materialCallbackCounts.leftover, 0);
+  const shadowCallbackCounts = countVisualShadowCallbacks(crate);
+  assert.equal(shadowCallbackCounts.absent, 13, "shadow-callbacks-absent count stays 13");
+  assert.equal(shadowCallbackCounts.leftover, 0);
+  const callbackCounts = countVisualRenderCallbacks(crate);
+  assert.equal(callbackCounts.absent, 13, "render-callbacks-absent count stays 13");
+  assert.equal(callbackCounts.leftover, 0);
+  const customCounts = countVisualCustomShadowMaterials(crate);
+  assert.equal(customCounts.absent, 13, "customDepth/Distance-absent count stays 13");
+  assert.equal(customCounts.leftover, 0);
+  const rotationCounts = countVisualRotationOrderXYZ(crate);
+  assert.equal(rotationCounts.xyz, 13, "rotation-order-XYZ count stays 13");
+  assert.equal(rotationCounts.other, 0);
+  const scaleCounts = countVisualScaleDefault(crate);
+  assert.equal(scaleCounts.unit, 13, "scale-default count stays 13");
+  assert.equal(scaleCounts.other, 0);
+  const upCounts = countVisualUpDefault(crate);
+  assert.equal(upCounts.yUp, 13, "up-default count stays 13");
+  assert.equal(upCounts.other, 0);
+  const worldAutoCounts = countVisualMatrixWorldAutoUpdate(crate);
+  assert.equal(worldAutoCounts.on, 13, "matrixWorldAutoUpdate-on count stays 13");
+  assert.equal(worldAutoCounts.off, 0);
+  const layerCounts = countVisualLayersDefault(crate);
+  assert.equal(layerCounts.layer0Only, 13, "layers-default count stays 13");
+  assert.equal(layerCounts.other, 0);
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  assert.equal(renderOrderCounts.nonzero, 0);
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assertQuestSafeUnlitDefines(lidMesh.material, "lidMesh");
+  assertQuestSafeUnlitDefines(latchMesh.material, "latchMesh");
+  assertQuestSafeUnlitDefines(fastener.material, "fastenerMesh");
+  assert.equal(fastener.geometry.getAttribute("position") ? cpuAttrBytes(fastener.geometry) : 0, 216, "fastener attrBytes stay 216");
+
+  const lod0Group = crate.userData.lod.groups[0][0];
+  assert.equal(lod0Group.visible, true, "LOD0 group starts visible");
+  setToolboxLod(crate, 1);
+  assert.equal(lod0Group.visible, false, "LOD hides via group.visible, not mesh.visible");
+  assert.equal(lidMesh.visible, true, "mesh.visible is not pinned; LOD uses group.visible");
+  setToolboxLod(crate, 0);
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assertQuestSafeUnlitDefines(bodyHero.material, "body LOD leaf");
+
+  for (const c of crate.userData.colliders) {
+    assertR170MaterialDefinesAbsent(c.material, "collider MeshBasic keeps r170 defines absence");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+    assert.equal(c.matrixAutoUpdate, true, "collider matrixAutoUpdate stays live");
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(activityState(crate), "closed");
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitDefines(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitCustomProgramCacheKey(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitMaterialRenderCallbacks(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitShadowCallbacks(fastener, "fastener after L5 drive");
+  assert.equal(fastener.castShadow, false, "fastener castShadow stays false after L5");
+  assert.equal(fastener.receiveShadow, false, "fastener receiveShadow stays false after L5");
+  assert.equal(fastener.material.stencilRef, 0, "fastener stencilRef stays 0 after L5");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+});
+
+test("pinColorOnlyUnlitBasicDefines corrects a wrong color-only MeshBasic that still passes isColorOnlyUnlitBasic", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assertR170MaterialDefinesAbsent(fresh, "r170 MeshBasicMaterial");
+
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const leftoverDefines = { USE_UV: "", DCC_LEFTOVER: 1 };
+  wrong.defines = leftoverDefines;
+  assert.equal(isColorOnlyUnlitBasic(wrong), true, "color-only MeshBasic still passes the gate");
+  assert.equal(wrong.defines, leftoverDefines, "DCC leftover is a non-empty defines map");
+  assert.notEqual(wrong.defines, undefined, "DCC leftover defines is present");
+  const fogBefore = wrong.fog;
+  const blendColorBefore = wrong.blendColor;
+  const blendAlphaBefore = wrong.blendAlpha;
+  const ditheringBefore = wrong.dithering;
+  const a2cBefore = wrong.alphaToCoverage;
+  const stencilRefBefore = wrong.stencilRef;
+  const polygonOffsetFactorBefore = wrong.polygonOffsetFactor;
+  const compileBefore = wrong.onBeforeCompile;
+  const beforeRenderBefore = wrong.onBeforeRender;
+  const cacheKeyBefore = wrong.customProgramCacheKey;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), wrong);
+  const meshBefore = mesh.onBeforeRender;
+  const meshAfter = mesh.onAfterRender;
+  const meshShadowBefore = mesh.onBeforeShadow;
+  const meshShadowAfter = mesh.onAfterShadow;
+  const customDepthBefore = mesh.customDepthMaterial;
+  const customDistanceBefore = mesh.customDistanceMaterial;
+  pinColorOnlyUnlitBasicDefines(wrong);
+  assertQuestSafeUnlitDefines(wrong, "deliberately wrong color-only MeshBasic");
+  assert.notEqual(wrong.defines, leftoverDefines, "leftover defines map is cleared");
+  assert.equal(wrong.defines, undefined, "defines is restored to r170 absence");
+  assert.notDeepEqual(wrong.defines, {}, "pin does not leave a sentinel empty defines object");
+  assert.equal(wrong.fog, fogBefore, "defines pin does not change fog");
+  assert.equal(wrong.blendColor, blendColorBefore, "defines pin does not replace blendColor");
+  assert.equal(wrong.blendAlpha, blendAlphaBefore, "defines pin does not change blendAlpha");
+  assert.equal(wrong.dithering, ditheringBefore, "defines pin does not change dithering");
+  assert.equal(wrong.alphaToCoverage, a2cBefore, "defines pin does not change alphaToCoverage");
+  assert.equal(wrong.stencilRef, stencilRefBefore, "defines pin does not change stencilRef");
+  assert.equal(wrong.polygonOffsetFactor, polygonOffsetFactorBefore, "defines pin does not change polygonOffsetFactor");
+  assert.equal(wrong.onBeforeCompile, compileBefore, "defines pin does not touch Material onBeforeCompile");
+  assert.equal(wrong.onBeforeRender, beforeRenderBefore, "defines pin does not touch Material onBeforeRender");
+  assert.equal(wrong.customProgramCacheKey, cacheKeyBefore, "defines pin does not touch Material customProgramCacheKey");
+  assert.equal(mesh.onBeforeRender, meshBefore, "defines pin does not touch Mesh onBeforeRender");
+  assert.equal(mesh.onAfterRender, meshAfter, "defines pin does not touch Mesh onAfterRender");
+  assert.equal(mesh.onBeforeShadow, meshShadowBefore, "defines pin does not touch Mesh onBeforeShadow");
+  assert.equal(mesh.onAfterShadow, meshShadowAfter, "defines pin does not touch Mesh onAfterShadow");
+  assert.equal(mesh.customDepthMaterial, customDepthBefore, "defines pin does not touch customDepthMaterial");
+  assert.equal(mesh.customDistanceMaterial, customDistanceBefore, "defines pin does not touch customDistanceMaterial");
+
+  const emptyMap = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  emptyMap.defines = {};
+  assert.equal(isColorOnlyUnlitBasic(emptyMap), true, "empty defines leftover still passes isColorOnlyUnlitBasic");
+  assert.notEqual(emptyMap.defines, undefined, "empty {} is still present for WebGLPrograms");
+  pinColorOnlyUnlitBasicDefines(emptyMap);
+  assertQuestSafeUnlitDefines(emptyMap, "empty defines leftover color-only MeshBasic");
+  assert.equal(emptyMap.defines, undefined, "empty {} leftover is restored to r170 absence");
+});
+
+test("pinColorOnlyUnlitBasicDefines / pinColorOnlyVisualMaterialFlags skip mapped, lit, morph, colliders, shared blocked", () => {
+  const leftover = () => ({ USE_UV: "", DCC_LEFTOVER: 1 });
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  colorOnly.defines = leftover();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedDefines = leftover();
+  mapped.defines = mappedDefines;
+  const std = new THREE.MeshStandardMaterial();
+  const stdDefines = std.defines;
+  assert.ok(stdDefines && typeof stdDefines === "object", "r170 MeshStandardMaterial sets a defines object");
+  pinColorOnlyUnlitBasicDefines(colorOnly);
+  pinColorOnlyUnlitBasicDefines(mapped);
+  pinColorOnlyUnlitBasicDefines(std);
+  assertQuestSafeUnlitDefines(colorOnly);
+  assert.equal(mapped.defines, mappedDefines, "mapped MeshBasic stays authored defines");
+  assert.equal(std.defines, stdDefines, "MeshStandard stays authored defines");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mapped);
+  const colorMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  colorMesh.material.defines = leftover();
+  const morph = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xc1c3c9 })
+  );
+  morph.geometry.morphAttributes.position = [morph.geometry.getAttribute("position").clone()];
+  const morphDefines = leftover();
+  morph.material.defines = morphDefines;
+  const collider = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  const colliderDefines = leftover();
+  collider.material.defines = colliderDefines;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedVisualDefines = leftover();
+  sharedBlocked.defines = sharedVisualDefines;
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  body.add(mappedMesh, colorMesh, morph, sharedVisual);
+  root.add(body, collider, sharedCollider, new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), std));
+  pinColorOnlyVisualMaterialFlags(root);
+  assertQuestSafeUnlitDefines(colorMesh.material, "entity helper color-only");
+  assert.equal(mapped.defines, mappedDefines, "mapped MeshBasic stays authored via entity helper");
+  assert.equal(morph.material.defines, morphDefines, "morph color-only MeshBasic is skipped");
+  assert.equal(collider.material.defines, colliderDefines, "collider Mesh stays authored");
+  assert.equal(sharedBlocked.defines, sharedVisualDefines, "shared collider material stays unpinned");
+  assert.equal(std.defines, stdDefines, "MeshStandard stays authored via entity helper");
 });
