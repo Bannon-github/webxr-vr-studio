@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.80.0] — 2026-09-20
+
+### Changed
+
+- `crate-toolbox` **v0.78.0** L3 packaging/perf UPGRADE: after the v0.77 Mesh `onBeforeRender` / `onAfterRender` clear (and after the long material-flag fence through v0.75 stencil companions / v0.74 polygonOffset companions / v0.72 dithering+A2C), also delete leftover own-property Material `onBeforeCompile` / `onBeforeRender` so the r170 Material.prototype empty no-ops remain on packed color-only unlit MeshBasic materials (3 unique shared wood/brass/steel instances; first-class measured material-render-callbacks-absent; does not invent replacement callbacks or custom shaders; does not assign `undefined`; does not touch Mesh `onBeforeRender` / `onAfterRender`; does not touch `onBeforeShadow` / `onAfterShadow`; does not enable shadows). Mapped / lit / colliders stay authored / r170 defaults. Does not pin `mesh.visible` or change `matrixAutoUpdate` / `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `rotation.order` / prior material pins including stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha / customDepth/Distance clear / the v0.77 Mesh render-callback clear. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13, matrixWorldAutoUpdate-on 13, up-default 13, scale-default 13, rotation-order-XYZ 13, customDepth/Distance-absent 13, render-callbacks-absent 13 unchanged vs v0.77. Material-render-callbacks-absent 3 is the new count. Headset ms / FFR still unmeasured.
+
 ## [0.79.0] — 2026-09-20
 
 ### Changed

@@ -523,6 +523,57 @@
  * companions / dithering / A2C /
  * `blendColor` / `blendAlpha` / the
  * v0.76 customDepth/Distance clear.
+ *
+ * v0.78: after that Mesh
+ * render-callback clear (and after
+ * the long material-flag fence
+ * through v0.75 stencil companions /
+ * v0.74 polygonOffset companions /
+ * v0.72 dithering+A2C),
+ * `pinColorOnlyUnlitBasicMaterialRenderCallbacks`
+ * (via `pinColorOnlyUnlitBasicFlags`
+ * / `pinColorOnlyVisualMaterialFlags`)
+ * deletes leftover own-property
+ * Material `onBeforeCompile` /
+ * `onBeforeRender` so the r170
+ * Material.prototype empty no-ops
+ * remain on packed color-only unlit
+ * MeshBasic materials (same
+ * `isColorOnlyUnlitBasic` gate). Does
+ * **not** invent replacement
+ * callbacks or custom shaders. Does
+ * **not** assign `undefined`
+ * (WebGLRenderer always invokes
+ * these). Does **not** touch Mesh
+ * `onBeforeRender` / `onAfterRender`
+ * (v0.77). Does **not** touch
+ * `onBeforeShadow` / `onAfterShadow`.
+ * Accidental DCC / GLB leftover
+ * own-property Material compile /
+ * render callbacks become
+ * compile/per-draw JS work on Quest
+ * Browser / TBDR and leftover
+ * `onBeforeCompile` stubs can also
+ * fragment `customProgramCacheKey`.
+ * Does not hex-dedupe or invent
+ * materials. Mapped / lit stay at
+ * authored / r170 Material defaults.
+ * Collider materials stay untouched.
+ * Does **not** pin `mesh.visible`
+ * (LOD visibility uses it), change
+ * `matrixAutoUpdate` (v0.45 already
+ * freezes static body LOD leaves),
+ * change `matrixWorldAutoUpdate`,
+ * change `layers`, change `up`,
+ * change `scale`, change
+ * `rotation.order`, or change prior
+ * material pins including stencil
+ * companions / polygonOffset
+ * companions / dithering / A2C /
+ * `blendColor` / `blendAlpha` / the
+ * v0.76 customDepth/Distance clear /
+ * the v0.77 Mesh render-callback
+ * clear.
  */
 
 import {
