@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.86.0] — 2026-09-21
+
+### Changed
+
+- `crate-toolbox` **v0.84.0** L3 packaging/perf UPGRADE: after the v0.83 Material `glslVersion` clear (and after the Mesh callback fence through v0.79 `onBeforeShadow`/`onAfterShadow` / v0.77 `onBeforeRender`/`onAfterRender` / v0.76 customDepth/Distance), also clear leftover Object3D `animations` to the r170 empty list (`Array.isArray(mesh.animations) && mesh.animations.length === 0`) on packed color-only unlit MeshBasic visual meshes (13 visual meshes; first-class measured animations-empty). Verified in-repo three@0.170.0: the Object3D constructor assigns `this.animations = []`. When the property is an array, mutate it (`animations.length = 0`); if missing or non-array, assign `animations = []`. Does not invent AnimationClips; does not create an AnimationMixer; does not call `AnimationMixer.update`; does not touch Material `glslVersion`; does not touch Material `flatShading`; does not touch Material `defines`; does not touch Material `customProgramCacheKey`; does not touch Material `onBeforeCompile` / `onBeforeRender`; does not touch Mesh `onBeforeRender` / `onAfterRender`; does not touch Mesh `onBeforeShadow` / `onAfterShadow`; does not touch customDepth/Distance; does not enable shadows. Mapped / lit / colliders stay authored / r170 defaults. Does not pin `mesh.visible` or change `matrixAutoUpdate` / `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `rotation.order` / prior material pins including glslVersion / flatShading / defines / customProgramCacheKey / stencil companions / polygonOffset companions / dithering / A2C / blendColor / blendAlpha. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, raycast-off 13, frozen 3 / live 10, shadow-off 13, frustumCulled-on 13, renderOrder-0 13, layers-default 13, matrixWorldAutoUpdate-on 13, up-default 13, scale-default 13, rotation-order-XYZ 13, customDepth/Distance-absent 13, render-callbacks-absent 13, material-render-callbacks-absent 3, shadow-callbacks-absent 13, customProgramCacheKey-default 3, defines-absent 3, flatShading-off 3, glslVersion-absent 3 unchanged vs v0.83. animations-empty 13 is the new count. Headset ms / FFR still unmeasured.
+
 ## [0.85.0] — 2026-09-21
 
 ### Changed
