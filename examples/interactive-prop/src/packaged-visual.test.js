@@ -266,6 +266,15 @@ function assertQuestSafeUnlitCustomProgramCacheKey(mat, label = "color-only Mesh
   assertR170MaterialCustomProgramCacheKeyDefault(mat, label);
 }
 
+function assertR170MaterialDefinesAbsent(mat, label = "r170 Material") {
+  assert.equal(mat.defines, undefined, `${label} defines is undefined`);
+  assert.equal(Object.hasOwn(mat, "defines"), false, `${label} defines is not an own property`);
+}
+
+function assertQuestSafeUnlitDefines(mat, label = "color-only MeshBasic") {
+  assertR170MaterialDefinesAbsent(mat, label);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -3459,4 +3468,123 @@ test("packaged ingest without lod groups still clears leftover Material customPr
   assert.equal(fastener.castShadow, false, "fail-soft fastener does not enable castShadow");
   const colliderGrab = root.getObjectByName("collider_grab");
   assertR170MaterialCustomProgramCacheKeyDefault(colliderGrab.material, "fail-soft collider keeps r170 customProgramCacheKey default");
+});
+
+test("packaged ingest clears leftover Material defines; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(fresh.defines, undefined, "r170 MeshBasicMaterial does not set defines");
+  assert.equal(Object.hasOwn(fresh, "defines"), false, "r170 MeshBasicMaterial does not define defines on the instance");
+  assertR170MaterialDefinesAbsent(fresh, "r170 MeshBasicMaterial");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const mappedDefines = { USE_MAP: "" };
+  mapped.defines = mappedDefines;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccDefines", wrong);
+  const leftoverDefines = { USE_UV: "", DCC_LEFTOVER: 1 };
+  wrong.defines = leftoverDefines;
+  const visibleBefore = wrongMesh.visible;
+  const layersMaskBefore = wrongMesh.layers.mask;
+  const worldAutoBefore = wrongMesh.matrixWorldAutoUpdate;
+  const rotationOrderBefore = wrongMesh.rotation.order;
+  const blendColorBefore = wrong.blendColor;
+  const blendAlphaBefore = wrong.blendAlpha;
+  const ditheringBefore = wrong.dithering;
+  const a2cBefore = wrong.alphaToCoverage;
+  const stencilRefBefore = wrong.stencilRef;
+  const meshBefore = wrongMesh.onBeforeRender;
+  const meshAfter = wrongMesh.onAfterRender;
+  const meshShadowBefore = wrongMesh.onBeforeShadow;
+  const meshShadowAfter = wrongMesh.onAfterShadow;
+  const customDepthBefore = wrongMesh.customDepthMaterial;
+  const customDistanceBefore = wrongMesh.customDistanceMaterial;
+  const matCompileBefore = wrong.onBeforeCompile;
+  const matBefore = wrong.onBeforeRender;
+  const cacheKeyBefore = wrong.customProgramCacheKey;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  const colliderDefines = { COLLIDER_LEFTOVER: 1 };
+  colliderGrabBefore.material.defines = colliderDefines;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitDefines(mesh.material, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitCustomProgramCacheKey(mesh.material, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitMaterialRenderCallbacks(mesh.material, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowCallbacks(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRenderCallbacks(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitCustomShadowMaterials(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowFlags(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRotationOrder(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.castShadow, false, "color-only pin does not enable castShadow");
+    assert.equal(mesh.receiveShadow, false, "color-only pin does not enable receiveShadow");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+    assert.equal(mesh.material.stencilRef, 0, "prior stencilRef pin stays intact");
+    assert.equal(mesh.material.dithering, false, "prior dithering pin stays intact");
+    assert.equal(mesh.material.alphaToCoverage, false, "prior A2C pin stays intact");
+  }
+  assertQuestSafeUnlitDefines(wrong, "packaged DCC leftover defines color-only MeshBasic");
+  assert.notEqual(wrong.defines, leftoverDefines, "DCC leftover defines map is cleared");
+  assert.equal(wrong.defines, undefined, "defines is restored to r170 absence");
+  assert.equal(wrong.onBeforeCompile, matCompileBefore, "defines pin does not touch Material onBeforeCompile");
+  assert.equal(wrong.onBeforeRender, matBefore, "defines pin does not touch Material onBeforeRender");
+  assert.equal(wrong.customProgramCacheKey, cacheKeyBefore, "defines pin does not touch Material customProgramCacheKey");
+  assert.equal(wrongMesh.onBeforeRender, meshBefore, "defines pin does not touch Mesh onBeforeRender");
+  assert.equal(wrongMesh.onAfterRender, meshAfter, "defines pin does not touch Mesh onAfterRender");
+  assert.equal(wrongMesh.onBeforeShadow, meshShadowBefore, "defines pin does not touch Mesh onBeforeShadow");
+  assert.equal(wrongMesh.onAfterShadow, meshShadowAfter, "defines pin does not touch Mesh onAfterShadow");
+  assert.equal(wrongMesh.customDepthMaterial, customDepthBefore, "defines pin does not touch customDepthMaterial");
+  assert.equal(wrongMesh.customDistanceMaterial, customDistanceBefore, "defines pin does not touch customDistanceMaterial");
+  assert.equal(wrongMesh.matrixAutoUpdate, false, "body LOD leaf still frozen by v0.45; defines pin does not unfreeze");
+  assert.equal(wrongMesh.matrixWorldAutoUpdate, worldAutoBefore, "defines pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrongMesh.visible, visibleBefore, "defines pin does not change mesh.visible");
+  assert.equal(wrongMesh.layers.mask, layersMaskBefore, "defines pin does not change layers");
+  assert.equal(wrongMesh.rotation.order, rotationOrderBefore, "defines pin does not change rotation.order");
+  assert.equal(wrong.blendColor, blendColorBefore, "defines pin does not replace blendColor");
+  assert.equal(wrong.blendAlpha, blendAlphaBefore, "defines pin does not change blendAlpha");
+  assert.equal(wrong.dithering, ditheringBefore, "defines pin does not change dithering");
+  assert.equal(wrong.alphaToCoverage, a2cBefore, "defines pin does not change alphaToCoverage");
+  assert.equal(wrong.stencilRef, stencilRefBefore, "defines pin does not change stencilRef");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live; defines pin does not freeze it");
+  assertQuestSafeUnlitDefines(fastener.material, "fastener");
+  assert.equal(mapped.defines, mappedDefines, "mapped MeshBasic stays authored defines");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.defines, colliderDefines, "collider MeshBasic stays authored defines");
+});
+
+test("packaged ingest without lod groups still clears leftover Material defines", () => {
+  const leftover = () => ({ USE_UV: "", DCC_LEFTOVER: 1 });
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  visualMeshes(body)[0].material.defines = leftover();
+  visualMeshes(lid)[0].material.defines = leftover();
+  visualMeshes(latch)[0].material.defines = leftover();
+  visualMeshes(tool)[0].material.defines = leftover();
+  fastener.material.defines = leftover();
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitDefines(visualMeshes(body)[0].material, "fail-soft body");
+  assertQuestSafeUnlitDefines(visualMeshes(lid)[0].material, "fail-soft lid");
+  assertQuestSafeUnlitDefines(visualMeshes(latch)[0].material, "fail-soft latch");
+  assertQuestSafeUnlitDefines(visualMeshes(tool)[0].material, "fail-soft tool");
+  assertQuestSafeUnlitDefines(fastener.material, "fail-soft fastener");
+  assertQuestSafeUnlitFlags(visualMeshes(body)[0].material, "fail-soft body");
+  assert.equal(visualMeshes(body)[0].castShadow, false, "fail-soft body does not enable castShadow");
+  assert.equal(fastener.castShadow, false, "fail-soft fastener does not enable castShadow");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assertR170MaterialDefinesAbsent(colliderGrab.material, "fail-soft collider keeps r170 defines absence");
 });
