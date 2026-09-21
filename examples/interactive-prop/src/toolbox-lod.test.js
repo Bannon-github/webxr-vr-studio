@@ -50,6 +50,7 @@ const {
   isUnderAnimatedToolboxPivot,
   noopColorOnlyVisualRaycast,
   packColorOnlyGeometry,
+  pinColorOnlyUnlitBasicAnimations,
   pinColorOnlyUnlitBasicCustomShadowMaterials,
   pinColorOnlyUnlitBasicCustomProgramCacheKey,
   pinColorOnlyUnlitBasicDefines,
@@ -67,6 +68,7 @@ const {
   pinColorOnlyUnlitBasicRotationOrder,
   pinColorOnlyUnlitBasicScale,
   pinColorOnlyUnlitBasicUp,
+  pinColorOnlyVisualAnimations,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
@@ -442,6 +444,15 @@ function assertR170MaterialGlslVersionAbsent(mat, label = "r170 Material") {
 
 function assertQuestSafeUnlitGlslVersion(mat, label = "color-only MeshBasic") {
   assertR170MaterialGlslVersionAbsent(mat, label);
+}
+
+function assertR170Object3DAnimationsEmpty(obj, label = "r170 Object3D") {
+  assert.equal(Array.isArray(obj.animations), true, `${label} animations is an Array`);
+  assert.equal(obj.animations.length, 0, `${label} animations length is 0`);
+}
+
+function assertQuestSafeUnlitAnimations(mesh, label = "color-only MeshBasic mesh") {
+  assertR170Object3DAnimationsEmpty(mesh, label);
 }
 
 test("LOD0 color-only MeshBasic; LOD1 color-only MeshBasic; LOD2 color-only MeshBasic", () => {
@@ -1277,6 +1288,16 @@ function countVisualGlslVersion(crate) {
     else leftover += 1;
   }
   return { absent, leftover, total: absent + leftover };
+}
+
+function countVisualAnimations(crate) {
+  let empty = 0;
+  let leftover = 0;
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (Array.isArray(mesh.animations) && mesh.animations.length === 0) empty += 1;
+    else leftover += 1;
+  }
+  return { empty, leftover, total: empty + leftover };
 }
 
 test("v0.46 disables Mesh.raycast on packed color-only visuals; colliders keep default", () => {
@@ -8898,4 +8919,385 @@ test("pinColorOnlyUnlitBasicGlslVersion / pinColorOnlyVisualMaterialFlags skip m
   assert.equal(collider.material.glslVersion, "300 es", "collider Mesh stays authored");
   assert.equal(sharedBlocked.glslVersion, "100", "shared collider material stays unpinned");
   assert.equal(std.glslVersion, "300 es", "MeshStandard stays authored via entity helper");
+});
+
+test("v0.84 clears leftover Object3D animations on packed color-only MeshBasic visuals; envelope stays v0.83", () => {
+  const freshObj = new THREE.Object3D();
+  const freshMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assertR170Object3DAnimationsEmpty(freshObj, "r170 Object3D");
+  assertR170Object3DAnimationsEmpty(freshMesh, "r170 Mesh");
+  assert.equal(typeof THREE.AnimationMixer, "function", "r170 AnimationMixer exists");
+  assert.equal(typeof THREE.AnimationClip, "function", "r170 AnimationClip exists");
+  const freshMat = new THREE.MeshBasicMaterial();
+  assertR170MaterialGlslVersionAbsent(freshMat, "r170 MeshBasicMaterial");
+  assertR170MaterialFlatShadingUnset(freshMat, "r170 MeshBasicMaterial");
+  assertR170MaterialDefinesAbsent(freshMat, "r170 MeshBasicMaterial");
+  assertR170MaterialCustomProgramCacheKeyDefault(freshMat, "r170 MeshBasicMaterial");
+  assertR170MaterialRenderCallbacksAbsent(freshMat, "r170 MeshBasicMaterial");
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+  assert.match(crate.userData.l2.note, /v0\.84 clears leftover Object3D animations/);
+  assert.match(crate.userData.l2.note, /13 animations-empty/);
+
+  const mats = collectCrateVisualMaterials(crate);
+  assert.equal(mats.length, 3, "unique procedural MeshBasic instances stay 3");
+  for (const mat of mats) {
+    assert.equal(isColorOnlyUnlitBasic(mat), true);
+    assertQuestSafeUnlitFlags(mat);
+    assertQuestSafeUnlitGlslVersion(mat);
+    assertQuestSafeUnlitFlatShading(mat);
+    assertQuestSafeUnlitDefines(mat);
+    assertQuestSafeUnlitCustomProgramCacheKey(mat);
+    assertQuestSafeUnlitMaterialRenderCallbacks(mat);
+    assert.equal(mat.stencilWrite, false, "prior stencilWrite pin stays false");
+    assert.equal(mat.stencilRef, 0, "prior stencilRef pin stays 0");
+    assert.equal(mat.dithering, false, "prior dithering pin stays false");
+    assert.equal(mat.alphaToCoverage, false, "prior alphaToCoverage pin stays false");
+    assert.equal(mat.flatShading, false, "prior flatShading pin stays false");
+  }
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitAnimations(mesh);
+    assertQuestSafeUnlitFlags(mesh.material);
+    assertQuestSafeUnlitGlslVersion(mesh.material);
+    assertQuestSafeUnlitFlatShading(mesh.material);
+    assertQuestSafeUnlitDefines(mesh.material);
+    assertQuestSafeUnlitCustomProgramCacheKey(mesh.material);
+    assertQuestSafeUnlitMaterialRenderCallbacks(mesh.material);
+    assertQuestSafeUnlitShadowCallbacks(mesh);
+    assertQuestSafeUnlitRenderCallbacks(mesh);
+    assertQuestSafeUnlitCustomShadowMaterials(mesh);
+    assertQuestSafeUnlitShadowFlags(mesh);
+    assertQuestSafeUnlitFrustumCulled(mesh);
+    assertQuestSafeUnlitRenderOrder(mesh);
+    assertQuestSafeUnlitLayers(mesh);
+    assertQuestSafeUnlitMatrixWorldAutoUpdate(mesh);
+    assertQuestSafeUnlitUp(mesh);
+    assertQuestSafeUnlitScale(mesh);
+    assertQuestSafeUnlitRotationOrder(mesh);
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+    assert.equal(mesh.castShadow, false, "animations pin does not enable castShadow");
+    assert.equal(mesh.receiveShadow, false, "animations pin does not enable receiveShadow");
+    assert.equal(Object.hasOwn(mesh, "onBeforeRender"), false, "animations pin does not touch Mesh onBeforeRender");
+    assert.equal(Object.hasOwn(mesh, "onAfterRender"), false, "animations pin does not touch Mesh onAfterRender");
+    assert.equal(Object.hasOwn(mesh, "onBeforeShadow"), false, "animations pin does not touch Mesh onBeforeShadow");
+    assert.equal(Object.hasOwn(mesh, "onAfterShadow"), false, "animations pin does not touch Mesh onAfterShadow");
+    assert.equal(Object.hasOwn(mesh.material, "onBeforeCompile"), false, "animations pin does not touch Material onBeforeCompile");
+    assert.equal(Object.hasOwn(mesh.material, "onBeforeRender"), false, "animations pin does not touch Material onBeforeRender");
+    assert.equal(Object.hasOwn(mesh.material, "customProgramCacheKey"), false, "animations pin does not touch Material customProgramCacheKey");
+    assert.equal(mesh.material.defines, undefined, "animations pin does not touch Material defines");
+    assert.equal(mesh.material.flatShading, false, "animations pin does not touch Material flatShading");
+    assert.equal(mesh.material.glslVersion, undefined, "animations pin does not touch Material glslVersion");
+    assert.equal(mesh.customDepthMaterial, undefined, "animations pin does not invent customDepthMaterial");
+    assert.equal(mesh.customDistanceMaterial, undefined, "animations pin does not invent customDistanceMaterial");
+    assert.equal(mesh.userData.mixer, undefined, "animations pin does not attach an AnimationMixer");
+  }
+  const animCounts = countVisualAnimations(crate);
+  assert.equal(animCounts.empty, 13, "animations-empty count is 13");
+  assert.equal(animCounts.leftover, 0);
+  const glslCounts = countVisualGlslVersion(crate);
+  assert.equal(glslCounts.absent, 3, "glslVersion-absent count stays 3");
+  assert.equal(glslCounts.leftover, 0);
+  const flatCounts = countVisualFlatShading(crate);
+  assert.equal(flatCounts.off, 3, "flatShading-off count stays 3");
+  assert.equal(flatCounts.leftover, 0);
+  const definesCounts = countVisualDefines(crate);
+  assert.equal(definesCounts.absent, 3, "defines-absent count stays 3");
+  assert.equal(definesCounts.leftover, 0);
+  const cacheKeyCounts = countVisualCustomProgramCacheKey(crate);
+  assert.equal(cacheKeyCounts.defaults, 3, "customProgramCacheKey-default count stays 3");
+  assert.equal(cacheKeyCounts.leftover, 0);
+  const materialCallbackCounts = countVisualMaterialRenderCallbacks(crate);
+  assert.equal(materialCallbackCounts.absent, 3, "material-render-callbacks-absent count stays 3");
+  assert.equal(materialCallbackCounts.leftover, 0);
+  const shadowCallbackCounts = countVisualShadowCallbacks(crate);
+  assert.equal(shadowCallbackCounts.absent, 13, "shadow-callbacks-absent count stays 13");
+  assert.equal(shadowCallbackCounts.leftover, 0);
+  const callbackCounts = countVisualRenderCallbacks(crate);
+  assert.equal(callbackCounts.absent, 13, "render-callbacks-absent count stays 13");
+  assert.equal(callbackCounts.leftover, 0);
+  const customCounts = countVisualCustomShadowMaterials(crate);
+  assert.equal(customCounts.absent, 13, "customDepth/Distance-absent count stays 13");
+  assert.equal(customCounts.leftover, 0);
+  const rotationCounts = countVisualRotationOrderXYZ(crate);
+  assert.equal(rotationCounts.xyz, 13, "rotation-order-XYZ count stays 13");
+  assert.equal(rotationCounts.other, 0);
+  const scaleCounts = countVisualScaleDefault(crate);
+  assert.equal(scaleCounts.unit, 13, "scale-default count stays 13");
+  assert.equal(scaleCounts.other, 0);
+  const upCounts = countVisualUpDefault(crate);
+  assert.equal(upCounts.yUp, 13, "up-default count stays 13");
+  assert.equal(upCounts.other, 0);
+  const worldAutoCounts = countVisualMatrixWorldAutoUpdate(crate);
+  assert.equal(worldAutoCounts.on, 13, "matrixWorldAutoUpdate-on count stays 13");
+  assert.equal(worldAutoCounts.off, 0);
+  const layerCounts = countVisualLayersDefault(crate);
+  assert.equal(layerCounts.layer0Only, 13, "layers-default count stays 13");
+  assert.equal(layerCounts.other, 0);
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  assert.equal(renderOrderCounts.nonzero, 0);
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  assert.equal(frustumCounts.off, 0);
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  assert.equal(shadowCounts.on, 0);
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  assert.equal(rayCounts.defaultRaycast, 0);
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assert.equal(fastener.parent.name, "toolbox", "fastener stays outside the LOD merge skip set");
+  assertQuestSafeUnlitAnimations(lidMesh, "lidMesh");
+  assertQuestSafeUnlitAnimations(latchMesh, "latchMesh");
+  assertQuestSafeUnlitAnimations(fastener, "fastenerMesh");
+  assert.equal(fastener.geometry.getAttribute("position") ? cpuAttrBytes(fastener.geometry) : 0, 216, "fastener attrBytes stay 216");
+  for (const level of [0, 1, 2]) {
+    for (const group of crate.userData.lod.groups[level]) {
+      assert.equal(group.getObjectByName("fastenerMesh"), undefined, "fastener is not folded into an LOD group");
+    }
+  }
+
+  const lod0Group = crate.userData.lod.groups[0][0];
+  assert.equal(lod0Group.visible, true, "LOD0 group starts visible");
+  setToolboxLod(crate, 1);
+  assert.equal(lod0Group.visible, false, "LOD hides via group.visible, not mesh.visible");
+  assert.equal(lidMesh.visible, true, "mesh.visible is not pinned; LOD uses group.visible");
+  setToolboxLod(crate, 0);
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assertQuestSafeUnlitAnimations(bodyHero, "body LOD leaf");
+  assertQuestSafeUnlitGlslVersion(bodyHero.material, "body LOD leaf");
+
+  for (const c of crate.userData.colliders) {
+    assertR170Object3DAnimationsEmpty(c, "collider keeps r170 empty animations");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.raycast, THREE.Mesh.prototype.raycast);
+    assert.equal(c.matrixAutoUpdate, true, "collider matrixAutoUpdate stays live");
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(activityState(crate), "closed");
+  const nack = tryUse(crate, "collider_lid");
+  assert.equal(nack.ok, false);
+  assert.equal(activityState(crate), "closed");
+  const unlatch = tryUse(crate, "collider_latch");
+  assert.equal(unlatch.ok, true);
+  assert.equal(unlatch.to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  const open = tryUse(crate, "collider_lid");
+  assert.equal(open.ok, true);
+  assert.equal(open.to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.equal(drive.turns, 1);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitAnimations(fastener, "fastener after L5 drive");
+  assertQuestSafeUnlitFlags(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitGlslVersion(fastener.material, "fastener after L5 drive");
+  assertQuestSafeUnlitShadowCallbacks(fastener, "fastener after L5 drive");
+  assert.equal(fastener.castShadow, false, "fastener castShadow stays false after L5");
+  assert.equal(fastener.receiveShadow, false, "fastener receiveShadow stays false after L5");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+});
+
+test("pinColorOnlyUnlitBasicAnimations clears a non-empty animations array on a color-only MeshBasic visual", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  assertR170Object3DAnimationsEmpty(fresh, "r170 Mesh");
+
+  const wrong = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const clip = new THREE.AnimationClip("dcc-leftover", 1, []);
+  const clips = [clip];
+  wrong.animations = clips;
+  wrong.material.glslVersion = "300 es";
+  wrong.material.flatShading = true;
+  wrong.material.defines = { USE_UV: "" };
+  wrong.material.fog = true;
+  const leftoverKey = () => "dcc-unique-program-key";
+  wrong.material.customProgramCacheKey = leftoverKey;
+  const compileBefore = () => {};
+  const beforeRenderBefore = () => {};
+  wrong.material.onBeforeCompile = compileBefore;
+  wrong.material.onBeforeRender = beforeRenderBefore;
+  const meshBefore = () => {};
+  const meshAfter = () => {};
+  const meshShadowBefore = () => {};
+  const meshShadowAfter = () => {};
+  wrong.onBeforeRender = meshBefore;
+  wrong.onAfterRender = meshAfter;
+  wrong.onBeforeShadow = meshShadowBefore;
+  wrong.onAfterShadow = meshShadowAfter;
+  const customDepthBefore = new THREE.MeshBasicMaterial({ color: 0x111111 });
+  const customDistanceBefore = new THREE.MeshBasicMaterial({ color: 0x222222 });
+  wrong.customDepthMaterial = customDepthBefore;
+  wrong.customDistanceMaterial = customDistanceBefore;
+  wrong.castShadow = false;
+  wrong.receiveShadow = false;
+  wrong.visible = true;
+  wrong.matrixAutoUpdate = true;
+  wrong.matrixWorldAutoUpdate = true;
+  const layersMaskBefore = wrong.layers.mask;
+  const upBefore = wrong.up;
+  const scaleBefore = wrong.scale;
+  const rotationBefore = wrong.rotation;
+  const rotationXBefore = wrong.rotation.x;
+  const orderBefore = wrong.rotation.order;
+  let mixerUpdates = 0;
+  const mixer = new THREE.AnimationMixer(wrong);
+  mixer.update = () => {
+    mixerUpdates += 1;
+  };
+  wrong.userData.mixer = mixer;
+  assert.equal(isColorOnlyUnlitBasic(wrong.material), true, "color-only MeshBasic still passes the gate");
+  assert.equal(wrong.animations.length, 1, "DCC leftover animations array is non-empty");
+  const returned = pinColorOnlyUnlitBasicAnimations(wrong);
+  assert.equal(returned, wrong, "animations pin does not replace the mesh");
+  assert.equal(wrong.animations, clips, "existing animations array is mutated, not replaced");
+  assert.equal(wrong.animations.length, 0, "leftover clips are cleared");
+  assert.equal(Array.isArray(wrong.animations), true);
+  assert.equal(clip.name, "dcc-leftover", "pin does not invent or rewrite AnimationClips");
+  assert.equal(mixerUpdates, 0, "pin does not call AnimationMixer.update");
+  assert.equal(wrong.userData.mixer, mixer, "pin does not replace a caller-owned mixer");
+  assert.equal(wrong.material.glslVersion, "300 es", "animations pin does not touch Material glslVersion");
+  assert.equal(wrong.material.flatShading, true, "animations pin does not touch Material flatShading");
+  assert.deepEqual(wrong.material.defines, { USE_UV: "" }, "animations pin does not touch Material defines");
+  assert.equal(wrong.material.fog, true, "animations pin does not change fog");
+  assert.equal(wrong.material.onBeforeCompile, compileBefore, "animations pin does not touch Material onBeforeCompile");
+  assert.equal(wrong.material.onBeforeRender, beforeRenderBefore, "animations pin does not touch Material onBeforeRender");
+  assert.equal(wrong.material.customProgramCacheKey, leftoverKey, "animations pin does not touch Material customProgramCacheKey");
+  assert.equal(wrong.onBeforeRender, meshBefore, "animations pin does not touch Mesh onBeforeRender");
+  assert.equal(wrong.onAfterRender, meshAfter, "animations pin does not touch Mesh onAfterRender");
+  assert.equal(wrong.onBeforeShadow, meshShadowBefore, "animations pin does not touch Mesh onBeforeShadow");
+  assert.equal(wrong.onAfterShadow, meshShadowAfter, "animations pin does not touch Mesh onAfterShadow");
+  assert.equal(wrong.customDepthMaterial, customDepthBefore, "animations pin does not touch customDepthMaterial");
+  assert.equal(wrong.customDistanceMaterial, customDistanceBefore, "animations pin does not touch customDistanceMaterial");
+  assert.equal(wrong.castShadow, false, "animations pin does not enable castShadow");
+  assert.equal(wrong.receiveShadow, false, "animations pin does not enable receiveShadow");
+  assert.equal(wrong.visible, true, "animations pin does not pin mesh.visible");
+  assert.equal(wrong.matrixAutoUpdate, true, "animations pin does not change matrixAutoUpdate");
+  assert.equal(wrong.matrixWorldAutoUpdate, true, "animations pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrong.layers.mask, layersMaskBefore, "animations pin does not change layers");
+  assert.equal(wrong.up, upBefore, "animations pin keeps the existing up Vector3");
+  assert.equal(wrong.scale, scaleBefore, "animations pin keeps the existing scale Vector3");
+  assert.equal(wrong.rotation, rotationBefore, "animations pin keeps the existing Euler");
+  assert.equal(wrong.rotation.x, rotationXBefore, "animations pin does not rewrite rotation.x");
+  assert.equal(wrong.rotation.order, orderBefore, "animations pin does not change rotation.order");
+
+  const missing = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  missing.animations = null;
+  pinColorOnlyUnlitBasicAnimations(missing);
+  assertQuestSafeUnlitAnimations(missing, "non-array animations null");
+
+  const absent = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  delete absent.animations;
+  pinColorOnlyUnlitBasicAnimations(absent);
+  assertQuestSafeUnlitAnimations(absent, "missing animations");
+
+  const bogus = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x8d5a23 }));
+  bogus.animations = "not-an-array";
+  pinColorOnlyUnlitBasicAnimations(bogus);
+  assertQuestSafeUnlitAnimations(bogus, "non-array animations string");
+});
+
+test("pinColorOnlyUnlitBasicAnimations / pinColorOnlyVisualAnimations skip mapped, lit, morph, colliders, shared blocked", () => {
+  const colorOnly = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  const colorClips = [new THREE.AnimationClip("color", 1, [])];
+  colorOnly.animations = colorClips;
+  const mappedMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const mappedClips = [new THREE.AnimationClip("mapped", 1, [])];
+  mapped.animations = mappedClips;
+  const std = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  const stdClips = [new THREE.AnimationClip("lit", 1, [])];
+  std.animations = stdClips;
+  pinColorOnlyUnlitBasicAnimations(colorOnly);
+  pinColorOnlyUnlitBasicAnimations(mapped);
+  pinColorOnlyUnlitBasicAnimations(std);
+  assert.equal(colorOnly.animations, colorClips, "color-only array identity kept");
+  assertQuestSafeUnlitAnimations(colorOnly);
+  assert.equal(mapped.animations, mappedClips, "mapped MeshBasic stays authored animations");
+  assert.equal(mapped.animations.length, 1, "mapped MeshBasic keeps leftover clips");
+  assert.equal(std.animations, stdClips, "MeshStandard stays authored animations");
+  assert.equal(std.animations.length, 1, "MeshStandard keeps leftover clips");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const mappedMeshClips = [new THREE.AnimationClip("mapped-entity", 1, [])];
+  mappedMesh.animations = mappedMeshClips;
+  const colorMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  const colorMeshClips = [new THREE.AnimationClip("color-entity", 0.4, [])];
+  colorMesh.animations = colorMeshClips;
+  const morph = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xc1c3c9 })
+  );
+  morph.geometry.morphAttributes.position = [morph.geometry.getAttribute("position").clone()];
+  const morphClips = [new THREE.AnimationClip("morph", 1, [])];
+  morph.animations = morphClips;
+  const collider = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  const colliderClips = [new THREE.AnimationClip("collider", 1, [])];
+  collider.animations = colliderClips;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedClips = [new THREE.AnimationClip("shared", 1, [])];
+  sharedVisual.animations = sharedClips;
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedColliderClips = [new THREE.AnimationClip("shared-collider", 1, [])];
+  sharedCollider.animations = sharedColliderClips;
+  body.add(mappedMesh, colorMesh, morph, sharedVisual);
+  root.add(body, collider, sharedCollider, std);
+  pinColorOnlyVisualAnimations(root);
+  assert.equal(colorMesh.animations, colorMeshClips, "entity helper keeps the color-only array");
+  assertQuestSafeUnlitAnimations(colorMesh, "entity helper color-only");
+  assert.equal(mappedMesh.animations, mappedMeshClips, "mapped MeshBasic stays authored via entity helper");
+  assert.equal(mappedMesh.animations.length, 1);
+  assert.equal(morph.animations, morphClips, "morph color-only MeshBasic is skipped");
+  assert.equal(morph.animations.length, 1);
+  assert.equal(collider.animations, colliderClips, "collider Mesh stays authored");
+  assert.equal(collider.animations.length, 1);
+  assert.equal(sharedVisual.animations, sharedClips, "shared collider material visual stays unpinned");
+  assert.equal(sharedVisual.animations.length, 1);
+  assert.equal(sharedCollider.animations.length, 1, "shared collider mesh stays authored");
+  assert.equal(std.animations.length, 1, "MeshStandard stays authored via entity helper");
 });

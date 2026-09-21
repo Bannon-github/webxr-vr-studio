@@ -293,6 +293,15 @@ function assertQuestSafeUnlitGlslVersion(mat, label = "color-only MeshBasic") {
   assertR170MaterialGlslVersionAbsent(mat, label);
 }
 
+function assertR170Object3DAnimationsEmpty(obj, label = "r170 Object3D") {
+  assert.equal(Array.isArray(obj.animations), true, `${label} animations is an Array`);
+  assert.equal(obj.animations.length, 0, `${label} animations length is 0`);
+}
+
+function assertQuestSafeUnlitAnimations(mesh, label = "color-only MeshBasic mesh") {
+  assertR170Object3DAnimationsEmpty(mesh, label);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -3843,4 +3852,129 @@ test("packaged ingest without lod groups still clears leftover Material glslVers
   assert.equal(fastener.castShadow, false, "fail-soft fastener does not enable castShadow");
   const colliderGrab = root.getObjectByName("collider_grab");
   assertR170MaterialGlslVersionAbsent(colliderGrab.material, "fail-soft collider keeps r170 glslVersion unset");
+});
+
+test("packaged ingest clears leftover Object3D animations; mapped/lit stay authored", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assertR170Object3DAnimationsEmpty(fresh, "r170 Mesh");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const mappedClips = [new THREE.AnimationClip("mapped-dcc", 1, [])];
+  mappedMesh.animations = mappedClips;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccAnimations", wrong);
+  const clips = [new THREE.AnimationClip("dcc-leftover", 0.8, [])];
+  wrongMesh.animations = clips;
+  wrong.glslVersion = THREE.GLSL3;
+  wrong.flatShading = true;
+  const visibleBefore = wrongMesh.visible;
+  const layersMaskBefore = wrongMesh.layers.mask;
+  const worldAutoBefore = wrongMesh.matrixWorldAutoUpdate;
+  const rotationOrderBefore = wrongMesh.rotation.order;
+  const scaleBefore = wrongMesh.scale;
+  const upBefore = wrongMesh.up;
+  const meshBefore = wrongMesh.onBeforeRender;
+  const meshAfter = wrongMesh.onAfterRender;
+  const meshShadowBefore = wrongMesh.onBeforeShadow;
+  const meshShadowAfter = wrongMesh.onAfterShadow;
+  const customDepthBefore = wrongMesh.customDepthMaterial;
+  const customDistanceBefore = wrongMesh.customDistanceMaterial;
+  const glslBefore = wrong.glslVersion;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  const colliderClips = [new THREE.AnimationClip("collider-dcc", 1, [])];
+  colliderGrabBefore.animations = colliderClips;
+  fastener.animations = null;
+  let mixerUpdates = 0;
+  const mixer = new THREE.AnimationMixer(wrongMesh);
+  mixer.update = () => {
+    mixerUpdates += 1;
+  };
+  wrongMesh.userData.mixer = mixer;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitAnimations(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitGlslVersion(mesh.material, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlatShading(mesh.material, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowCallbacks(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRenderCallbacks(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.castShadow, false, "color-only pin does not enable castShadow");
+    assert.equal(mesh.receiveShadow, false, "color-only pin does not enable receiveShadow");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+  }
+  assert.equal(wrongMesh.animations, clips, "ingest mutates the leftover animations array");
+  assert.equal(wrongMesh.animations.length, 0, "DCC leftover animations are cleared");
+  assert.equal(mixerUpdates, 0, "ingest does not call AnimationMixer.update");
+  assert.equal(wrongMesh.userData.mixer, mixer, "ingest does not replace a caller-owned mixer");
+  assert.equal(wrong.glslVersion, undefined, "flags pin still clears leftover glslVersion");
+  assert.notEqual(wrong.glslVersion, glslBefore, "glslVersion clear stays a separate material pin");
+  assert.equal(wrong.flatShading, false, "ingest flags pin still sets flatShading false");
+  assert.equal(wrongMesh.onBeforeRender, meshBefore, "animations pin does not touch Mesh onBeforeRender");
+  assert.equal(wrongMesh.onAfterRender, meshAfter, "animations pin does not touch Mesh onAfterRender");
+  assert.equal(wrongMesh.onBeforeShadow, meshShadowBefore, "animations pin does not touch Mesh onBeforeShadow");
+  assert.equal(wrongMesh.onAfterShadow, meshShadowAfter, "animations pin does not touch Mesh onAfterShadow");
+  assert.equal(wrongMesh.customDepthMaterial, customDepthBefore, "animations pin does not touch customDepthMaterial");
+  assert.equal(wrongMesh.customDistanceMaterial, customDistanceBefore, "animations pin does not touch customDistanceMaterial");
+  assert.equal(wrongMesh.matrixAutoUpdate, false, "body LOD leaf still frozen by v0.45; animations pin does not unfreeze");
+  assert.equal(wrongMesh.matrixWorldAutoUpdate, worldAutoBefore, "animations pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrongMesh.visible, visibleBefore, "animations pin does not change mesh.visible");
+  assert.equal(wrongMesh.layers.mask, layersMaskBefore, "animations pin does not change layers");
+  assert.equal(wrongMesh.rotation.order, rotationOrderBefore, "animations pin does not change rotation.order");
+  assert.equal(wrongMesh.scale, scaleBefore, "animations pin keeps the existing scale Vector3");
+  assert.equal(wrongMesh.up, upBefore, "animations pin keeps the existing up Vector3");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live; animations pin does not freeze it");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assertQuestSafeUnlitAnimations(fastener, "fastener");
+  assert.equal(mappedMesh.animations, mappedClips, "mapped MeshBasic stays authored animations");
+  assert.equal(mappedMesh.animations.length, 1, "mapped MeshBasic keeps leftover clips");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+  assert.equal(wrongMesh, root.getObjectByName("dccAnimations"), "ingest does not replace the color-only mesh");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.animations, colliderClips, "collider Mesh stays authored animations");
+  assert.equal(colliderGrab.animations.length, 1, "collider keeps leftover clips");
+});
+
+test("packaged ingest without lod groups still clears leftover Object3D animations", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  const bodyClips = [new THREE.AnimationClip("body", 1, [])];
+  visualMeshes(body)[0].animations = bodyClips;
+  visualMeshes(lid)[0].animations = null;
+  delete visualMeshes(latch)[0].animations;
+  visualMeshes(tool)[0].animations = "not-an-array";
+  const fastenerClips = [new THREE.AnimationClip("fastener", 0.2, [])];
+  fastener.animations = fastenerClips;
+  const colliderGrab = root.getObjectByName("collider_grab");
+  const colliderClips = [new THREE.AnimationClip("collider", 1, [])];
+  colliderGrab.animations = colliderClips;
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(visualMeshes(body)[0].animations, bodyClips, "fail-soft body array is mutated");
+  assertQuestSafeUnlitAnimations(visualMeshes(body)[0], "fail-soft body");
+  assertQuestSafeUnlitAnimations(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitAnimations(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitAnimations(visualMeshes(tool)[0], "fail-soft tool");
+  assert.equal(fastener.animations, fastenerClips, "fail-soft fastener array is mutated");
+  assertQuestSafeUnlitAnimations(fastener, "fail-soft fastener");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assertQuestSafeUnlitFlags(visualMeshes(body)[0].material, "fail-soft body");
+  assert.equal(visualMeshes(body)[0].castShadow, false, "fail-soft body does not enable castShadow");
+  assert.equal(fastener.castShadow, false, "fail-soft fastener does not enable castShadow");
+  assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
+  assert.equal(colliderGrab.animations, colliderClips, "fail-soft collider stays authored animations");
+  assert.equal(colliderGrab.animations.length, 1);
 });

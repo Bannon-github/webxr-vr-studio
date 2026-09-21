@@ -876,6 +876,75 @@
  * polygonOffset companions /
  * dithering / A2C / `blendColor` /
  * `blendAlpha`.
+ *
+ * v0.84: after that Material
+ * `glslVersion` clear (and after the
+ * Mesh callback fence through v0.79
+ * `onBeforeShadow` / `onAfterShadow`
+ * / v0.77 `onBeforeRender` /
+ * `onAfterRender` / v0.76
+ * customDepth/Distance),
+ * `pinColorOnlyVisualAnimations`
+ * clears leftover Object3D
+ * `animations` so the r170 empty
+ * list remains
+ * (`Array.isArray(mesh.animations) &&
+ * mesh.animations.length === 0`) on
+ * packed color-only unlit MeshBasic
+ * visual meshes (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Verified r170 (three@0.170.0):**
+ * the Object3D constructor assigns
+ * `this.animations = []`. GLTFLoader
+ * / DCC paths can leave a non-empty
+ * AnimationClip array on a node even
+ * when lid/latch/tool/fastener motion
+ * is procedural L4/L5 pivot mutation
+ * (`tryUse` / `tryDriveFastener`).
+ * When `animations` is an array,
+ * mutate it (`length = 0`); if
+ * missing or non-array, assign
+ * `animations = []`. Does **not**
+ * invent AnimationClips. Does **not**
+ * create an AnimationMixer. Does
+ * **not** call `AnimationMixer.update`.
+ * Does **not** touch Material
+ * `glslVersion` (v0.83). Does **not**
+ * touch Material `flatShading`
+ * (v0.82). Does **not** touch
+ * Material `defines` (v0.81). Does
+ * **not** touch Material
+ * `customProgramCacheKey` (v0.80).
+ * Does **not** touch Material
+ * `onBeforeCompile` /
+ * `onBeforeRender` (v0.78). Does
+ * **not** touch Mesh
+ * `onBeforeRender` / `onAfterRender`
+ * (v0.77). Does **not** touch Mesh
+ * `onBeforeShadow` / `onAfterShadow`
+ * (v0.79). Does **not** touch
+ * `customDepthMaterial` /
+ * `customDistanceMaterial`. Does
+ * **not** enable shadows. Does not
+ * hex-dedupe or invent meshes.
+ * Mapped / lit stay at authored /
+ * r170 Mesh defaults. Collider meshes
+ * stay untouched. Does **not** pin
+ * `mesh.visible` (LOD visibility uses
+ * it), change `matrixAutoUpdate`
+ * (v0.45 already freezes static body
+ * LOD leaves), change
+ * `matrixWorldAutoUpdate`, change
+ * `layers`, change `up`, change
+ * `scale`, change `rotation.order`,
+ * or change prior material pins
+ * including `glslVersion` /
+ * `flatShading` / `defines` /
+ * `customProgramCacheKey` / stencil
+ * companions / polygonOffset
+ * companions / dithering / A2C /
+ * `blendColor` / `blendAlpha`.
  */
 
 import {
@@ -896,6 +965,7 @@ import {
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
+  pinColorOnlyVisualAnimations,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1067,6 +1137,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualCustomShadowMaterials(root);
   pinColorOnlyVisualRenderCallbacks(root);
   pinColorOnlyVisualShadowCallbacks(root);
+  pinColorOnlyVisualAnimations(root);
   return root;
 }
 
