@@ -945,6 +945,79 @@
  * companions / polygonOffset
  * companions / dithering / A2C /
  * `blendColor` / `blendAlpha`.
+ *
+ * v0.85: after that Object3D
+ * `animations` clear,
+ * `pinColorOnlyVisualMorphTargets`
+ * deletes leftover Mesh
+ * `morphTargetInfluences` /
+ * `morphTargetDictionary` so the
+ * r170 absence remains
+ * (`morphTargetInfluences === undefined`
+ * && `morphTargetDictionary === undefined`;
+ * `Object.hasOwn` false) on packed
+ * color-only unlit MeshBasic visual
+ * meshes (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Verified r170 (three@0.170.0):**
+ * the Mesh constructor calls
+ * `updateMorphTargets()`, which
+ * assigns both properties only when
+ * `Object.keys(geometry.morphAttributes).length > 0`.
+ * A non-morph Mesh leaves both
+ * absent. `Mesh.copy` copies them
+ * when the source defines them.
+ * GLTFLoader / DCC paths can leave
+ * a non-empty influence array and/or
+ * dictionary even when this prop’s
+ * color-only stand-ins have no
+ * morphAttributes and lid/latch/tool/
+ * fastener motion is procedural
+ * (`tryUse` / `tryDriveFastener`).
+ * Prefer `delete` when present. Does
+ * **not** assign `null` or empty
+ * `[]` / `{}`. Does **not** invent
+ * morph targets. Does **not** call
+ * `updateMorphTargets()`. Does **not**
+ * add morphAttributes. Does **not**
+ * enable morphing. Does **not** touch
+ * Object3D `animations` (v0.84). Does
+ * **not** touch Material `glslVersion`
+ * (v0.83). Does **not** touch Material
+ * `flatShading` (v0.82). Does **not**
+ * touch Material `defines` (v0.81).
+ * Does **not** touch Material
+ * `customProgramCacheKey` (v0.80).
+ * Does **not** touch Material
+ * `onBeforeCompile` /
+ * `onBeforeRender` (v0.78). Does
+ * **not** touch Mesh
+ * `onBeforeRender` / `onAfterRender`
+ * (v0.77). Does **not** touch Mesh
+ * `onBeforeShadow` / `onAfterShadow`
+ * (v0.79). Does **not** touch
+ * `customDepthMaterial` /
+ * `customDistanceMaterial`. Does
+ * **not** enable shadows. Does not
+ * hex-dedupe or invent meshes.
+ * Mapped / lit stay at authored /
+ * r170 Mesh defaults. Collider meshes
+ * stay untouched. Does **not** pin
+ * `mesh.visible` (LOD visibility uses
+ * it), change `matrixAutoUpdate`
+ * (v0.45 already freezes static body
+ * LOD leaves), change
+ * `matrixWorldAutoUpdate`, change
+ * `layers`, change `up`, change
+ * `scale`, change `rotation.order`,
+ * or change prior material pins
+ * including `glslVersion` /
+ * `flatShading` / `defines` /
+ * `customProgramCacheKey` / stencil
+ * companions / polygonOffset
+ * companions / dithering / A2C /
+ * `blendColor` / `blendAlpha`.
  */
 
 import {
@@ -966,6 +1039,7 @@ import {
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
   pinColorOnlyVisualAnimations,
+  pinColorOnlyVisualMorphTargets,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1138,6 +1212,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualRenderCallbacks(root);
   pinColorOnlyVisualShadowCallbacks(root);
   pinColorOnlyVisualAnimations(root);
+  pinColorOnlyVisualMorphTargets(root);
   return root;
 }
 

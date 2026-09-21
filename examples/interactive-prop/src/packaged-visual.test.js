@@ -302,6 +302,19 @@ function assertQuestSafeUnlitAnimations(mesh, label = "color-only MeshBasic mesh
   assertR170Object3DAnimationsEmpty(mesh, label);
 }
 
+function assertR170MeshMorphTargetsAbsent(mesh, label = "r170 Mesh") {
+  assert.equal(mesh.morphTargetInfluences, undefined, `${label} morphTargetInfluences is undefined`);
+  assert.equal(mesh.morphTargetDictionary, undefined, `${label} morphTargetDictionary is undefined`);
+  assert.equal(Object.hasOwn(mesh, "morphTargetInfluences"), false, `${label} morphTargetInfluences is not an own property`);
+  assert.equal(Object.hasOwn(mesh, "morphTargetDictionary"), false, `${label} morphTargetDictionary is not an own property`);
+  assert.notEqual(mesh.morphTargetInfluences, null, `${label} morphTargetInfluences is not null`);
+  assert.notEqual(mesh.morphTargetDictionary, null, `${label} morphTargetDictionary is not null`);
+}
+
+function assertQuestSafeUnlitMorphTargets(mesh, label = "color-only MeshBasic mesh") {
+  assertR170MeshMorphTargetsAbsent(mesh, label);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -3977,4 +3990,142 @@ test("packaged ingest without lod groups still clears leftover Object3D animatio
   assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
   assert.equal(colliderGrab.animations, colliderClips, "fail-soft collider stays authored animations");
   assert.equal(colliderGrab.animations.length, 1);
+});
+
+test("packaged ingest clears leftover Mesh morph targets; mapped/lit stay authored", () => {
+  const fresh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial());
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assertR170MeshMorphTargetsAbsent(fresh, "r170 Mesh");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const mappedInfluences = [0.5];
+  const mappedDict = { mapped: 0 };
+  mappedMesh.morphTargetInfluences = mappedInfluences;
+  mappedMesh.morphTargetDictionary = mappedDict;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccMorph", wrong);
+  const influences = [0.8, 0.1];
+  const dictionary = { lid: 0, latch: 1 };
+  wrongMesh.morphTargetInfluences = influences;
+  wrongMesh.morphTargetDictionary = dictionary;
+  const clips = [new THREE.AnimationClip("keep-clips", 0.4, [])];
+  wrongMesh.animations = clips;
+  wrong.glslVersion = THREE.GLSL3;
+  wrong.flatShading = true;
+  const visibleBefore = wrongMesh.visible;
+  const layersMaskBefore = wrongMesh.layers.mask;
+  const worldAutoBefore = wrongMesh.matrixWorldAutoUpdate;
+  const rotationOrderBefore = wrongMesh.rotation.order;
+  const scaleBefore = wrongMesh.scale;
+  const upBefore = wrongMesh.up;
+  const meshBefore = wrongMesh.onBeforeRender;
+  const meshAfter = wrongMesh.onAfterRender;
+  const meshShadowBefore = wrongMesh.onBeforeShadow;
+  const meshShadowAfter = wrongMesh.onAfterShadow;
+  const customDepthBefore = wrongMesh.customDepthMaterial;
+  const customDistanceBefore = wrongMesh.customDistanceMaterial;
+  let morphUpdates = 0;
+  wrongMesh.updateMorphTargets = () => {
+    morphUpdates += 1;
+  };
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  const colliderInfluences = [0.2];
+  const colliderDict = { collider: 0 };
+  colliderGrabBefore.morphTargetInfluences = colliderInfluences;
+  colliderGrabBefore.morphTargetDictionary = colliderDict;
+  fastener.morphTargetInfluences = [];
+  fastener.morphTargetDictionary = {};
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitMorphTargets(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitAnimations(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitGlslVersion(mesh.material, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlatShading(mesh.material, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowCallbacks(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRenderCallbacks(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.castShadow, false, "color-only pin does not enable castShadow");
+    assert.equal(mesh.receiveShadow, false, "color-only pin does not enable receiveShadow");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+  }
+  assert.equal(morphUpdates, 0, "ingest does not call updateMorphTargets");
+  assert.equal(influences.length, 2, "ingest does not rewrite the detached influences array");
+  assert.equal(dictionary.lid, 0, "ingest does not rewrite the detached dictionary");
+  assert.equal(wrongMesh.animations, clips, "animations pin still mutates the leftover array in place");
+  assert.equal(wrongMesh.animations.length, 0, "animations pin still clears leftover clips; morph-target pin does not replace the array");
+  assert.equal(wrong.glslVersion, undefined, "flags pin still clears leftover glslVersion");
+  assert.equal(wrong.flatShading, false, "ingest flags pin still sets flatShading false");
+  assert.equal(wrongMesh.onBeforeRender, meshBefore, "morph-target pin does not touch Mesh onBeforeRender");
+  assert.equal(wrongMesh.onAfterRender, meshAfter, "morph-target pin does not touch Mesh onAfterRender");
+  assert.equal(wrongMesh.onBeforeShadow, meshShadowBefore, "morph-target pin does not touch Mesh onBeforeShadow");
+  assert.equal(wrongMesh.onAfterShadow, meshShadowAfter, "morph-target pin does not touch Mesh onAfterShadow");
+  assert.equal(wrongMesh.customDepthMaterial, customDepthBefore, "morph-target pin does not touch customDepthMaterial");
+  assert.equal(wrongMesh.customDistanceMaterial, customDistanceBefore, "morph-target pin does not touch customDistanceMaterial");
+  assert.equal(wrongMesh.matrixAutoUpdate, false, "body LOD leaf still frozen by v0.45; morph-target pin does not unfreeze");
+  assert.equal(wrongMesh.matrixWorldAutoUpdate, worldAutoBefore, "morph-target pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrongMesh.visible, visibleBefore, "morph-target pin does not change mesh.visible");
+  assert.equal(wrongMesh.layers.mask, layersMaskBefore, "morph-target pin does not change layers");
+  assert.equal(wrongMesh.rotation.order, rotationOrderBefore, "morph-target pin does not change rotation.order");
+  assert.equal(wrongMesh.scale, scaleBefore, "morph-target pin keeps the existing scale Vector3");
+  assert.equal(wrongMesh.up, upBefore, "morph-target pin keeps the existing up Vector3");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live; morph-target pin does not freeze it");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assertQuestSafeUnlitMorphTargets(fastener, "fastener");
+  assert.equal(mappedMesh.morphTargetInfluences, mappedInfluences, "mapped MeshBasic stays authored influences");
+  assert.equal(mappedMesh.morphTargetDictionary, mappedDict, "mapped MeshBasic stays authored dictionary");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+  assert.equal(wrongMesh, root.getObjectByName("dccMorph"), "ingest does not replace the color-only mesh");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.morphTargetInfluences, colliderInfluences, "collider Mesh stays authored influences");
+  assert.equal(colliderGrab.morphTargetDictionary, colliderDict, "collider Mesh stays authored dictionary");
+});
+
+test("packaged ingest without lod groups still clears leftover Mesh morph targets", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  const bodyInfluences = [0.4];
+  const bodyDict = { body: 0 };
+  visualMeshes(body)[0].morphTargetInfluences = bodyInfluences;
+  visualMeshes(body)[0].morphTargetDictionary = bodyDict;
+  visualMeshes(lid)[0].morphTargetInfluences = [];
+  visualMeshes(lid)[0].morphTargetDictionary = {};
+  visualMeshes(latch)[0].morphTargetInfluences = null;
+  visualMeshes(latch)[0].morphTargetDictionary = null;
+  delete visualMeshes(tool)[0].morphTargetInfluences;
+  delete visualMeshes(tool)[0].morphTargetDictionary;
+  fastener.morphTargetInfluences = [0.1];
+  fastener.morphTargetDictionary = { fastener: 0 };
+  const colliderGrab = root.getObjectByName("collider_grab");
+  const colliderInfluences = [1];
+  const colliderDict = { grab: 0 };
+  colliderGrab.morphTargetInfluences = colliderInfluences;
+  colliderGrab.morphTargetDictionary = colliderDict;
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitMorphTargets(visualMeshes(body)[0], "fail-soft body");
+  assertQuestSafeUnlitMorphTargets(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitMorphTargets(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitMorphTargets(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitMorphTargets(fastener, "fail-soft fastener");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(bodyInfluences.length, 1, "fail-soft pin deletes the property without rewriting the array");
+  assertQuestSafeUnlitFlags(visualMeshes(body)[0].material, "fail-soft body");
+  assert.equal(visualMeshes(body)[0].castShadow, false, "fail-soft body does not enable castShadow");
+  assert.equal(fastener.castShadow, false, "fail-soft fastener does not enable castShadow");
+  assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
+  assert.equal(colliderGrab.morphTargetInfluences, colliderInfluences, "fail-soft collider stays authored influences");
+  assert.equal(colliderGrab.morphTargetDictionary, colliderDict, "fail-soft collider stays authored dictionary");
 });
