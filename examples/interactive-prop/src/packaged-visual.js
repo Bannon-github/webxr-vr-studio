@@ -741,6 +741,65 @@
  * the v0.79 Mesh shadow-callback
  * clear / the v0.80 Material
  * customProgramCacheKey clear.
+ *
+ * v0.82: after that Material
+ * `defines` clear (and after the
+ * long Material flag fence through
+ * v0.80 `customProgramCacheKey` /
+ * v0.78 `onBeforeCompile` +
+ * `onBeforeRender` / v0.75 stencil
+ * companions),
+ * `pinColorOnlyUnlitBasicFlatShading`
+ * (via `pinColorOnlyUnlitBasicFlags`
+ * / `pinColorOnlyVisualMaterialFlags`)
+ * sets Material `flatShading = false`
+ * on packed color-only unlit
+ * MeshBasic materials (same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Verified r170 (three@0.170.0):**
+ * Material / MeshBasicMaterial leave
+ * `flatShading` unset (`undefined`).
+ * `WebGLPrograms` copies
+ * `flatShading: material.flatShading
+ * === true` into program parameters
+ * and the program cache key;
+ * `WebGLProgram` emits
+ * `#define FLAT_SHADED` when that
+ * parameter is true. Leftover
+ * DCC/GLB `flatShading = true`
+ * fragments the cache and can force
+ * a separate FLAT_SHADED program on
+ * Quest Browser / TBDR. Does **not**
+ * invent custom shaders. Does **not**
+ * enable flat shading. Does **not**
+ * touch Material `defines` (v0.81).
+ * Does **not** touch Material
+ * `customProgramCacheKey` (v0.80).
+ * Does **not** touch Material
+ * `onBeforeCompile` /
+ * `onBeforeRender` (v0.78). Does
+ * **not** touch Mesh
+ * `onBeforeRender` / `onAfterRender`
+ * (v0.77). Does **not** touch Mesh
+ * `onBeforeShadow` / `onAfterShadow`
+ * (v0.79). Does not hex-dedupe or
+ * invent materials. Mapped / lit stay
+ * at authored / r170 Material
+ * defaults. Collider materials stay
+ * untouched. Does **not** pin
+ * `mesh.visible` (LOD visibility uses
+ * it), change `matrixAutoUpdate`
+ * (v0.45 already freezes static body
+ * LOD leaves), change
+ * `matrixWorldAutoUpdate`, change
+ * `layers`, change `up`, change
+ * `scale`, change `rotation.order`,
+ * or change prior material pins
+ * including `defines` /
+ * `customProgramCacheKey` / stencil
+ * companions / polygonOffset
+ * companions / dithering / A2C /
+ * `blendColor` / `blendAlpha`.
  */
 
 import {
