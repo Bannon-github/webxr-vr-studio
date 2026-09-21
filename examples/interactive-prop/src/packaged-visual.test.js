@@ -257,6 +257,15 @@ function assertQuestSafeUnlitShadowCallbacks(mesh, label = "color-only MeshBasic
   assertR170Object3DShadowCallbacksAbsent(mesh, label);
 }
 
+function assertR170MaterialCustomProgramCacheKeyDefault(mat, label = "r170 Material") {
+  assert.equal(Object.hasOwn(mat, "customProgramCacheKey"), false, `${label} customProgramCacheKey is not an own property`);
+  assert.equal(mat.customProgramCacheKey, THREE.Material.prototype.customProgramCacheKey, `${label} customProgramCacheKey is the r170 prototype method`);
+}
+
+function assertQuestSafeUnlitCustomProgramCacheKey(mat, label = "color-only MeshBasic") {
+  assertR170MaterialCustomProgramCacheKeyDefault(mat, label);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -3329,4 +3338,125 @@ test("packaged ingest without lod groups still clears leftover Mesh onBefore/Aft
   assert.equal(fastener.castShadow, false, "fail-soft fastener does not enable castShadow");
   const colliderGrab = root.getObjectByName("collider_grab");
   assertR170Object3DShadowCallbacksAbsent(colliderGrab, "fail-soft collider keeps r170 shadow-callback absence");
+});
+
+test("packaged ingest clears leftover Material customProgramCacheKey; mapped/lit stay authored", () => {
+  const fresh = new THREE.MeshBasicMaterial();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(Object.hasOwn(fresh, "customProgramCacheKey"), false, "r170 Material does not define customProgramCacheKey on the instance");
+  assert.equal(typeof THREE.Material.prototype.customProgramCacheKey, "function", "r170 Material.prototype.customProgramCacheKey is the default method");
+  assert.equal(
+    fresh.customProgramCacheKey(),
+    fresh.onBeforeCompile.toString(),
+    "r170 Material.prototype.customProgramCacheKey returns this.onBeforeCompile.toString()"
+  );
+  assertR170MaterialCustomProgramCacheKeyDefault(fresh, "r170 MeshBasicMaterial");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const mappedKey = () => "mapped-unique-program-key";
+  mapped.customProgramCacheKey = mappedKey;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccCustomProgramCacheKey", wrong);
+  const leftoverKey = () => "dcc-unique-program-key";
+  wrong.customProgramCacheKey = leftoverKey;
+  const visibleBefore = wrongMesh.visible;
+  const layersMaskBefore = wrongMesh.layers.mask;
+  const worldAutoBefore = wrongMesh.matrixWorldAutoUpdate;
+  const rotationOrderBefore = wrongMesh.rotation.order;
+  const blendColorBefore = wrong.blendColor;
+  const blendAlphaBefore = wrong.blendAlpha;
+  const ditheringBefore = wrong.dithering;
+  const a2cBefore = wrong.alphaToCoverage;
+  const stencilRefBefore = wrong.stencilRef;
+  const meshBefore = wrongMesh.onBeforeRender;
+  const meshAfter = wrongMesh.onAfterRender;
+  const meshShadowBefore = wrongMesh.onBeforeShadow;
+  const meshShadowAfter = wrongMesh.onAfterShadow;
+  const customDepthBefore = wrongMesh.customDepthMaterial;
+  const customDistanceBefore = wrongMesh.customDistanceMaterial;
+  const matCompileBefore = wrong.onBeforeCompile;
+  const matBefore = wrong.onBeforeRender;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  const colliderKey = () => "collider-unique-program-key";
+  colliderGrabBefore.material.customProgramCacheKey = colliderKey;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitCustomProgramCacheKey(mesh.material, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitMaterialRenderCallbacks(mesh.material, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowCallbacks(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRenderCallbacks(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitCustomShadowMaterials(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitShadowFlags(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitRotationOrder(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitFlags(mesh.material, "packaged color-only MeshBasic");
+    assert.equal(mesh.castShadow, false, "color-only pin does not enable castShadow");
+    assert.equal(mesh.receiveShadow, false, "color-only pin does not enable receiveShadow");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+    assert.equal(mesh.material.stencilRef, 0, "prior stencilRef pin stays intact");
+    assert.equal(mesh.material.dithering, false, "prior dithering pin stays intact");
+    assert.equal(mesh.material.alphaToCoverage, false, "prior A2C pin stays intact");
+  }
+  assertQuestSafeUnlitCustomProgramCacheKey(wrong, "packaged DCC leftover customProgramCacheKey color-only MeshBasic");
+  assert.notEqual(wrong.customProgramCacheKey, leftoverKey, "DCC leftover customProgramCacheKey stub is cleared");
+  assert.equal(wrong.customProgramCacheKey, THREE.Material.prototype.customProgramCacheKey, "prototype customProgramCacheKey remains");
+  assert.equal(wrong.onBeforeCompile, matCompileBefore, "customProgramCacheKey pin does not touch Material onBeforeCompile");
+  assert.equal(wrong.onBeforeRender, matBefore, "customProgramCacheKey pin does not touch Material onBeforeRender");
+  assert.equal(wrongMesh.onBeforeRender, meshBefore, "customProgramCacheKey pin does not touch Mesh onBeforeRender");
+  assert.equal(wrongMesh.onAfterRender, meshAfter, "customProgramCacheKey pin does not touch Mesh onAfterRender");
+  assert.equal(wrongMesh.onBeforeShadow, meshShadowBefore, "customProgramCacheKey pin does not touch Mesh onBeforeShadow");
+  assert.equal(wrongMesh.onAfterShadow, meshShadowAfter, "customProgramCacheKey pin does not touch Mesh onAfterShadow");
+  assert.equal(wrongMesh.customDepthMaterial, customDepthBefore, "customProgramCacheKey pin does not touch customDepthMaterial");
+  assert.equal(wrongMesh.customDistanceMaterial, customDistanceBefore, "customProgramCacheKey pin does not touch customDistanceMaterial");
+  assert.equal(wrongMesh.matrixAutoUpdate, false, "body LOD leaf still frozen by v0.45; customProgramCacheKey pin does not unfreeze");
+  assert.equal(wrongMesh.matrixWorldAutoUpdate, worldAutoBefore, "customProgramCacheKey pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrongMesh.visible, visibleBefore, "customProgramCacheKey pin does not change mesh.visible");
+  assert.equal(wrongMesh.layers.mask, layersMaskBefore, "customProgramCacheKey pin does not change layers");
+  assert.equal(wrongMesh.rotation.order, rotationOrderBefore, "customProgramCacheKey pin does not change rotation.order");
+  assert.equal(wrong.blendColor, blendColorBefore, "customProgramCacheKey pin does not replace blendColor");
+  assert.equal(wrong.blendAlpha, blendAlphaBefore, "customProgramCacheKey pin does not change blendAlpha");
+  assert.equal(wrong.dithering, ditheringBefore, "customProgramCacheKey pin does not change dithering");
+  assert.equal(wrong.alphaToCoverage, a2cBefore, "customProgramCacheKey pin does not change alphaToCoverage");
+  assert.equal(wrong.stencilRef, stencilRefBefore, "customProgramCacheKey pin does not change stencilRef");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live; customProgramCacheKey pin does not freeze it");
+  assertQuestSafeUnlitCustomProgramCacheKey(fastener.material, "fastener");
+  assert.equal(mapped.customProgramCacheKey, mappedKey, "mapped MeshBasic stays authored customProgramCacheKey");
+  assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.customProgramCacheKey, colliderKey, "collider MeshBasic stays authored customProgramCacheKey");
+});
+
+test("packaged ingest without lod groups still clears leftover Material customProgramCacheKey", () => {
+  const leftover = () => () => "dcc-unique-program-key";
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  visualMeshes(body)[0].material.customProgramCacheKey = leftover();
+  visualMeshes(lid)[0].material.customProgramCacheKey = leftover();
+  visualMeshes(latch)[0].material.customProgramCacheKey = leftover();
+  visualMeshes(tool)[0].material.customProgramCacheKey = leftover();
+  fastener.material.customProgramCacheKey = leftover();
+  ingestPackagedRoot(root, sidecar);
+  assertQuestSafeUnlitCustomProgramCacheKey(visualMeshes(body)[0].material, "fail-soft body");
+  assertQuestSafeUnlitCustomProgramCacheKey(visualMeshes(lid)[0].material, "fail-soft lid");
+  assertQuestSafeUnlitCustomProgramCacheKey(visualMeshes(latch)[0].material, "fail-soft latch");
+  assertQuestSafeUnlitCustomProgramCacheKey(visualMeshes(tool)[0].material, "fail-soft tool");
+  assertQuestSafeUnlitCustomProgramCacheKey(fastener.material, "fail-soft fastener");
+  assertQuestSafeUnlitFlags(visualMeshes(body)[0].material, "fail-soft body");
+  assert.equal(visualMeshes(body)[0].castShadow, false, "fail-soft body does not enable castShadow");
+  assert.equal(fastener.castShadow, false, "fail-soft fastener does not enable castShadow");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assertR170MaterialCustomProgramCacheKeyDefault(colliderGrab.material, "fail-soft collider keeps r170 customProgramCacheKey default");
 });
