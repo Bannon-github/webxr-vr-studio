@@ -338,6 +338,22 @@ function assertQuestSafeUnlitDrawRange(mesh, label = "color-only MeshBasic mesh"
   assert.equal(drawRange.count, Infinity, `${label} drawRange.count is Infinity`);
 }
 
+function assertQuestSafeUnlitSkinAttributes(mesh, label = "color-only MeshBasic mesh") {
+  assert.equal(mesh.geometry.getAttribute("skinIndex"), undefined, `${label} skinIndex is absent`);
+  assert.equal(mesh.geometry.getAttribute("skinWeight"), undefined, `${label} skinWeight is absent`);
+  assert.ok(mesh.geometry.getAttribute("position"), `${label} keeps position`);
+  assert.notEqual(mesh.isSkinnedMesh, true, `${label} is not a SkinnedMesh`);
+}
+
+function attachLeftoverSkinAttributes(geometry) {
+  const count = geometry.getAttribute("position").count;
+  const skinIndex = new THREE.Uint16BufferAttribute(count * 4, 4);
+  const skinWeight = new THREE.Float32BufferAttribute(count * 4, 4);
+  geometry.setAttribute("skinIndex", skinIndex);
+  geometry.setAttribute("skinWeight", skinWeight);
+  return { skinIndex, skinWeight, skinBytes: skinIndex.array.byteLength + skinWeight.array.byteLength };
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -4530,4 +4546,99 @@ test("packaged ingest without lod groups still pins leftover BufferGeometry draw
   assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
   assert.equal(colliderGrab.geometry.drawRange.start, 6, "fail-soft collider stays authored drawRange.start");
   assert.equal(colliderGrab.geometry.drawRange.count, 3, "fail-soft collider stays authored drawRange.count");
+});
+
+test("packaged ingest strips leftover skinIndex/skinWeight after drawRange; mapped/lit/collider stay authored", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const mappedSkin = attachLeftoverSkinAttributes(mappedMesh.geometry);
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccSkin", wrong);
+  const skin = attachLeftoverSkinAttributes(wrongMesh.geometry);
+  const drawRange = wrongMesh.geometry.drawRange;
+  wrongMesh.geometry.drawRange.start = 2;
+  wrongMesh.geometry.drawRange.count = 9;
+  const bag = wrongMesh.geometry.groups;
+  wrongMesh.geometry.addGroup(0, 3, 0);
+  const morphBag = wrongMesh.geometry.morphAttributes;
+  morphBag.position = [];
+  wrongMesh.geometry.morphTargetsRelative = true;
+  const skeleton = { bones: [{ name: "keep-bone" }] };
+  const bindMatrix = new THREE.Matrix4().makeTranslation(0, 2, 0);
+  wrongMesh.skeleton = skeleton;
+  wrongMesh.bindMatrix = bindMatrix;
+  const geometryBefore = wrongMesh.geometry;
+  const beforeBytes = skin.skinBytes;
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  const colliderSkin = attachLeftoverSkinAttributes(colliderGrabBefore.geometry);
+  const fastenerSkin = attachLeftoverSkinAttributes(fastener.geometry);
+  const fastenerPosition = fastener.geometry.getAttribute("position");
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(wrongMesh.geometry, geometryBefore, "ingest does not replace the geometry");
+  assert.notEqual(wrongMesh.isSkinnedMesh, true, "ingest does not convert the visual to SkinnedMesh");
+  assertQuestSafeUnlitSkinAttributes(wrongMesh, "packaged color-only MeshBasic");
+  assert.equal(wrongMesh.geometry.getAttribute("position").count, 24, "skin strip does not delete position");
+  assert.equal(beforeBytes, 576, "BoxGeometry leftover skin attrs are 576 bytes before strip");
+  assert.equal(wrongMesh.geometry.drawRange, drawRange, "skin strip does not replace drawRange");
+  assertQuestSafeUnlitDrawRange(wrongMesh, "drawRange pin still holds");
+  assert.equal(wrongMesh.geometry.groups, bag, "skin strip does not replace groups");
+  assert.equal(bag.length, 0, "earlier groups pin still clears leftover groups");
+  assert.equal(wrongMesh.geometry.morphAttributes, morphBag, "skin strip does not replace morphAttributes");
+  assert.equal(Object.keys(morphBag).length, 0, "earlier morphAttributes pin still clears leftover keys");
+  assert.equal(wrongMesh.geometry.morphTargetsRelative, false, "earlier morphAttributes pin still pins morphTargetsRelative");
+  assert.equal(wrongMesh.skeleton, skeleton, "skin strip does not touch skeleton");
+  assert.equal(wrongMesh.skeleton.bones[0].name, "keep-bone", "skin strip does not delete bones");
+  assert.equal(wrongMesh.bindMatrix, bindMatrix, "skin strip does not touch bindMatrix");
+  assert.equal(wrongMesh.bindMatrix.elements[13], 2, "skin strip does not rewrite bindMatrix");
+  assertQuestSafeUnlitSkinAttributes(fastener, "fastener");
+  assert.equal(fastener.geometry.getAttribute("position") === fastenerPosition || fastener.geometry.getAttribute("position").isFloat16BufferAttribute, true, "fastener position stays or is the pack Float16 quantize");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+  assert.equal(fastenerSkin.skinBytes, 576, "fastener fixture carried 576 leftover skin bytes");
+  assert.equal(mappedMesh.geometry.getAttribute("skinIndex"), mappedSkin.skinIndex, "mapped MeshBasic keeps skinIndex");
+  assert.equal(mappedMesh.geometry.getAttribute("skinWeight"), mappedSkin.skinWeight, "mapped MeshBasic keeps skinWeight");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.geometry.getAttribute("skinIndex"), colliderSkin.skinIndex, "collider Mesh keeps skinIndex");
+  assert.equal(colliderGrab.geometry.getAttribute("skinWeight"), colliderSkin.skinWeight, "collider Mesh keeps skinWeight");
+});
+
+test("packaged ingest without lod groups still strips leftover skinIndex/skinWeight", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  const bodyMesh = visualMeshes(body)[0];
+  const bodySkin = attachLeftoverSkinAttributes(bodyMesh.geometry);
+  const bodyPosition = bodyMesh.geometry.getAttribute("position");
+  const bodyRange = bodyMesh.geometry.drawRange;
+  bodyMesh.geometry.drawRange.start = 2;
+  bodyMesh.geometry.drawRange.count = 4;
+  bodyMesh.geometry.addGroup(0, 3, 0);
+  attachLeftoverSkinAttributes(visualMeshes(lid)[0].geometry);
+  attachLeftoverSkinAttributes(visualMeshes(latch)[0].geometry);
+  attachLeftoverSkinAttributes(visualMeshes(tool)[0].geometry);
+  attachLeftoverSkinAttributes(fastener.geometry);
+  const colliderGrab = root.getObjectByName("collider_grab");
+  const colliderSkin = attachLeftoverSkinAttributes(colliderGrab.geometry);
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(bodyMesh.geometry.getAttribute("position"), bodyPosition, "fail-soft body position stays (no pack quantize)");
+  assert.equal(bodySkin.skinBytes, 576, "fail-soft body fixture leftover skin bytes");
+  assertQuestSafeUnlitSkinAttributes(bodyMesh, "fail-soft body");
+  assert.equal(bodyMesh.geometry.drawRange, bodyRange, "fail-soft skin strip does not replace drawRange");
+  assertQuestSafeUnlitDrawRange(bodyMesh, "fail-soft body drawRange still pinned");
+  assert.equal(bodyMesh.geometry.groups.length, 0, "fail-soft groups pin still clears groups");
+  assertQuestSafeUnlitSkinAttributes(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitSkinAttributes(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitSkinAttributes(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitSkinAttributes(fastener, "fail-soft fastener");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
+  assert.equal(colliderGrab.geometry.getAttribute("skinIndex"), colliderSkin.skinIndex, "fail-soft collider keeps skinIndex");
+  assert.equal(colliderGrab.geometry.getAttribute("skinWeight"), colliderSkin.skinWeight, "fail-soft collider keeps skinWeight");
 });

@@ -1185,6 +1185,50 @@
  * `layers`, change `up`, change
  * `scale`, change `rotation.order`,
  * or change prior material pins.
+ *
+ * v0.89: after that drawRange pin,
+ * `pinColorOnlyVisualSkinAttributes`
+ * strips leftover `skinIndex` /
+ * `skinWeight` on packed color-only
+ * unlit MeshBasic visual geometries
+ * (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Verified r170 (three@0.170.0):**
+ * `WebGLPrograms` sets `skinning`
+ * only when `object.isSkinnedMesh === true`.
+ * `WebGLProgram` emits
+ * `#define USE_SKINNING` and
+ * `attribute vec4 skinIndex` /
+ * `attribute vec4 skinWeight` only
+ * then. A plain Mesh + MeshBasic
+ * does not read them.
+ * `WebGLGeometries.update` still
+ * uploads every
+ * `geometry.attributes` entry, so
+ * leftover skin attrs inflate
+ * pre-upload attrBytes.
+ * `GLTFLoader` maps `JOINTS_0` →
+ * `skinIndex` and `WEIGHTS_0` →
+ * `skinWeight`, and builds a
+ * `SkinnedMesh` only when the node
+ * has a skin. This pulse deletes
+ * the leftover attributes via
+ * `BufferGeometry.deleteAttribute`.
+ * Do **not** invent a SkinnedMesh.
+ * Do **not** enable skinning. Do
+ * **not** touch bones / `skeleton`
+ * / `bindMatrix` /
+ * `bindMatrixInverse`. Do **not**
+ * delete `position`. Do **not**
+ * touch `drawRange` (v0.88). Do
+ * **not** touch `groups` (v0.87).
+ * Mapped / lit / interleaved stay
+ * authored. Collider meshes stay
+ * untouched. Does not hex-dedupe
+ * or invent meshes. Fail-soft
+ * (no lod groups) still runs this
+ * pin.
  */
 
 import {
@@ -1210,6 +1254,7 @@ import {
   pinColorOnlyVisualMorphAttributes,
   pinColorOnlyVisualGroups,
   pinColorOnlyVisualDrawRange,
+  pinColorOnlyVisualSkinAttributes,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1386,6 +1431,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMorphAttributes(root);
   pinColorOnlyVisualGroups(root);
   pinColorOnlyVisualDrawRange(root);
+  pinColorOnlyVisualSkinAttributes(root);
   return root;
 }
 

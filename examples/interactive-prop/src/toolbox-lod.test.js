@@ -55,6 +55,7 @@ const {
   pinColorOnlyUnlitBasicMorphAttributes,
   pinColorOnlyUnlitBasicGroups,
   pinColorOnlyUnlitBasicDrawRange,
+  pinColorOnlyUnlitBasicSkinAttributes,
   pinColorOnlyUnlitBasicCustomShadowMaterials,
   pinColorOnlyUnlitBasicCustomProgramCacheKey,
   pinColorOnlyUnlitBasicDefines,
@@ -77,6 +78,7 @@ const {
   pinColorOnlyVisualMorphAttributes,
   pinColorOnlyVisualGroups,
   pinColorOnlyVisualDrawRange,
+  pinColorOnlyVisualSkinAttributes,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
@@ -95,6 +97,7 @@ const {
   setToolboxLod,
   shareColorOnlyUnlitBasic,
   stripUnusedColorOnlyAttributes,
+  stripUnusedColorOnlySkinAttributes,
   tryDriveFastener,
   tryUse,
   weldCoincidentVertices,
@@ -538,6 +541,45 @@ function countVisualDrawRange(crate) {
     else leftover += 1;
   }
   return { defaults, leftover, total: defaults + leftover, uniqueGeometries: geos.size };
+}
+
+function assertQuestSafeUnlitSkinAttributes(mesh, label = "color-only MeshBasic mesh") {
+  assert.equal(mesh.geometry.getAttribute("skinIndex"), undefined, `${label} skinIndex is absent`);
+  assert.equal(mesh.geometry.getAttribute("skinWeight"), undefined, `${label} skinWeight is absent`);
+  assert.ok(mesh.geometry.getAttribute("position"), `${label} keeps position`);
+  assert.notEqual(mesh.isSkinnedMesh, true, `${label} is not a SkinnedMesh`);
+}
+
+function countVisualSkinAttributes(crate) {
+  let absent = 0;
+  let leftover = 0;
+  const geos = new Set();
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.geometry) geos.add(mesh.geometry);
+    const skinIndex = mesh.geometry?.getAttribute?.("skinIndex");
+    const skinWeight = mesh.geometry?.getAttribute?.("skinWeight");
+    if (!skinIndex && !skinWeight) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover, uniqueGeometries: geos.size };
+}
+
+/** GLTF-style leftover: Uint16 JOINTS_0 + Float32 WEIGHTS_0, itemSize 4. */
+function attachLeftoverSkinAttributes(geometry) {
+  const count = geometry.getAttribute("position").count;
+  const skinIndex = new THREE.Uint16BufferAttribute(count * 4, 4);
+  const skinWeight = new THREE.Float32BufferAttribute(count * 4, 4);
+  for (let i = 0; i < count; i++) {
+    skinIndex.setXYZW(i, 0, 1, 2, 3);
+    skinWeight.setXYZW(i, 1, 0, 0, 0);
+  }
+  geometry.setAttribute("skinIndex", skinIndex);
+  geometry.setAttribute("skinWeight", skinWeight);
+  return {
+    skinIndex,
+    skinWeight,
+    skinBytes: skinIndex.array.byteLength + skinWeight.array.byteLength,
+  };
 }
 
 function countVisualMorphAttributes(crate) {
@@ -10904,4 +10946,275 @@ test("pinColorOnlyUnlitBasicDrawRange / pinColorOnlyVisualDrawRange skip mapped,
   assert.equal(sharedGeoVisual.geometry.drawRange.start, 2, "geometry shared with a mapped mesh stays authored");
   assert.equal(std.geometry.drawRange.start, 3, "MeshStandard stays authored via entity helper");
   assert.equal(std.geometry.drawRange.count, 6, "MeshStandard count stays authored via entity helper");
+});
+
+test("stripUnusedColorOnlyAttributes drops leftover skinIndex/skinWeight only on color-only MeshBasic", () => {
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const std = new THREE.MeshStandardMaterial();
+  const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  stripUnusedColorOnlyAttributes(geo, colorOnly);
+  const position = geo.getAttribute("position");
+  const attached = attachLeftoverSkinAttributes(geo);
+  assert.equal(attached.skinBytes, 576, "24 verts × (Uint16 skinIndex 8 B + Float32 skinWeight 16 B)");
+  const before = cpuAttrBytes(geo);
+  const drawRange = geo.drawRange;
+  const groups = geo.groups;
+  const morphAttributes = geo.morphAttributes;
+  stripUnusedColorOnlySkinAttributes(geo, colorOnly);
+  assert.equal(geo.getAttribute("skinIndex"), undefined, "narrow skin strip drops skinIndex");
+  assert.equal(geo.getAttribute("skinWeight"), undefined, "narrow skin strip drops skinWeight");
+  assert.equal(geo.getAttribute("position"), position, "skin strip does not replace position");
+  assert.equal(cpuAttrBytes(geo), before - attached.skinBytes, "measured attrBytes drop is the leftover skin bytes");
+  assert.equal(geo.drawRange, drawRange, "skin strip does not replace drawRange");
+  assert.equal(geo.groups, groups, "skin strip does not replace groups");
+  assert.equal(geo.morphAttributes, morphAttributes, "skin strip does not replace morphAttributes");
+
+  const packed = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const packedSkin = attachLeftoverSkinAttributes(packed);
+  const packedBefore = cpuAttrBytes(packed);
+  stripUnusedColorOnlyAttributes(packed, colorOnly);
+  assert.equal(packed.getAttribute("skinIndex"), undefined);
+  assert.equal(packed.getAttribute("skinWeight"), undefined);
+  assert.equal(packed.getAttribute("normal"), undefined, "existing unused-attr strip still drops normal");
+  assert.equal(packed.getAttribute("uv"), undefined, "existing unused-attr strip still drops uv");
+  assert.ok(packed.getAttribute("position"));
+  assert.ok(packedBefore - cpuAttrBytes(packed) >= packedSkin.skinBytes, "pack strip drops at least the skin bytes");
+
+  const keptMapped = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  attachLeftoverSkinAttributes(keptMapped);
+  stripUnusedColorOnlyAttributes(keptMapped, mapped);
+  stripUnusedColorOnlySkinAttributes(keptMapped, mapped);
+  assert.ok(keptMapped.getAttribute("skinIndex"), "mapped MeshBasic keeps skinIndex");
+  assert.ok(keptMapped.getAttribute("skinWeight"), "mapped MeshBasic keeps skinWeight");
+  assert.ok(keptMapped.getAttribute("uv"), "mapped MeshBasic keeps uv");
+  const keptStd = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  attachLeftoverSkinAttributes(keptStd);
+  stripUnusedColorOnlyAttributes(keptStd, std);
+  assert.ok(keptStd.getAttribute("skinIndex"), "MeshStandard keeps skinIndex");
+  assert.ok(keptStd.getAttribute("skinWeight"), "MeshStandard keeps skinWeight");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  interleavedGeo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(8, 4));
+  interleavedGeo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(8, 4));
+  stripUnusedColorOnlySkinAttributes(interleavedGeo, colorOnly);
+  assert.ok(interleavedGeo.getAttribute("skinIndex"), "interleaved geometry keeps authored skinIndex");
+  assert.ok(interleavedGeo.getAttribute("skinWeight"), "interleaved geometry keeps authored skinWeight");
+});
+
+test("v0.89 strips leftover skinIndex/skinWeight on packed color-only MeshBasic visuals; envelope stays v0.88", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v0\.89 strips leftover skinIndex\/skinWeight/);
+  assert.match(crate.userData.l2.note, /13 skinAttributes-absent/);
+  assert.match(crate.userData.l2.note, /13 drawRange-default/);
+  assert.match(crate.userData.l2.note, /13 groups-empty/);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitSkinAttributes(mesh);
+    assertQuestSafeUnlitDrawRange(mesh);
+    assertQuestSafeUnlitGroups(mesh);
+    assertQuestSafeUnlitMorphAttributes(mesh);
+    assertQuestSafeUnlitMorphTargets(mesh);
+    assertQuestSafeUnlitAnimations(mesh);
+    assert.equal(mesh.isSkinnedMesh, undefined, "procedural visuals stay plain Mesh");
+    assert.equal(mesh.skeleton, undefined, "skin strip does not invent a skeleton");
+    assert.equal(mesh.bindMatrix, undefined, "skin strip does not invent bindMatrix");
+  }
+  const skinCounts = countVisualSkinAttributes(crate);
+  assert.equal(skinCounts.uniqueGeometries, 13, "one geometry per visual; geometries are not shared");
+  assert.equal(skinCounts.absent, 13, "skinAttributes-absent count is 13");
+  assert.equal(skinCounts.leftover, 0);
+  const drawCounts = countVisualDrawRange(crate);
+  assert.equal(drawCounts.defaults, 13, "drawRange-default count stays 13");
+  const groupCounts = countVisualGroups(crate);
+  assert.equal(groupCounts.empty, 13, "groups-empty count stays 13");
+  const morphAttrCounts = countVisualMorphAttributes(crate);
+  assert.equal(morphAttrCounts.empty, 13, "morphAttributes-empty count stays 13");
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assert.equal(fastener.parent.name, "toolbox", "fastener stays outside the LOD merge skip set");
+  assertQuestSafeUnlitSkinAttributes(fastener, "fastenerMesh");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assertQuestSafeUnlitSkinAttributes(bodyHero, "body LOD leaf");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitSkinAttributes(fastener, "fastener after L5 drive");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+});
+
+test("pinColorOnlyUnlitBasicSkinAttributes drops leftover skin attrs and leaves drawRange, groups, morph, bones", () => {
+  const wrong = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const attached = attachLeftoverSkinAttributes(wrong.geometry);
+  const position = wrong.geometry.getAttribute("position");
+  const drawRange = wrong.geometry.drawRange;
+  wrong.geometry.drawRange.start = 3;
+  wrong.geometry.drawRange.count = 12;
+  const groups = wrong.geometry.groups;
+  wrong.geometry.addGroup(0, 3, 0);
+  const bag = wrong.geometry.morphAttributes;
+  bag.position = [new THREE.BufferAttribute(new Float32Array(3), 3)];
+  wrong.geometry.morphTargetsRelative = true;
+  const influences = [0.4];
+  const dictionary = { smile: 0 };
+  wrong.morphTargetInfluences = influences;
+  wrong.morphTargetDictionary = dictionary;
+  const clips = [new THREE.AnimationClip("dcc-leftover", 1, [])];
+  wrong.animations = clips;
+  const skeleton = { bones: [{ name: "root" }] };
+  const bindMatrix = new THREE.Matrix4().makeTranslation(1, 0, 0);
+  wrong.skeleton = skeleton;
+  wrong.bindMatrix = bindMatrix;
+  wrong.bindMatrixInverse = new THREE.Matrix4();
+  const geometryBefore = wrong.geometry;
+  const beforeBytes = cpuAttrBytes(wrong.geometry);
+  assert.equal(isColorOnlyUnlitBasic(wrong.material), true, "color-only MeshBasic still passes the gate");
+  const returned = pinColorOnlyUnlitBasicSkinAttributes(wrong);
+  assert.equal(returned, wrong, "skin pin does not replace the mesh");
+  assert.equal(wrong.geometry, geometryBefore, "pin does not replace the geometry");
+  assert.notEqual(wrong.isSkinnedMesh, true, "pin does not convert the mesh to SkinnedMesh");
+  assertQuestSafeUnlitSkinAttributes(wrong, "leftover skin attributes");
+  assert.equal(cpuAttrBytes(wrong.geometry), beforeBytes - attached.skinBytes, "pin drops the leftover skin attrBytes");
+  assert.equal(attached.skinBytes, 72, "3 verts × (Uint16 skinIndex 8 B + Float32 skinWeight 16 B)");
+  assert.equal(wrong.geometry.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(wrong.geometry.drawRange, drawRange, "pin does not replace drawRange");
+  assert.equal(drawRange.start, 3, "pin does not change drawRange.start");
+  assert.equal(drawRange.count, 12, "pin does not change drawRange.count");
+  assert.equal(wrong.geometry.groups, groups, "pin does not replace groups");
+  assert.equal(groups.length, 1, "pin does not clear groups");
+  assert.equal(wrong.geometry.morphAttributes, bag, "pin does not replace morphAttributes");
+  assert.equal(bag.position.length, 1, "pin does not clear morphAttributes");
+  assert.equal(wrong.geometry.morphTargetsRelative, true, "pin does not pin morphTargetsRelative");
+  assert.equal(wrong.morphTargetInfluences, influences, "pin does not touch Mesh morphTargetInfluences");
+  assert.equal(wrong.morphTargetDictionary, dictionary, "pin does not touch Mesh morphTargetDictionary");
+  assert.equal(wrong.animations, clips, "pin does not touch Object3D animations");
+  assert.equal(wrong.skeleton, skeleton, "pin does not touch skeleton");
+  assert.equal(wrong.skeleton.bones.length, 1, "pin does not delete bones");
+  assert.equal(wrong.bindMatrix, bindMatrix, "pin does not touch bindMatrix");
+  assert.equal(wrong.bindMatrix.elements[12], 1, "pin does not rewrite bindMatrix");
+
+  const already = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  const alreadyPosition = already.geometry.getAttribute("position");
+  pinColorOnlyUnlitBasicSkinAttributes(already);
+  assert.equal(already.geometry.getAttribute("position"), alreadyPosition, "already-absent skin attrs leave position");
+  assertQuestSafeUnlitSkinAttributes(already, "already-absent skin attributes");
+});
+
+test("pinColorOnlyUnlitBasicSkinAttributes / pinColorOnlyVisualSkinAttributes skip mapped, lit, interleaved, colliders, shared blocked", () => {
+  const colorOnly = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  attachLeftoverSkinAttributes(colorOnly.geometry);
+  colorOnly.geometry.drawRange.start = 2;
+  colorOnly.geometry.drawRange.count = 5;
+  const mappedMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mapped = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  const mappedSkin = attachLeftoverSkinAttributes(mapped.geometry);
+  const std = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshStandardMaterial());
+  const stdSkin = attachLeftoverSkinAttributes(std.geometry);
+  pinColorOnlyUnlitBasicSkinAttributes(colorOnly);
+  pinColorOnlyUnlitBasicSkinAttributes(mapped);
+  pinColorOnlyUnlitBasicSkinAttributes(std);
+  assertQuestSafeUnlitSkinAttributes(colorOnly, "color-only leftover skin attributes are stripped");
+  assert.equal(colorOnly.geometry.drawRange.start, 2, "per-mesh pin does not change drawRange.start");
+  assert.equal(mapped.geometry.getAttribute("skinIndex"), mappedSkin.skinIndex, "mapped MeshBasic keeps skinIndex");
+  assert.equal(mapped.geometry.getAttribute("skinWeight"), mappedSkin.skinWeight, "mapped MeshBasic keeps skinWeight");
+  assert.equal(std.geometry.getAttribute("skinIndex"), stdSkin.skinIndex, "MeshStandard keeps skinIndex");
+  assert.equal(std.geometry.getAttribute("skinWeight"), stdSkin.skinWeight, "MeshStandard keeps skinWeight");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedSkin = new THREE.Uint16BufferAttribute(8, 4);
+  const interleavedWeight = new THREE.Float32BufferAttribute(8, 4);
+  interleavedGeo.setAttribute("skinIndex", interleavedSkin);
+  interleavedGeo.setAttribute("skinWeight", interleavedWeight);
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  pinColorOnlyUnlitBasicSkinAttributes(interleaved);
+  assert.equal(interleaved.geometry.getAttribute("skinIndex"), interleavedSkin, "interleaved geometry stays authored");
+  assert.equal(interleaved.geometry.getAttribute("skinWeight"), interleavedWeight, "interleaved skinWeight stays authored");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  const mappedMeshSkin = attachLeftoverSkinAttributes(mappedMesh.geometry);
+  const colorMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  attachLeftoverSkinAttributes(colorMesh.geometry);
+  const colorRange = colorMesh.geometry.drawRange;
+  colorMesh.geometry.drawRange.start = 1;
+  colorMesh.geometry.drawRange.count = 4;
+  const colorGroups = colorMesh.geometry.groups;
+  colorMesh.geometry.addGroup(0, 3, 0);
+  const collider = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  const colliderSkin = attachLeftoverSkinAttributes(collider.geometry);
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  const sharedVisualSkin = attachLeftoverSkinAttributes(sharedVisual.geometry);
+  const sharedCollider = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedGeo = mappedMesh.geometry;
+  const sharedGeoVisual = new THREE.Mesh(sharedGeo, new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  body.add(mappedMesh, colorMesh, sharedVisual, sharedGeoVisual, interleaved);
+  root.add(body, collider, sharedCollider, std);
+  pinColorOnlyVisualSkinAttributes(root);
+  assertQuestSafeUnlitSkinAttributes(colorMesh, "entity helper color-only");
+  assert.equal(colorMesh.geometry.drawRange, colorRange, "entity helper does not replace drawRange");
+  assert.equal(colorRange.start, 1, "entity helper does not change drawRange.start");
+  assert.equal(colorMesh.geometry.groups, colorGroups, "entity helper does not replace groups");
+  assert.equal(colorGroups.length, 1, "entity helper does not clear groups");
+  assert.equal(mappedMesh.geometry.getAttribute("skinIndex"), mappedMeshSkin.skinIndex, "mapped MeshBasic stays authored via entity helper");
+  assert.equal(mappedMesh.geometry.getAttribute("skinWeight"), mappedMeshSkin.skinWeight, "mapped skinWeight stays authored via entity helper");
+  assert.equal(interleaved.geometry.getAttribute("skinIndex"), interleavedSkin, "interleaved stays authored via entity helper");
+  assert.equal(collider.geometry.getAttribute("skinIndex"), colliderSkin.skinIndex, "collider Mesh stays authored skinIndex");
+  assert.equal(collider.geometry.getAttribute("skinWeight"), colliderSkin.skinWeight, "collider Mesh stays authored skinWeight");
+  assert.equal(sharedVisual.geometry.getAttribute("skinIndex"), sharedVisualSkin.skinIndex, "shared collider material visual stays unstripped");
+  assert.equal(sharedGeoVisual.geometry, sharedGeo, "shared mapped geometry is not replaced");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("skinIndex"), mappedMeshSkin.skinIndex, "geometry shared with a mapped mesh stays authored");
+  assert.equal(std.geometry.getAttribute("skinIndex"), stdSkin.skinIndex, "MeshStandard stays authored via entity helper");
 });
