@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.93.0] — 2026-09-22
+
+### Changed
+
+- `crate-toolbox` **v0.91.0** L3 packaging/perf UPGRADE: after the v0.90 BufferAttribute `updateRange` pin, also clear leftover BufferAttribute `updateRanges` so `Array.isArray(updateRanges) && updateRanges.length === 0` on every non-interleaved BufferAttribute plus `geometry.index` when it is a BufferAttribute, on packed color-only unlit MeshBasic visual geometries (13 visual meshes; one geometry per visual; first-class measured updateRanges-empty). `pinColorOnlyUnlitBasicUpdateRanges` / `pinColorOnlyVisualUpdateRanges` run after `pinColorOnlyVisualUpdateRange` on procedural create and packaged ingest, including fail-soft (no lod groups) and the fastener. Mutate the existing array (`length = 0`); if missing or not an array, assign `[]`. Checked installed three@0.170.0: the BufferAttribute constructor assigns `this.updateRanges = []`. `WebGLAttributes.updateBuffer` full-uploads when `updateRanges.length === 0` and partial-uploads each `{ start, count }` otherwise. `addUpdateRange(start, count)` pushes a partial range; `clearUpdateRanges()` sets length; this pulse calls neither. Does not touch legacy `updateRange` (v0.90). Does not change `usage` (v0.43 StaticDrawUsage stays). Does not replace attributes or geometry. Does not delete `skinIndex` / `skinWeight`. Does not touch `drawRange` / `groups` / `morphAttributes` / `morphTargetsRelative`. Mapped / lit / interleaved / colliders stay authored. Does not pin `mesh.visible` or change `matrixAutoUpdate`. Clean procedural draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, updateRange-default 13, skinAttributes-absent 13, drawRange-default 13, groups-empty 13 stay vs v0.90. updateRanges-empty 13 is the new count (13 unique geometries). Quest 3 90 Hz / 72 fallback requested, not measured. Headset ms / FFR still unmeasured.
+
 ## [0.92.0] — 2026-09-22
 
 ### Changed

@@ -1273,6 +1273,47 @@
  * or invent meshes. Fail-soft
  * (no lod groups) still runs this
  * pin, including the fastener.
+ *
+ * v0.91: after that updateRange pin,
+ * `pinColorOnlyVisualUpdateRanges`
+ * clears leftover BufferAttribute
+ * `updateRanges` so
+ * `Array.isArray(updateRanges) &&
+ * updateRanges.length === 0` on
+ * every non-interleaved
+ * BufferAttribute plus
+ * `geometry.index` when it is a
+ * BufferAttribute, on packed
+ * color-only unlit MeshBasic visual
+ * geometries (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Checked installed three@0.170.0:**
+ * the BufferAttribute constructor
+ * assigns `this.updateRanges = []`.
+ * `WebGLAttributes.updateBuffer`
+ * full-uploads when
+ * `updateRanges.length === 0` and
+ * partial-uploads each
+ * `{ start, count }` otherwise.
+ * Mutate the existing array
+ * (`length = 0`). If missing or
+ * non-array, assign `[]`.
+ * Do **not** call `addUpdateRange()`.
+ * Do **not** call `clearUpdateRanges()`.
+ * Do **not** touch `updateRange`
+ * (v0.90). Do **not** change `usage`.
+ * Do **not** replace attributes or
+ * the geometry. Do **not** delete
+ * `skinIndex` / `skinWeight`.
+ * Do **not** touch `drawRange` /
+ * `groups` / `morphAttributes`.
+ * Mapped / lit / interleaved stay
+ * authored. Collider meshes stay
+ * untouched. Does not hex-dedupe
+ * or invent meshes. Fail-soft
+ * (no lod groups) still runs this
+ * pin, including the fastener.
  */
 
 import {
@@ -1300,6 +1341,7 @@ import {
   pinColorOnlyVisualDrawRange,
   pinColorOnlyVisualSkinAttributes,
   pinColorOnlyVisualUpdateRange,
+  pinColorOnlyVisualUpdateRanges,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1478,6 +1520,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualDrawRange(root);
   pinColorOnlyVisualSkinAttributes(root);
   pinColorOnlyVisualUpdateRange(root);
+  pinColorOnlyVisualUpdateRanges(root);
   return root;
 }
 

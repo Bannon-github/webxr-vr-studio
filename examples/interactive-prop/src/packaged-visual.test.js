@@ -4729,10 +4729,9 @@ test("packaged ingest pins leftover BufferAttribute updateRange after skin strip
   assert.equal(index.updateRange, indexRange, "ingest mutates index updateRange in place");
   assertQuestSafeUnlitUpdateRange(wrongMesh, "packaged color-only MeshBasic");
   assert.equal(addUpdateRangeCalls, 0, "ingest does not call addUpdateRange");
-  assert.equal(position.updateRanges, updateRanges, "ingest does not replace updateRanges");
-  assert.equal(updateRanges.length, 1, "ingest does not clear authored updateRanges");
-  assert.equal(updateRanges[0].start, 2, "ingest does not rewrite updateRanges start");
-  assert.equal(updateRanges[0].count, 4, "ingest does not rewrite updateRanges count");
+  assert.equal(position.updateRanges, updateRanges, "v0.91 clears updateRanges in place");
+  assert.equal(updateRanges.length, 0, "v0.91 clears leftover updateRanges on color-only MeshBasic");
+  assert.equal(updateRanges[0], undefined, "v0.91 drops the partial updateRanges entry");
   assert.equal(position.usage, THREE.DynamicDrawUsage, "ingest does not change a leftover DynamicDrawUsage");
   assertQuestSafeUnlitSkinAttributes(wrongMesh, "skin strip still holds");
   assert.equal(skin.skinBytes, 576, "BoxGeometry leftover skin attrs are 576 bytes before strip");
@@ -4807,4 +4806,177 @@ test("packaged ingest without lod groups still pins leftover BufferAttribute upd
   assert.equal(colliderGrab.geometry.getAttribute("position").updateRange, colliderRange, "fail-soft collider keeps its updateRange object");
   assert.equal(colliderRange.offset, 6, "fail-soft collider updateRange.offset stays authored");
   assert.equal(colliderRange.count, 3, "fail-soft collider updateRange.count stays authored");
+});
+
+function assertQuestSafeUnlitUpdateRanges(mesh, label = "color-only MeshBasic mesh") {
+  const geometry = mesh.geometry;
+  const names = Object.keys(geometry.attributes || {});
+  assert.ok(names.length > 0, `${label} has attributes`);
+  for (const name of names) {
+    const attribute = geometry.getAttribute(name);
+    if (!attribute || attribute.isInterleavedBufferAttribute || attribute.isBufferAttribute !== true) continue;
+    assert.ok(Array.isArray(attribute.updateRanges), `${label} ${name} updateRanges is an array`);
+    assert.equal(attribute.updateRanges.length, 0, `${label} ${name} updateRanges is empty`);
+  }
+  if (geometry.index?.isBufferAttribute && !geometry.index.isInterleavedBufferAttribute) {
+    assert.ok(Array.isArray(geometry.index.updateRanges), `${label} index updateRanges is an array`);
+    assert.equal(geometry.index.updateRanges.length, 0, `${label} index updateRanges is empty`);
+  }
+}
+
+function spoilBufferAttributeUpdateRanges(geometry, start = 1, count = 2) {
+  const touched = [];
+  const spoil = (attribute) => {
+    if (!attribute || attribute.isInterleavedBufferAttribute || attribute.isBufferAttribute !== true) return;
+    if (!Array.isArray(attribute.updateRanges)) attribute.updateRanges = [];
+    attribute.updateRanges.push({ start, count });
+    touched.push(attribute);
+  };
+  for (const name of Object.keys(geometry.attributes || {})) spoil(geometry.getAttribute(name));
+  if (geometry.index?.isBufferAttribute && !geometry.index.isInterleavedBufferAttribute) spoil(geometry.index);
+  return touched;
+}
+
+test("packaged ingest clears leftover BufferAttribute updateRanges after updateRange pin; mapped/lit/collider stay authored", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  spoilBufferAttributeUpdateRanges(mappedMesh.geometry, 3, 6);
+  const mappedRanges = mappedMesh.geometry.getAttribute("position").updateRanges;
+  const mappedIndexRanges = mappedMesh.geometry.index.updateRanges;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccUpdateRanges", wrong);
+  const geometryBefore = wrongMesh.geometry;
+  const position = wrongMesh.geometry.getAttribute("position");
+  const index = wrongMesh.geometry.index;
+  spoilBufferAttributeUpdateRanges(wrongMesh.geometry, 2, 4);
+  const positionRanges = position.updateRanges;
+  const indexRanges = index.updateRanges;
+  position.updateRange = { offset: 8, count: 3 };
+  index.updateRange = { offset: 8, count: 3 };
+  const positionRange = position.updateRange;
+  const indexRange = index.updateRange;
+  position.setUsage(THREE.DynamicDrawUsage);
+  const drawRange = wrongMesh.geometry.drawRange;
+  wrongMesh.geometry.drawRange.start = 2;
+  wrongMesh.geometry.drawRange.count = 9;
+  const bag = wrongMesh.geometry.groups;
+  wrongMesh.geometry.addGroup(0, 3, 0);
+  const morphBag = wrongMesh.geometry.morphAttributes;
+  morphBag.position = [];
+  wrongMesh.geometry.morphTargetsRelative = true;
+  let addUpdateRangeCalls = 0;
+  const realAdd = position.addUpdateRange.bind(position);
+  position.addUpdateRange = (...args) => {
+    addUpdateRangeCalls += 1;
+    return realAdd(...args);
+  };
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  spoilBufferAttributeUpdateRanges(colliderGrabBefore.geometry, 4, 8);
+  const colliderRanges = colliderGrabBefore.geometry.getAttribute("position").updateRanges;
+  fastener.geometry.morphAttributes.position = [];
+  const fastenerPosition = fastener.geometry.getAttribute("position");
+  spoilBufferAttributeUpdateRanges(fastener.geometry, 5, 1);
+  const fastenerRanges = fastenerPosition.updateRanges;
+  fastenerPosition.updateRange = { offset: 5, count: 1 };
+  const fastenerRange = fastenerPosition.updateRange;
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(wrongMesh.geometry, geometryBefore, "ingest does not replace the geometry");
+  assert.equal(wrongMesh.geometry.getAttribute("position"), position, "ingest does not replace position");
+  assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
+  assert.equal(position.updateRanges, positionRanges, "ingest clears position updateRanges in place");
+  assert.equal(index.updateRanges, indexRanges, "ingest clears index updateRanges in place");
+  assert.equal(positionRanges.length, 0, "color-only position updateRanges is empty");
+  assert.equal(indexRanges.length, 0, "color-only index updateRanges is empty");
+  assert.equal(addUpdateRangeCalls, 0, "ingest does not call addUpdateRange");
+  assert.equal(position.updateRange, positionRange, "ingest does not replace updateRange");
+  assertQuestSafeUnlitUpdateRange(wrongMesh, "updateRange pin still holds");
+  assert.equal(position.usage, THREE.DynamicDrawUsage, "ingest does not change a leftover DynamicDrawUsage");
+  assert.equal(wrongMesh.geometry.drawRange, drawRange, "updateRanges pin does not replace drawRange");
+  assertQuestSafeUnlitDrawRange(wrongMesh, "drawRange pin still holds");
+  assert.equal(wrongMesh.geometry.groups, bag, "updateRanges pin does not replace groups");
+  assert.equal(bag.length, 0, "earlier groups pin still clears leftover groups");
+  assert.equal(wrongMesh.geometry.morphAttributes, morphBag, "updateRanges pin does not replace morphAttributes");
+  assert.equal(Object.keys(morphBag).length, 0, "earlier morphAttributes pin still clears leftover keys");
+  assert.equal(wrongMesh.geometry.morphTargetsRelative, false, "earlier morphAttributes pin still pins morphTargetsRelative");
+  assert.equal(fastener.geometry.getAttribute("position"), fastenerPosition, "morph-blocked fastener position stays");
+  assert.equal(fastenerPosition.updateRanges, fastenerRanges, "fastener updateRanges array is kept");
+  assert.equal(fastenerRanges.length, 0, "fastener leftover updateRanges is cleared");
+  assert.equal(fastenerPosition.updateRange, fastenerRange, "fastener updateRange object is kept");
+  assertQuestSafeUnlitUpdateRange(fastener, "fastener updateRange still pinned");
+  assertQuestSafeUnlitUpdateRanges(fastener, "fastener");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+  assert.equal(mappedMesh.geometry.getAttribute("position").updateRanges, mappedRanges, "mapped MeshBasic keeps its updateRanges array");
+  assert.equal(mappedRanges.length, 1, "mapped MeshBasic keeps authored updateRanges");
+  assert.equal(mappedRanges[0].start, 3, "mapped MeshBasic keeps authored updateRanges.start");
+  assert.equal(mappedRanges[0].count, 6, "mapped MeshBasic keeps authored updateRanges.count");
+  assert.equal(mappedMesh.geometry.index.updateRanges, mappedIndexRanges, "mapped index updateRanges array stays");
+  assert.equal(mappedIndexRanges.length, 1, "mapped index updateRanges stays authored");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.geometry.getAttribute("position").updateRanges, colliderRanges, "collider Mesh keeps its updateRanges array");
+  assert.equal(colliderRanges.length, 1, "collider updateRanges stays authored");
+  assert.equal(colliderRanges[0].start, 4, "collider updateRanges.start stays authored");
+  assert.equal(colliderRanges[0].count, 8, "collider updateRanges.count stays authored");
+});
+
+test("packaged ingest without lod groups still clears leftover BufferAttribute updateRanges", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  const bodyMesh = visualMeshes(body)[0];
+  const bodyPosition = bodyMesh.geometry.getAttribute("position");
+  const bodyIndex = bodyMesh.geometry.index;
+  spoilBufferAttributeUpdateRanges(bodyMesh.geometry, 2, 4);
+  const bodyRanges = bodyPosition.updateRanges;
+  const bodyIndexRanges = bodyIndex.updateRanges;
+  bodyPosition.updateRange = { offset: 2, count: 4 };
+  const bodyRange = bodyPosition.updateRange;
+  bodyMesh.geometry.drawRange.start = 2;
+  bodyMesh.geometry.drawRange.count = 4;
+  bodyMesh.geometry.addGroup(0, 3, 0);
+  spoilBufferAttributeUpdateRanges(visualMeshes(lid)[0].geometry, 1, 2);
+  visualMeshes(latch)[0].geometry.getAttribute("position").updateRanges = null;
+  visualMeshes(latch)[0].geometry.index.updateRanges = null;
+  delete visualMeshes(tool)[0].geometry.getAttribute("position").updateRanges;
+  delete visualMeshes(tool)[0].geometry.index.updateRanges;
+  fastener.geometry.morphAttributes.position = [];
+  const fastenerPosition = fastener.geometry.getAttribute("position");
+  spoilBufferAttributeUpdateRanges(fastener.geometry, 5, 1);
+  const fastenerRanges = fastenerPosition.updateRanges;
+  const colliderGrab = root.getObjectByName("collider_grab");
+  spoilBufferAttributeUpdateRanges(colliderGrab.geometry, 6, 3);
+  const colliderRanges = colliderGrab.geometry.getAttribute("position").updateRanges;
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(bodyMesh.geometry.getAttribute("position"), bodyPosition, "fail-soft body position stays");
+  assert.equal(bodyMesh.geometry.index, bodyIndex, "fail-soft body index stays");
+  assert.equal(bodyPosition.updateRanges, bodyRanges, "fail-soft body updateRanges array is cleared in place");
+  assert.equal(bodyIndex.updateRanges, bodyIndexRanges, "fail-soft body index updateRanges array is cleared in place");
+  assert.equal(bodyRanges.length, 0, "fail-soft body updateRanges is empty");
+  assert.equal(bodyIndexRanges.length, 0, "fail-soft body index updateRanges is empty");
+  assert.equal(bodyPosition.updateRange, bodyRange, "fail-soft updateRanges pin does not replace updateRange");
+  assertQuestSafeUnlitUpdateRange(bodyMesh, "fail-soft body updateRange still pinned");
+  assertQuestSafeUnlitUpdateRanges(bodyMesh, "fail-soft body");
+  assertQuestSafeUnlitDrawRange(bodyMesh, "fail-soft body drawRange still pinned");
+  assert.equal(bodyMesh.geometry.groups.length, 0, "fail-soft groups pin still clears groups");
+  assertQuestSafeUnlitUpdateRanges(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitUpdateRanges(visualMeshes(latch)[0], "fail-soft latch");
+  assert.equal(Array.isArray(visualMeshes(latch)[0].geometry.getAttribute("position").updateRanges), true, "fail-soft null updateRanges becomes an array");
+  assertQuestSafeUnlitUpdateRanges(visualMeshes(tool)[0], "fail-soft tool");
+  assert.equal(fastener.geometry.getAttribute("position"), fastenerPosition, "fail-soft fastener position stays");
+  assert.equal(fastenerPosition.updateRanges, fastenerRanges, "fail-soft fastener updateRanges array is kept");
+  assert.equal(fastenerRanges.length, 0, "fail-soft fastener updateRanges is cleared");
+  assertQuestSafeUnlitUpdateRanges(fastener, "fail-soft fastener");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
+  assert.equal(colliderGrab.geometry.getAttribute("position").updateRanges, colliderRanges, "fail-soft collider keeps its updateRanges array");
+  assert.equal(colliderRanges.length, 1, "fail-soft collider updateRanges stays authored");
+  assert.equal(colliderRanges[0].start, 6, "fail-soft collider updateRanges.start stays authored");
+  assert.equal(colliderRanges[0].count, 3, "fail-soft collider updateRanges.count stays authored");
 });

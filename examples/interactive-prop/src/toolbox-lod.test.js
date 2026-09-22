@@ -57,6 +57,7 @@ const {
   pinColorOnlyUnlitBasicDrawRange,
   pinColorOnlyUnlitBasicSkinAttributes,
   pinColorOnlyUnlitBasicUpdateRange,
+  pinColorOnlyUnlitBasicUpdateRanges,
   pinColorOnlyUnlitBasicCustomShadowMaterials,
   pinColorOnlyUnlitBasicCustomProgramCacheKey,
   pinColorOnlyUnlitBasicDefines,
@@ -81,6 +82,7 @@ const {
   pinColorOnlyVisualDrawRange,
   pinColorOnlyVisualSkinAttributes,
   pinColorOnlyVisualUpdateRange,
+  pinColorOnlyVisualUpdateRanges,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
@@ -11619,4 +11621,360 @@ test("pinColorOnlyUnlitBasicUpdateRange / pinColorOnlyVisualUpdateRange skip map
   assert.equal(sharedGeoVisual.geometry.getAttribute("position").updateRange.offset, 3, "geometry shared with a mapped mesh stays authored");
   assert.equal(std.geometry.getAttribute("position").updateRange.offset, 3, "MeshStandard stays authored via entity helper");
   assert.equal(std.geometry.getAttribute("position").updateRange.count, 6, "MeshStandard count stays authored via entity helper");
+});
+
+function bufferAttributeUpdateRangesIsEmpty(attribute) {
+  if (!attribute || attribute.isInterleavedBufferAttribute) return true;
+  if (attribute.isBufferAttribute !== true) return true;
+  return Array.isArray(attribute.updateRanges) && attribute.updateRanges.length === 0;
+}
+
+function assertQuestSafeUnlitUpdateRanges(mesh, label = "color-only MeshBasic mesh") {
+  const geometry = mesh.geometry;
+  assert.ok(geometry, `${label} has geometry`);
+  const names = Object.keys(geometry.attributes || {});
+  assert.ok(names.length > 0, `${label} has attributes`);
+  for (const name of names) {
+    const attribute = geometry.getAttribute(name);
+    if (!attribute || attribute.isInterleavedBufferAttribute || attribute.isBufferAttribute !== true) continue;
+    assert.ok(Array.isArray(attribute.updateRanges), `${label} ${name} updateRanges is an array`);
+    assert.equal(attribute.updateRanges.length, 0, `${label} ${name} updateRanges is empty`);
+  }
+  if (geometry.index && geometry.index.isBufferAttribute === true && !geometry.index.isInterleavedBufferAttribute) {
+    assert.ok(Array.isArray(geometry.index.updateRanges), `${label} index updateRanges is an array`);
+    assert.equal(geometry.index.updateRanges.length, 0, `${label} index updateRanges is empty`);
+  }
+}
+
+function geometryUpdateRangesIsEmpty(geometry) {
+  if (!geometry) return false;
+  for (const name of Object.keys(geometry.attributes || {})) {
+    if (!bufferAttributeUpdateRangesIsEmpty(geometry.getAttribute(name))) return false;
+  }
+  if (geometry.index && !bufferAttributeUpdateRangesIsEmpty(geometry.index)) return false;
+  return true;
+}
+
+function countVisualUpdateRanges(crate) {
+  let empty = 0;
+  let leftover = 0;
+  const geos = new Set();
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.geometry) geos.add(mesh.geometry);
+    if (geometryUpdateRangesIsEmpty(mesh.geometry)) empty += 1;
+    else leftover += 1;
+  }
+  return { empty, leftover, total: empty + leftover, uniqueGeometries: geos.size };
+}
+
+/** DCC leftover: a non-empty partial updateRanges entry on every BufferAttribute and the index. */
+function spoilBufferAttributeUpdateRanges(geometry, start = 1, count = 2) {
+  const touched = [];
+  const spoil = (attribute) => {
+    if (!attribute || attribute.isInterleavedBufferAttribute || attribute.isBufferAttribute !== true) return;
+    if (!Array.isArray(attribute.updateRanges)) attribute.updateRanges = [];
+    attribute.updateRanges.push({ start, count });
+    touched.push(attribute);
+  };
+  for (const name of Object.keys(geometry.attributes || {})) spoil(geometry.getAttribute(name));
+  if (geometry.index?.isBufferAttribute && !geometry.index.isInterleavedBufferAttribute) spoil(geometry.index);
+  return touched;
+}
+
+test("v0.91 clears leftover BufferAttribute updateRanges on packed color-only MeshBasic visuals; envelope stays v0.90", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v0\.91 clears leftover BufferAttribute updateRanges/);
+  assert.match(crate.userData.l2.note, /13 updateRanges-empty/);
+  assert.match(crate.userData.l2.note, /v0\.90 pins leftover BufferAttribute updateRange/);
+  assert.match(crate.userData.l2.note, /13 updateRange-default/);
+  assert.match(crate.userData.l2.note, /13 skinAttributes-absent/);
+  assert.match(crate.userData.l2.note, /13 drawRange-default/);
+  assert.match(crate.userData.l2.note, /13 groups-empty/);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitUpdateRanges(mesh);
+    assertQuestSafeUnlitUpdateRange(mesh);
+    assertQuestSafeUnlitSkinAttributes(mesh);
+    assertQuestSafeUnlitDrawRange(mesh);
+    assertQuestSafeUnlitGroups(mesh);
+    assertQuestSafeUnlitMorphAttributes(mesh);
+    const position = mesh.geometry.getAttribute("position");
+    assert.equal(position.usage, THREE.StaticDrawUsage, "v0.43 StaticDrawUsage stays");
+  }
+  const rangeCounts = countVisualUpdateRanges(crate);
+  assert.equal(rangeCounts.uniqueGeometries, 13, "one geometry per visual; geometries are not shared");
+  assert.equal(rangeCounts.empty, 13, "updateRanges-empty count is 13");
+  assert.equal(rangeCounts.leftover, 0);
+  const updateRangeCounts = countVisualUpdateRange(crate);
+  assert.equal(updateRangeCounts.defaults, 13, "updateRange-default count stays 13");
+  const skinCounts = countVisualSkinAttributes(crate);
+  assert.equal(skinCounts.absent, 13, "skinAttributes-absent count stays 13");
+  const drawCounts = countVisualDrawRange(crate);
+  assert.equal(drawCounts.defaults, 13, "drawRange-default count stays 13");
+  const groupCounts = countVisualGroups(crate);
+  assert.equal(groupCounts.empty, 13, "groups-empty count stays 13");
+  const morphAttrCounts = countVisualMorphAttributes(crate);
+  assert.equal(morphAttrCounts.empty, 13, "morphAttributes-empty count stays 13");
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assert.equal(fastener.parent.name, "toolbox", "fastener stays outside the LOD merge skip set");
+  assertQuestSafeUnlitUpdateRanges(fastener, "fastenerMesh");
+  assertQuestSafeUnlitUpdateRange(fastener, "fastenerMesh updateRange still default");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assertQuestSafeUnlitUpdateRanges(bodyHero, "body LOD leaf");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitUpdateRanges(fastener, "fastener after L5 drive");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+});
+
+test("pinColorOnlyUnlitBasicUpdateRanges clears leftover updateRanges in place and leaves updateRange, usage, skin, drawRange, groups", () => {
+  const fresh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const freshRanges = fresh.geometry.getAttribute("position").updateRanges;
+  pinColorOnlyUnlitBasicUpdateRanges(fresh);
+  assertQuestSafeUnlitUpdateRanges(fresh, "already-empty updateRanges");
+  assert.equal(fresh.geometry.getAttribute("position").updateRanges, freshRanges, "already-empty updateRanges array is kept");
+  assert.equal(fresh.geometry.getAttribute("position").updateRange, undefined, "clear does not assign updateRange");
+
+  const wrong = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const position = wrong.geometry.getAttribute("position");
+  const index = wrong.geometry.index;
+  const positionArray = position.array;
+  const indexArray = index.array;
+  position.updateRange = { offset: 8, count: 3 };
+  index.updateRange = { offset: 8, count: 3 };
+  const positionRange = position.updateRange;
+  const indexRange = index.updateRange;
+  position.addUpdateRange(1, 2);
+  index.addUpdateRange(4, 1);
+  const positionRanges = position.updateRanges;
+  const indexRanges = index.updateRanges;
+  position.setUsage(THREE.DynamicDrawUsage);
+  const skin = attachLeftoverSkinAttributes(wrong.geometry);
+  skin.skinIndex.addUpdateRange(2, 1);
+  const skinRanges = skin.skinIndex.updateRanges;
+  const drawRange = wrong.geometry.drawRange;
+  wrong.geometry.drawRange.start = 3;
+  wrong.geometry.drawRange.count = 12;
+  const groups = wrong.geometry.groups;
+  wrong.geometry.addGroup(0, 3, 0);
+  const bag = wrong.geometry.morphAttributes;
+  bag.position = [new THREE.BufferAttribute(new Float32Array(3), 3)];
+  wrong.geometry.morphTargetsRelative = true;
+  const influences = [0.4];
+  const dictionary = { smile: 0 };
+  wrong.morphTargetInfluences = influences;
+  wrong.morphTargetDictionary = dictionary;
+  const clips = [new THREE.AnimationClip("dcc-leftover", 1, [])];
+  wrong.animations = clips;
+  const geometryBefore = wrong.geometry;
+  let addUpdateRangeCalls = 0;
+  const realAdd = position.addUpdateRange.bind(position);
+  position.addUpdateRange = (...args) => {
+    addUpdateRangeCalls += 1;
+    return realAdd(...args);
+  };
+  const returned = pinColorOnlyUnlitBasicUpdateRanges(wrong);
+  assert.equal(returned, wrong, "updateRanges pin does not replace the mesh");
+  assert.equal(wrong.geometry, geometryBefore, "pin does not replace the geometry");
+  assert.equal(wrong.geometry.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(wrong.geometry.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not replace the position array");
+  assert.equal(index.array, indexArray, "pin does not replace the index array");
+  assert.equal(position.updateRanges, positionRanges, "pin clears position updateRanges in place");
+  assert.equal(index.updateRanges, indexRanges, "pin clears index updateRanges in place");
+  assert.equal(positionRanges.length, 0, "leftover position updateRanges is empty");
+  assert.equal(indexRanges.length, 0, "leftover index updateRanges is empty");
+  assert.equal(addUpdateRangeCalls, 0, "pin does not call addUpdateRange");
+  assert.equal(position.updateRange, positionRange, "pin does not replace updateRange");
+  assert.equal(positionRange.offset, 8, "pin does not touch updateRange.offset");
+  assert.equal(positionRange.count, 3, "pin does not touch updateRange.count");
+  assert.equal(indexRange.offset, 8, "pin does not touch index updateRange.offset");
+  assert.equal(indexRange.count, 3, "pin does not touch index updateRange.count");
+  assert.equal(position.usage, THREE.DynamicDrawUsage, "pin does not change usage");
+  assert.equal(wrong.geometry.getAttribute("skinIndex"), skin.skinIndex, "pin does not delete or replace skinIndex");
+  assert.equal(wrong.geometry.getAttribute("skinWeight"), skin.skinWeight, "pin does not delete or replace skinWeight");
+  assert.equal(skin.skinIndex.updateRanges, skinRanges, "skinIndex updateRanges array is kept");
+  assert.equal(skinRanges.length, 0, "skinIndex is a BufferAttribute so its updateRanges is cleared");
+  assert.equal(wrong.geometry.drawRange, drawRange, "pin does not replace drawRange");
+  assert.equal(drawRange.start, 3, "pin does not change drawRange.start");
+  assert.equal(drawRange.count, 12, "pin does not change drawRange.count");
+  assert.equal(wrong.geometry.groups, groups, "pin does not replace groups");
+  assert.equal(groups.length, 1, "pin does not clear groups");
+  assert.equal(wrong.geometry.morphAttributes, bag, "pin does not replace morphAttributes");
+  assert.equal(bag.position.length, 1, "pin does not clear morphAttributes");
+  assert.equal(wrong.geometry.morphTargetsRelative, true, "pin does not pin morphTargetsRelative");
+  assert.equal(wrong.morphTargetInfluences, influences, "pin does not touch Mesh morphTargetInfluences");
+  assert.equal(wrong.morphTargetDictionary, dictionary, "pin does not touch Mesh morphTargetDictionary");
+  assert.equal(wrong.animations, clips, "pin does not touch Object3D animations");
+
+  const missing = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  missing.geometry.getAttribute("position").updateRanges = null;
+  missing.geometry.index.updateRanges = null;
+  pinColorOnlyUnlitBasicUpdateRanges(missing);
+  assertQuestSafeUnlitUpdateRanges(missing, "null updateRanges is replaced");
+
+  const absent = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  delete absent.geometry.getAttribute("position").updateRanges;
+  delete absent.geometry.index.updateRanges;
+  pinColorOnlyUnlitBasicUpdateRanges(absent);
+  assertQuestSafeUnlitUpdateRanges(absent, "undefined updateRanges is replaced");
+
+  const numeric = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  numeric.geometry.getAttribute("position").updateRanges = 4;
+  numeric.geometry.index.updateRanges = 9;
+  pinColorOnlyUnlitBasicUpdateRanges(numeric);
+  assertQuestSafeUnlitUpdateRanges(numeric, "non-array updateRanges is replaced");
+
+  const arrayMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    [new THREE.MeshBasicMaterial({ color: 0x633318 }), new THREE.MeshBasicMaterial({ color: 0xbe7e31 })]
+  );
+  const arrayPosition = arrayMesh.geometry.getAttribute("position");
+  arrayPosition.addUpdateRange(2, 2);
+  pinColorOnlyUnlitBasicUpdateRanges(arrayMesh);
+  assert.equal(arrayPosition.updateRanges.length, 1, "material array skips the per-mesh pin");
+  assert.equal(arrayPosition.updateRanges[0].start, 2, "material array leaves authored updateRanges.start");
+  assert.equal(arrayPosition.updateRanges[0].count, 2, "material array leaves authored updateRanges.count");
+});
+
+test("pinColorOnlyUnlitBasicUpdateRanges / pinColorOnlyVisualUpdateRanges skip mapped, lit, interleaved, colliders, shared blocked", () => {
+  const colorOnly = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  spoilBufferAttributeUpdateRanges(colorOnly.geometry, 4, 2);
+  colorOnly.geometry.getAttribute("position").updateRange = { offset: 9, count: 1 };
+  const colorRange = colorOnly.geometry.getAttribute("position").updateRange;
+  pinColorOnlyUnlitBasicUpdateRanges(colorOnly);
+  assertQuestSafeUnlitUpdateRanges(colorOnly, "color-only leftover updateRanges is cleared");
+  assert.equal(colorOnly.geometry.getAttribute("position").updateRange, colorRange, "per-mesh pin does not replace updateRange");
+  assert.equal(colorRange.offset, 9, "per-mesh pin does not change updateRange.offset");
+  assert.equal(colorRange.count, 1, "per-mesh pin does not change updateRange.count");
+
+  const mappedMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mapped = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  spoilBufferAttributeUpdateRanges(mapped.geometry, 3, 6);
+  const mappedRanges = mapped.geometry.getAttribute("position").updateRanges;
+  const std = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshStandardMaterial());
+  spoilBufferAttributeUpdateRanges(std.geometry, 3, 6);
+  const stdRanges = std.geometry.getAttribute("position").updateRanges;
+  pinColorOnlyUnlitBasicUpdateRanges(mapped);
+  pinColorOnlyUnlitBasicUpdateRanges(std);
+  assert.equal(mapped.geometry.getAttribute("position").updateRanges, mappedRanges, "mapped MeshBasic keeps its updateRanges array");
+  assert.equal(mappedRanges.length, 1, "mapped MeshBasic keeps authored updateRanges");
+  assert.equal(mappedRanges[0].start, 3, "mapped MeshBasic keeps authored updateRanges.start");
+  assert.equal(mappedRanges[0].count, 6, "mapped MeshBasic keeps authored updateRanges.count");
+  assert.equal(std.geometry.getAttribute("position").updateRanges, stdRanges, "MeshStandard keeps its updateRanges array");
+  assert.equal(stdRanges.length, 1, "MeshStandard keeps authored updateRanges");
+  assert.equal(stdRanges[0].start, 3);
+  assert.equal(stdRanges[0].count, 6);
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  const interleavedPosition = new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0);
+  interleavedPosition.updateRanges = [{ start: 1, count: 1 }];
+  interleavedGeo.setAttribute("position", interleavedPosition);
+  const extra = new THREE.BufferAttribute(new Float32Array(6), 3);
+  extra.addUpdateRange(7, 1);
+  interleavedGeo.setAttribute("uv", extra);
+  const interleavedIndex = new THREE.BufferAttribute(new Uint16Array([0, 1]), 1);
+  interleavedIndex.addUpdateRange(2, 1);
+  interleavedGeo.setIndex(interleavedIndex);
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  pinColorOnlyUnlitBasicUpdateRanges(interleaved);
+  assert.equal(interleavedPosition.updateRanges.length, 1, "interleaved attribute stays authored");
+  assert.equal(interleavedPosition.updateRanges[0].start, 1, "interleaved attribute start stays authored");
+  assert.equal(extra.updateRanges.length, 1, "BufferAttribute on an interleaved geometry stays authored");
+  assert.equal(extra.updateRanges[0].start, 7, "interleaved-geometry BufferAttribute start stays authored");
+  assert.equal(interleavedIndex.updateRanges.length, 1, "index on an interleaved geometry stays authored");
+  assert.equal(interleavedIndex.updateRanges[0].start, 2, "interleaved index start stays authored");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  spoilBufferAttributeUpdateRanges(mappedMesh.geometry, 3, 6);
+  const mappedMeshRanges = mappedMesh.geometry.getAttribute("position").updateRanges;
+  const colorMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  spoilBufferAttributeUpdateRanges(colorMesh.geometry, 9, 1);
+  const colorUpdateRange = colorMesh.geometry.getAttribute("position").updateRange;
+  colorMesh.geometry.getAttribute("position").updateRange = { offset: 2, count: 2 };
+  const authoredUpdateRange = colorMesh.geometry.getAttribute("position").updateRange;
+  const skin = attachLeftoverSkinAttributes(colorMesh.geometry);
+  skin.skinIndex.addUpdateRange(1, 1);
+  const collider = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  spoilBufferAttributeUpdateRanges(collider.geometry, 5, 9);
+  const colliderRanges = collider.geometry.getAttribute("position").updateRanges;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  spoilBufferAttributeUpdateRanges(sharedVisual.geometry, 2, 3);
+  const sharedVisualRanges = sharedVisual.geometry.getAttribute("position").updateRanges;
+  const sharedCollider = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedGeo = mappedMesh.geometry;
+  const sharedGeoVisual = new THREE.Mesh(sharedGeo, new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  body.add(mappedMesh, colorMesh, sharedVisual, sharedGeoVisual, interleaved);
+  root.add(body, collider, sharedCollider, std);
+  pinColorOnlyVisualUpdateRanges(root);
+  assertQuestSafeUnlitUpdateRanges(colorMesh, "entity helper color-only");
+  assert.equal(colorMesh.geometry.getAttribute("position").updateRange, authoredUpdateRange, "entity helper does not replace updateRange");
+  assert.equal(authoredUpdateRange.offset, 2, "entity helper does not change updateRange.offset");
+  assert.equal(authoredUpdateRange.count, 2, "entity helper does not change updateRange.count");
+  assert.equal(colorUpdateRange === authoredUpdateRange || authoredUpdateRange.offset === 2, true);
+  assert.equal(colorMesh.geometry.getAttribute("skinIndex"), skin.skinIndex, "entity helper does not delete skinIndex");
+  assert.equal(skin.skinIndex.updateRanges.length, 0, "entity helper clears skinIndex updateRanges because it is a BufferAttribute");
+  assert.equal(mappedMesh.geometry.getAttribute("position").updateRanges, mappedMeshRanges, "mapped MeshBasic stays authored via entity helper");
+  assert.equal(mappedMeshRanges.length, 1, "mapped updateRanges length stays authored via entity helper");
+  assert.equal(mappedMeshRanges[0].start, 3, "mapped start stays authored via entity helper");
+  assert.equal(extra.updateRanges[0].start, 7, "interleaved stays authored via entity helper");
+  assert.equal(collider.geometry.getAttribute("position").updateRanges, colliderRanges, "collider Mesh stays authored");
+  assert.equal(colliderRanges.length, 1, "collider updateRanges length stays authored");
+  assert.equal(colliderRanges[0].start, 5, "collider updateRanges.start stays authored");
+  assert.equal(sharedVisual.geometry.getAttribute("position").updateRanges, sharedVisualRanges, "shared collider material visual stays unpinned");
+  assert.equal(sharedVisualRanges.length, 1, "shared collider material visual updateRanges stays authored");
+  assert.equal(sharedGeoVisual.geometry, sharedGeo, "shared mapped geometry is not replaced");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("position").updateRanges[0].start, 3, "geometry shared with a mapped mesh stays authored");
+  assert.equal(std.geometry.getAttribute("position").updateRanges[0].start, 3, "MeshStandard stays authored via entity helper");
+  assert.equal(std.geometry.getAttribute("position").updateRanges[0].count, 6, "MeshStandard count stays authored via entity helper");
 });
