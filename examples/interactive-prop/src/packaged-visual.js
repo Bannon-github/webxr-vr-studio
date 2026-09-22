@@ -1229,6 +1229,50 @@
  * or invent meshes. Fail-soft
  * (no lod groups) still runs this
  * pin.
+ *
+ * v0.90: after that skin strip,
+ * `pinColorOnlyVisualUpdateRange`
+ * pins leftover BufferAttribute
+ * `updateRange` so
+ * `offset === 0` && `count === -1`
+ * on every non-interleaved
+ * BufferAttribute plus
+ * `geometry.index` when it is a
+ * BufferAttribute, on packed
+ * color-only unlit MeshBasic visual
+ * geometries (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Checked installed three@0.170.0:**
+ * the BufferAttribute constructor
+ * assigns `this.updateRanges = []`
+ * and does **not** assign
+ * `updateRange`. `WebGLAttributes.updateBuffer`
+ * full-uploads when
+ * `updateRanges.length === 0` and
+ * partial-uploads each
+ * `{ start, count }` otherwise.
+ * `addUpdateRange(start, count)`
+ * pushes a partial range. Mutate
+ * the existing `updateRange` object
+ * (`offset = 0`, `count = -1`).
+ * If missing or non-object, assign
+ * `{ offset: 0, count: -1 }`.
+ * Do **not** call `addUpdateRange()`.
+ * Do **not** rewrite `updateRanges`.
+ * Do **not** change `usage`.
+ * Do **not** replace attributes or
+ * the geometry. Do **not** delete
+ * `skinIndex` / `skinWeight`
+ * (v0.89). Do **not** touch
+ * `drawRange` (v0.88). Do **not**
+ * touch `groups` (v0.87).
+ * Mapped / lit / interleaved stay
+ * authored. Collider meshes stay
+ * untouched. Does not hex-dedupe
+ * or invent meshes. Fail-soft
+ * (no lod groups) still runs this
+ * pin, including the fastener.
  */
 
 import {
@@ -1255,6 +1299,7 @@ import {
   pinColorOnlyVisualGroups,
   pinColorOnlyVisualDrawRange,
   pinColorOnlyVisualSkinAttributes,
+  pinColorOnlyVisualUpdateRange,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1432,6 +1477,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualGroups(root);
   pinColorOnlyVisualDrawRange(root);
   pinColorOnlyVisualSkinAttributes(root);
+  pinColorOnlyVisualUpdateRange(root);
   return root;
 }
 
