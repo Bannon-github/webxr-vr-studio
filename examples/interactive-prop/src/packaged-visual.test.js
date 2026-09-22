@@ -330,6 +330,14 @@ function assertQuestSafeUnlitGroups(mesh, label = "color-only MeshBasic mesh") {
   assert.equal(geometry.groups.length, 0, `${label} groups length is 0`);
 }
 
+function assertQuestSafeUnlitDrawRange(mesh, label = "color-only MeshBasic mesh") {
+  const drawRange = mesh.geometry.drawRange;
+  assert.ok(drawRange && typeof drawRange === "object", `${label} drawRange is an object`);
+  assert.notEqual(drawRange, null, `${label} drawRange is not null`);
+  assert.equal(drawRange.start, 0, `${label} drawRange.start is 0`);
+  assert.equal(drawRange.count, Infinity, `${label} drawRange.count is Infinity`);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -4330,9 +4338,9 @@ test("packaged ingest clears leftover BufferGeometry groups; mapped/lit stay aut
     assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
   }
   assert.equal(wrongMesh.geometry.groups, bag, "ingest mutates groups in place");
-  assert.equal(wrongMesh.geometry.drawRange, drawRange, "groups pin keeps the drawRange object");
-  assert.equal(drawRange.start, 2, "groups pin does not change drawRange.start");
-  assert.equal(drawRange.count, 9, "groups pin does not change drawRange.count");
+  assert.equal(wrongMesh.geometry.drawRange, drawRange, "v0.88 drawRange pin after groups keeps the drawRange object");
+  assert.equal(drawRange.start, 0, "v0.88 drawRange pin after groups restores start 0");
+  assert.equal(drawRange.count, Infinity, "v0.88 drawRange pin after groups restores count Infinity");
   assert.equal(wrongMesh.geometry.morphAttributes, morphBag, "groups pin does not replace morphAttributes");
   assert.equal(Object.keys(morphBag).length, 0, "earlier morphAttributes pin still clears leftover keys");
   assert.equal(wrongMesh.geometry.morphTargetsRelative, false, "earlier morphAttributes pin still pins morphTargetsRelative");
@@ -4365,6 +4373,7 @@ test("packaged ingest clears leftover BufferGeometry groups; mapped/lit stay aut
 test("packaged ingest without lod groups still clears leftover BufferGeometry groups", () => {
   const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
   const bodyGroups = visualMeshes(body)[0].geometry.groups;
+  const bodyDrawRange = visualMeshes(body)[0].geometry.drawRange;
   visualMeshes(body)[0].geometry.addGroup(0, 3, 0);
   visualMeshes(body)[0].geometry.drawRange.start = 1;
   visualMeshes(lid)[0].geometry.groups = null;
@@ -4377,7 +4386,9 @@ test("packaged ingest without lod groups still clears leftover BufferGeometry gr
   ingestPackagedRoot(root, sidecar);
   assert.equal(visualMeshes(body)[0].geometry.groups, bodyGroups, "fail-soft body groups array is mutated in place");
   assertQuestSafeUnlitGroups(visualMeshes(body)[0], "fail-soft body");
-  assert.equal(visualMeshes(body)[0].geometry.drawRange.start, 1, "fail-soft groups pin does not change drawRange.start");
+  assert.equal(visualMeshes(body)[0].geometry.drawRange, bodyDrawRange, "fail-soft v0.88 drawRange pin keeps the drawRange object");
+  assert.equal(bodyDrawRange.start, 0, "fail-soft v0.88 drawRange pin after groups restores start 0");
+  assert.equal(bodyDrawRange.count, Infinity, "fail-soft v0.88 drawRange pin after groups restores count Infinity");
   assertQuestSafeUnlitGroups(visualMeshes(lid)[0], "fail-soft lid");
   assertQuestSafeUnlitGroups(visualMeshes(latch)[0], "fail-soft latch");
   assertQuestSafeUnlitGroups(visualMeshes(tool)[0], "fail-soft tool");
@@ -4386,4 +4397,137 @@ test("packaged ingest without lod groups still clears leftover BufferGeometry gr
   assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
   assert.equal(colliderGrab.geometry.groups.length, colliderGroupsBefore + 1, "fail-soft collider stays authored groups");
   assert.equal(colliderGrab.geometry.groups.at(-1).materialIndex, 1, "fail-soft collider group materialIndex stays authored");
+});
+
+test("packaged ingest pins leftover BufferGeometry drawRange after groups; mapped/lit stay authored", () => {
+  const fresh = new THREE.BufferGeometry();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(fresh.drawRange.start, 0, "r170 BufferGeometry drawRange.start is 0");
+  assert.equal(fresh.drawRange.count, Infinity, "r170 BufferGeometry drawRange.count is Infinity");
+  const replaced = fresh.drawRange;
+  fresh.setDrawRange(1, 2);
+  assert.equal(fresh.drawRange, replaced, "r170 setDrawRange mutates the existing object");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  mappedMesh.geometry.drawRange.start = 3;
+  mappedMesh.geometry.drawRange.count = 6;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccDrawRange", wrong);
+  const drawRange = wrongMesh.geometry.drawRange;
+  wrongMesh.geometry.drawRange.start = 2;
+  wrongMesh.geometry.drawRange.count = 9;
+  const bag = wrongMesh.geometry.groups;
+  wrongMesh.geometry.addGroup(0, 3, 0);
+  const morphBag = wrongMesh.geometry.morphAttributes;
+  morphBag.position = [];
+  wrongMesh.geometry.morphTargetsRelative = true;
+  const influences = [0.8];
+  const dictionary = { lid: 0 };
+  wrongMesh.morphTargetInfluences = influences;
+  wrongMesh.morphTargetDictionary = dictionary;
+  const clips = [new THREE.AnimationClip("keep-clips", 0.4, [])];
+  wrongMesh.animations = clips;
+  wrong.glslVersion = THREE.GLSL3;
+  wrong.flatShading = true;
+  const visibleBefore = wrongMesh.visible;
+  const layersMaskBefore = wrongMesh.layers.mask;
+  const worldAutoBefore = wrongMesh.matrixWorldAutoUpdate;
+  const rotationOrderBefore = wrongMesh.rotation.order;
+  const scaleBefore = wrongMesh.scale;
+  const upBefore = wrongMesh.up;
+  const geometryBefore = wrongMesh.geometry;
+  let setDrawRangeCalls = 0;
+  const realSetDrawRange = wrongMesh.geometry.setDrawRange.bind(wrongMesh.geometry);
+  wrongMesh.geometry.setDrawRange = (...args) => {
+    setDrawRangeCalls += 1;
+    return realSetDrawRange(...args);
+  };
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  colliderGrabBefore.geometry.drawRange.start = 4;
+  colliderGrabBefore.geometry.drawRange.count = 8;
+  const fastenerRange = fastener.geometry.drawRange;
+  fastener.geometry.drawRange.start = 1;
+  fastener.geometry.drawRange.count = 3;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitDrawRange(mesh, "packaged color-only MeshBasic");
+    assertQuestSafeUnlitGroups(mesh, "packaged color-only MeshBasic groups stay empty");
+    assert.equal(mesh.castShadow, false, "color-only pin does not enable castShadow");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+  }
+  assert.equal(setDrawRangeCalls, 0, "ingest does not call setDrawRange");
+  assert.equal(wrongMesh.geometry, geometryBefore, "ingest does not replace the geometry");
+  assert.equal(wrongMesh.geometry.drawRange, drawRange, "ingest mutates drawRange in place");
+  assert.equal(wrongMesh.geometry.groups, bag, "drawRange pin does not replace groups");
+  assert.equal(bag.length, 0, "earlier groups pin still clears leftover groups");
+  assert.equal(wrongMesh.geometry.morphAttributes, morphBag, "drawRange pin does not replace morphAttributes");
+  assert.equal(Object.keys(morphBag).length, 0, "earlier morphAttributes pin still clears leftover keys");
+  assert.equal(wrongMesh.geometry.morphTargetsRelative, false, "earlier morphAttributes pin still pins morphTargetsRelative");
+  assert.equal(wrongMesh.morphTargetInfluences, influences, "drawRange pin does not touch morphTargetInfluences");
+  assert.equal(wrongMesh.morphTargetDictionary, dictionary, "drawRange pin does not touch morphTargetDictionary");
+  assert.equal(wrongMesh.animations, clips, "drawRange pin does not replace the animations array");
+  assert.equal(wrongMesh.animations.length, 1, "drawRange pin does not clear leftover clips");
+  assert.equal(wrong.glslVersion, THREE.GLSL3, "drawRange pin does not clear Material glslVersion");
+  assert.equal(wrong.flatShading, true, "drawRange pin does not set Material flatShading");
+  assert.equal(wrongMesh.matrixWorldAutoUpdate, worldAutoBefore, "drawRange pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrongMesh.visible, visibleBefore, "drawRange pin does not change mesh.visible");
+  assert.equal(wrongMesh.layers.mask, layersMaskBefore, "drawRange pin does not change layers");
+  assert.equal(wrongMesh.rotation.order, rotationOrderBefore, "drawRange pin does not change rotation.order");
+  assert.equal(wrongMesh.scale, scaleBefore, "drawRange pin keeps the existing scale Vector3");
+  assert.equal(wrongMesh.up, upBefore, "drawRange pin keeps the existing up Vector3");
+  assert.equal(fastener.geometry.drawRange, fastenerRange, "fastener drawRange object is kept");
+  assertQuestSafeUnlitDrawRange(fastener, "fastener");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+  assert.equal(mappedMesh.geometry.drawRange.start, 3, "mapped MeshBasic stays authored drawRange.start");
+  assert.equal(mappedMesh.geometry.drawRange.count, 6, "mapped MeshBasic stays authored drawRange.count");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+  assert.equal(Array.isArray(wrongMesh.material), false, "ingest does not assign a material array");
+  assert.equal(wrongMesh, root.getObjectByName("dccDrawRange"), "ingest does not replace the color-only mesh");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.geometry.drawRange.start, 4, "collider Mesh stays authored drawRange.start");
+  assert.equal(colliderGrab.geometry.drawRange.count, 8, "collider Mesh stays authored drawRange.count");
+});
+
+test("packaged ingest without lod groups still pins leftover BufferGeometry drawRange", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  const bodyRange = visualMeshes(body)[0].geometry.drawRange;
+  visualMeshes(body)[0].geometry.drawRange.start = 2;
+  visualMeshes(body)[0].geometry.drawRange.count = 4;
+  visualMeshes(body)[0].geometry.addGroup(0, 3, 0);
+  visualMeshes(lid)[0].geometry.drawRange = null;
+  visualMeshes(latch)[0].geometry.drawRange.start = 1;
+  visualMeshes(latch)[0].geometry.drawRange.count = 2;
+  delete visualMeshes(tool)[0].geometry.drawRange;
+  fastener.geometry.drawRange.start = 5;
+  fastener.geometry.drawRange.count = 1;
+  const colliderGrab = root.getObjectByName("collider_grab");
+  colliderGrab.geometry.drawRange.start = 6;
+  colliderGrab.geometry.drawRange.count = 3;
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(visualMeshes(body)[0].geometry.drawRange, bodyRange, "fail-soft body drawRange object is mutated in place");
+  assertQuestSafeUnlitDrawRange(visualMeshes(body)[0], "fail-soft body");
+  assert.equal(visualMeshes(body)[0].geometry.groups.length, 0, "fail-soft groups pin still clears groups before drawRange");
+  assertQuestSafeUnlitDrawRange(visualMeshes(lid)[0], "fail-soft lid");
+  assert.equal(Array.isArray(visualMeshes(lid)[0].geometry.drawRange), false, "fail-soft null drawRange becomes a plain object");
+  assertQuestSafeUnlitDrawRange(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitDrawRange(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitDrawRange(fastener, "fail-soft fastener");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
+  assert.equal(colliderGrab.geometry.drawRange.start, 6, "fail-soft collider stays authored drawRange.start");
+  assert.equal(colliderGrab.geometry.drawRange.count, 3, "fail-soft collider stays authored drawRange.count");
 });

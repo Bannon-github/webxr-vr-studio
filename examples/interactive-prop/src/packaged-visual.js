@@ -1129,6 +1129,62 @@
  * `layers`, change `up`, change
  * `scale`, change `rotation.order`,
  * or change prior material pins.
+ *
+ * v0.88: after that groups clear,
+ * `pinColorOnlyVisualDrawRange`
+ * pins leftover BufferGeometry
+ * `drawRange` so
+ * `drawRange.start === 0` &&
+ * `drawRange.count === Infinity`
+ * on packed color-only unlit
+ * MeshBasic visual geometries
+ * (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Verified r170 (three@0.170.0):**
+ * the BufferGeometry constructor
+ * assigns
+ * `this.drawRange = { start: 0, count: Infinity }`.
+ * `setDrawRange(start, count)` writes
+ * those fields on the existing
+ * object and throws when
+ * `drawRange` is missing. Mutate
+ * the existing object
+ * (`start = 0`, `count = Infinity`).
+ * If missing or non-object, assign
+ * `{ start: 0, count: Infinity }`.
+ * Do **not** call `setDrawRange()`.
+ * Do **not** invent a partial range.
+ * Do **not** replace the geometry.
+ * Do **not** touch `groups` (v0.87).
+ * r170 `renderBufferDirect` draws
+ * `geometry.drawRange` when the
+ * render item's `group` is null.
+ * A single MeshBasicMaterial pushes
+ * `group = null`, so a leftover
+ * partial `drawRange` clips or
+ * under-draws the stand-in.
+ * Pinning the default keeps the
+ * full index / position span.
+ * Does **not** touch
+ * `morphAttributes` /
+ * `morphTargetsRelative` (v0.86).
+ * Does **not** touch Mesh
+ * `morphTargetInfluences` /
+ * `morphTargetDictionary` (v0.85).
+ * Does **not** touch Object3D
+ * `animations` (v0.84). Does **not**
+ * enable shadows. Does not
+ * hex-dedupe or invent meshes.
+ * Mapped / lit / interleaved stay
+ * authored. Collider meshes stay
+ * untouched. Does **not** pin
+ * `mesh.visible`, change
+ * `matrixAutoUpdate`, change
+ * `matrixWorldAutoUpdate`, change
+ * `layers`, change `up`, change
+ * `scale`, change `rotation.order`,
+ * or change prior material pins.
  */
 
 import {
@@ -1153,6 +1209,7 @@ import {
   pinColorOnlyVisualMorphTargets,
   pinColorOnlyVisualMorphAttributes,
   pinColorOnlyVisualGroups,
+  pinColorOnlyVisualDrawRange,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1328,6 +1385,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMorphTargets(root);
   pinColorOnlyVisualMorphAttributes(root);
   pinColorOnlyVisualGroups(root);
+  pinColorOnlyVisualDrawRange(root);
   return root;
 }
 

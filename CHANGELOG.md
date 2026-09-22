@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.90.0] — 2026-09-22
+
+### Changed
+
+- `crate-toolbox` **v0.88.0** L3 packaging/perf UPGRADE: after the v0.87 BufferGeometry `groups` clear, also pin leftover BufferGeometry `drawRange` so `start === 0` and `count === Infinity` on packed color-only unlit MeshBasic visual geometries (13 visual meshes; one geometry per visual; first-class measured drawRange-default). Verified in-repo three@0.170.0: the BufferGeometry constructor assigns `this.drawRange = { start: 0, count: Infinity }`. `setDrawRange(start, count)` writes those fields on the existing object and throws when `drawRange` is missing; the helper mutates `start` / `count` in place, and assigns `{ start: 0, count: Infinity }` only when `drawRange` is missing or not an object. r170 `WebGLRenderer.renderBufferDirect` draws `geometry.drawRange` when the render item's `group` is null. A single MeshBasicMaterial pushes `group = null` (`projectObject` walks `groups` only when `Array.isArray(material)`), so a leftover partial `drawRange` clips or under-draws the color-only stand-in. Pinning the r170 default keeps the full index/position span. Does not call `setDrawRange()`; does not invent a partial range; does not replace the geometry; does not touch `groups`; does not touch `morphAttributes` / `morphTargetsRelative`; does not touch Mesh `morphTargetInfluences` / `morphTargetDictionary`; does not touch Object3D `animations`. Mapped / lit / interleaved / colliders stay authored. Does not pin `mesh.visible` or change `matrixAutoUpdate` / `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `rotation.order` / prior material pins. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, groups-empty 13, morphAttributes-empty 13, morphTargets-absent 13, animations-empty 13 unchanged vs v0.87. drawRange-default 13 is the new count. Headset ms / FFR still unmeasured.
+
 ## [0.89.0] — 2026-09-22
 
 ### Changed
