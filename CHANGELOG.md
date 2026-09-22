@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.92.0] — 2026-09-22
+
+### Changed
+
+- `crate-toolbox` **v0.90.0** L3 packaging/perf UPGRADE: after the v0.89 `skinIndex` / `skinWeight` strip, also pin leftover BufferAttribute `updateRange` so `offset === 0` and `count === -1` on every non-interleaved BufferAttribute plus `geometry.index` when it is a BufferAttribute, on packed color-only unlit MeshBasic visual geometries (13 visual meshes; one geometry per visual; first-class measured updateRange-default). `pinColorOnlyUnlitBasicUpdateRange` / `pinColorOnlyVisualUpdateRange` run after `pinColorOnlyVisualSkinAttributes` on procedural create and packaged ingest, including fail-soft (no lod groups) and the fastener. Mutate the existing object (`offset = 0`, `count = -1`); if missing or not an object, assign `{ offset: 0, count: -1 }`. Checked installed three@0.170.0: the BufferAttribute constructor assigns `this.updateRanges = []` and does not assign `updateRange`. `WebGLAttributes.updateBuffer` full-uploads when `updateRanges.length === 0` and partial-uploads each `{ start, count }` otherwise. `addUpdateRange(start, count)` pushes a partial range; this pulse does not call it and does not rewrite `updateRanges` or `usage` (v0.43 StaticDrawUsage stays). Does not replace attributes or geometry. Does not delete `skinIndex` / `skinWeight`. Does not touch `drawRange` / `groups` / `morphAttributes` / `morphTargetsRelative`. Mapped / lit / interleaved / colliders stay authored. Does not pin `mesh.visible` or change `matrixAutoUpdate`. Clean procedural draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, skinAttributes-absent 13, drawRange-default 13, groups-empty 13 stay vs v0.89. updateRange-default 13 is the new count (13 unique geometries; every BufferAttribute + index has `updateRange.offset === 0` && `updateRange.count === -1`). Quest 3 90 Hz / 72 fallback requested, not measured. Headset ms / FFR still unmeasured.
+
 ## [0.91.0] — 2026-09-22
 
 ### Changed
