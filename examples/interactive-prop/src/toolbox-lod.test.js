@@ -53,6 +53,7 @@ const {
   pinColorOnlyUnlitBasicAnimations,
   pinColorOnlyUnlitBasicMorphTargets,
   pinColorOnlyUnlitBasicMorphAttributes,
+  pinColorOnlyUnlitBasicGroups,
   pinColorOnlyUnlitBasicCustomShadowMaterials,
   pinColorOnlyUnlitBasicCustomProgramCacheKey,
   pinColorOnlyUnlitBasicDefines,
@@ -73,6 +74,7 @@ const {
   pinColorOnlyVisualAnimations,
   pinColorOnlyVisualMorphTargets,
   pinColorOnlyVisualMorphAttributes,
+  pinColorOnlyVisualGroups,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
@@ -483,6 +485,28 @@ function assertR170GeometryMorphAttributesEmpty(geometry, label = "r170 BufferGe
 
 function assertQuestSafeUnlitMorphAttributes(mesh, label = "color-only MeshBasic mesh") {
   assertR170GeometryMorphAttributesEmpty(mesh.geometry, label);
+}
+
+function assertR170GeometryGroupsEmpty(geometry, label = "r170 BufferGeometry") {
+  assert.equal(Array.isArray(geometry.groups), true, `${label} groups is an Array`);
+  assert.equal(geometry.groups.length, 0, `${label} groups length is 0`);
+}
+
+function assertQuestSafeUnlitGroups(mesh, label = "color-only MeshBasic mesh") {
+  assertR170GeometryGroupsEmpty(mesh.geometry, label);
+}
+
+function countVisualGroups(crate) {
+  let empty = 0;
+  let leftover = 0;
+  const geos = new Set();
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.geometry) geos.add(mesh.geometry);
+    const groups = mesh.geometry?.groups;
+    if (Array.isArray(groups) && groups.length === 0) empty += 1;
+    else leftover += 1;
+  }
+  return { empty, leftover, total: empty + leftover, uniqueGeometries: geos.size };
 }
 
 function countVisualMorphAttributes(crate) {
@@ -10146,4 +10170,371 @@ test("pinColorOnlyUnlitBasicMorphAttributes / pinColorOnlyVisualMorphAttributes 
   assert.equal(sharedGeoVisual.geometry, sharedGeo, "shared mapped geometry is not replaced");
   assert.equal(sharedGeoVisual.geometry.morphAttributes.position[0], mappedMeshAttr, "geometry shared with a mapped mesh stays authored");
   assert.equal(std.geometry.morphTargetsRelative, true, "MeshStandard stays authored via entity helper");
+});
+
+test("v0.87 clears leftover BufferGeometry groups on packed color-only MeshBasic visuals; envelope stays v0.86", () => {
+  const freshGeo = new THREE.BufferGeometry();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.ok(Array.isArray(freshGeo.groups), "r170 BufferGeometry groups starts as an array");
+  assert.equal(freshGeo.groups.length, 0, "r170 BufferGeometry groups starts empty");
+  const replaced = freshGeo.groups;
+  freshGeo.addGroup(0, 3, 0);
+  freshGeo.clearGroups();
+  assert.notEqual(freshGeo.groups, replaced, "r170 clearGroups assigns a new array");
+  assert.equal(freshGeo.groups.length, 0, "r170 clearGroups leaves an empty array");
+  const freshMesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial());
+  assertR170GeometryGroupsEmpty(freshMesh.geometry, "r170 Mesh geometry");
+  assertR170GeometryMorphAttributesEmpty(freshMesh.geometry, "r170 Mesh geometry morphAttributes stay empty");
+  const box = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  assert.ok(box.groups.length > 0, "r170 BoxGeometry authors per-face groups");
+
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.equal(crate.userData.l2.uniqueTextures, 0);
+  assert.match(crate.userData.l2.note, /v0\.87 clears leftover BufferGeometry groups/);
+  assert.match(crate.userData.l2.note, /13 groups-empty/);
+  assert.match(crate.userData.l2.note, /13 morphAttributes-empty/);
+  assert.match(crate.userData.l2.note, /13 morphTargets-absent/);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitGroups(mesh);
+    assertQuestSafeUnlitMorphAttributes(mesh);
+    assertQuestSafeUnlitMorphTargets(mesh);
+    assertQuestSafeUnlitAnimations(mesh);
+    assert.equal(Array.isArray(mesh.material), false, "groups pin does not assign a material array");
+    assert.equal(mesh.geometry.drawRange.start, 0, "groups pin does not change drawRange.start");
+    assert.equal(mesh.geometry.drawRange.count, Infinity, "groups pin does not change drawRange.count");
+    assert.equal(mesh.material.glslVersion, undefined, "groups pin does not touch Material glslVersion");
+    assert.equal(mesh.material.flatShading, false, "groups pin does not touch Material flatShading");
+    assert.equal(mesh.material.defines, undefined, "groups pin does not touch Material defines");
+    assert.equal(Object.hasOwn(mesh.material, "customProgramCacheKey"), false, "groups pin does not touch Material customProgramCacheKey");
+    assert.equal(Object.hasOwn(mesh, "onBeforeRender"), false, "groups pin does not touch Mesh onBeforeRender");
+    assert.equal(Object.hasOwn(mesh, "onAfterRender"), false, "groups pin does not touch Mesh onAfterRender");
+    assert.equal(Object.hasOwn(mesh, "onBeforeShadow"), false, "groups pin does not touch Mesh onBeforeShadow");
+    assert.equal(Object.hasOwn(mesh, "onAfterShadow"), false, "groups pin does not touch Mesh onAfterShadow");
+    assert.equal(mesh.customDepthMaterial, undefined, "groups pin does not invent customDepthMaterial");
+    assert.equal(mesh.customDistanceMaterial, undefined, "groups pin does not invent customDistanceMaterial");
+    assert.equal(mesh.castShadow, false, "groups pin does not enable castShadow");
+    assert.equal(mesh.receiveShadow, false, "groups pin does not enable receiveShadow");
+    assert.equal(mesh.visible, true, "procedural visuals keep mesh.visible true; pin does not force false");
+  }
+  const groupCounts = countVisualGroups(crate);
+  assert.equal(groupCounts.uniqueGeometries, 13, "one geometry per visual; geometries are not shared");
+  assert.equal(groupCounts.empty, 13, "groups-empty count is 13");
+  assert.equal(groupCounts.leftover, 0);
+  const morphAttrCounts = countVisualMorphAttributes(crate);
+  assert.equal(morphAttrCounts.uniqueGeometries, 13, "unique geometries stay 13");
+  assert.equal(morphAttrCounts.empty, 13, "morphAttributes-empty count stays 13");
+  assert.equal(morphAttrCounts.leftover, 0);
+  const morphCounts = countVisualMorphTargets(crate);
+  assert.equal(morphCounts.absent, 13, "morphTargets-absent count stays 13");
+  assert.equal(morphCounts.leftover, 0);
+  const animCounts = countVisualAnimations(crate);
+  assert.equal(animCounts.empty, 13, "animations-empty count stays 13");
+  const glslCounts = countVisualGlslVersion(crate);
+  assert.equal(glslCounts.absent, 3, "glslVersion-absent count stays 3");
+  const flatCounts = countVisualFlatShading(crate);
+  assert.equal(flatCounts.off, 3, "flatShading-off count stays 3");
+  const definesCounts = countVisualDefines(crate);
+  assert.equal(definesCounts.absent, 3, "defines-absent count stays 3");
+  const cacheKeyCounts = countVisualCustomProgramCacheKey(crate);
+  assert.equal(cacheKeyCounts.defaults, 3, "customProgramCacheKey-default count stays 3");
+  const materialCallbackCounts = countVisualMaterialRenderCallbacks(crate);
+  assert.equal(materialCallbackCounts.absent, 3, "material-render-callbacks-absent count stays 3");
+  const shadowCallbackCounts = countVisualShadowCallbacks(crate);
+  assert.equal(shadowCallbackCounts.absent, 13, "shadow-callbacks-absent count stays 13");
+  const callbackCounts = countVisualRenderCallbacks(crate);
+  assert.equal(callbackCounts.absent, 13, "render-callbacks-absent count stays 13");
+  const customCounts = countVisualCustomShadowMaterials(crate);
+  assert.equal(customCounts.absent, 13, "customDepth/Distance-absent count stays 13");
+  const rotationCounts = countVisualRotationOrderXYZ(crate);
+  assert.equal(rotationCounts.xyz, 13, "rotation-order-XYZ count stays 13");
+  const scaleCounts = countVisualScaleDefault(crate);
+  assert.equal(scaleCounts.unit, 13, "scale-default count stays 13");
+  const upCounts = countVisualUpDefault(crate);
+  assert.equal(upCounts.yUp, 13, "up-default count stays 13");
+  const worldAutoCounts = countVisualMatrixWorldAutoUpdate(crate);
+  assert.equal(worldAutoCounts.on, 13, "matrixWorldAutoUpdate-on count stays 13");
+  const layerCounts = countVisualLayersDefault(crate);
+  assert.equal(layerCounts.layer0Only, 13, "layers-default count stays 13");
+  const renderOrderCounts = countVisualRenderOrder(crate);
+  assert.equal(renderOrderCounts.zero, 13, "renderOrder-0 count stays 13");
+  const frustumCounts = countVisualFrustumCulled(crate);
+  assert.equal(frustumCounts.on, 13, "frustumCulled-on count stays 13");
+  const shadowCounts = countVisualShadowFlags(crate);
+  assert.equal(shadowCounts.off, 13, "shadow-off count stays 13");
+  const rayCounts = countVisualRaycast(crate);
+  assert.equal(rayCounts.disabled, 13, "raycast-off count stays 13");
+  const matrixCounts = countVisualMatrixAutoUpdate(crate);
+  assert.equal(matrixCounts.frozen, 3);
+  assert.equal(matrixCounts.live, 10);
+  const basicCounts = collectCrateVisualMaterials(crate);
+  assert.equal(basicCounts.length, 3, "unique MeshBasic stays 3");
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assert.equal(fastener.parent.name, "toolbox", "fastener stays outside the LOD merge skip set");
+  assertQuestSafeUnlitGroups(lidMesh, "lidMesh");
+  assertQuestSafeUnlitGroups(latchMesh, "latchMesh");
+  assertQuestSafeUnlitGroups(fastener, "fastenerMesh");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  for (const level of [0, 1, 2]) {
+    for (const group of crate.userData.lod.groups[level]) {
+      assert.equal(group.getObjectByName("fastenerMesh"), undefined, "fastener is not folded into an LOD group");
+    }
+  }
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assertQuestSafeUnlitGroups(bodyHero, "body LOD leaf");
+  assertQuestSafeUnlitMorphAttributes(bodyHero, "body LOD leaf");
+
+  for (const c of crate.userData.colliders) {
+    assert.ok(c.geometry.groups.length > 0, "collider BoxGeometry groups stay authored");
+    assert.equal(c.visible, false, "collider mesh.visible stays authored hidden");
+    assert.equal(c.matrixAutoUpdate, true, "collider matrixAutoUpdate stays live");
+  }
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitGroups(fastener, "fastener after L5 drive");
+  assertQuestSafeUnlitMorphAttributes(fastener, "fastener after L5 drive");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+});
+
+function groupsTestGeometry() {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9), 3));
+  geometry.setIndex([0, 1, 2]);
+  return geometry;
+}
+
+test("pinColorOnlyUnlitBasicGroups empties leftover groups in place and leaves drawRange and morphAttributes", () => {
+  const fresh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  assertR170GeometryGroupsEmpty(fresh.geometry, "r170 geometry");
+
+  const wrong = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const groups = wrong.geometry.groups;
+  wrong.geometry.addGroup(0, 6, 0);
+  wrong.geometry.addGroup(6, 6, 1);
+  wrong.geometry.drawRange.start = 3;
+  wrong.geometry.drawRange.count = 12;
+  const drawRange = wrong.geometry.drawRange;
+  const positionBefore = wrong.geometry.getAttribute("position");
+  const indexBefore = wrong.geometry.index;
+  const bag = wrong.geometry.morphAttributes;
+  const leftoverMorph = new THREE.BufferAttribute(new Float32Array(3), 3);
+  bag.position = [leftoverMorph];
+  wrong.geometry.morphTargetsRelative = true;
+  const influences = [0.4];
+  const dictionary = { smile: 0 };
+  wrong.morphTargetInfluences = influences;
+  wrong.morphTargetDictionary = dictionary;
+  const clips = [new THREE.AnimationClip("dcc-leftover", 1, [])];
+  wrong.animations = clips;
+  wrong.material.glslVersion = "300 es";
+  wrong.material.flatShading = true;
+  wrong.material.defines = { USE_UV: "" };
+  const leftoverKey = () => "dcc-unique-program-key";
+  wrong.material.customProgramCacheKey = leftoverKey;
+  const compileBefore = () => {};
+  const beforeRenderBefore = () => {};
+  wrong.material.onBeforeCompile = compileBefore;
+  wrong.material.onBeforeRender = beforeRenderBefore;
+  const meshBefore = () => {};
+  const meshAfter = () => {};
+  const meshShadowBefore = () => {};
+  const meshShadowAfter = () => {};
+  wrong.onBeforeRender = meshBefore;
+  wrong.onAfterRender = meshAfter;
+  wrong.onBeforeShadow = meshShadowBefore;
+  wrong.onAfterShadow = meshShadowAfter;
+  const customDepthBefore = new THREE.MeshBasicMaterial({ color: 0x111111 });
+  const customDistanceBefore = new THREE.MeshBasicMaterial({ color: 0x222222 });
+  wrong.customDepthMaterial = customDepthBefore;
+  wrong.customDistanceMaterial = customDistanceBefore;
+  wrong.castShadow = false;
+  wrong.receiveShadow = false;
+  wrong.visible = true;
+  wrong.matrixAutoUpdate = true;
+  wrong.matrixWorldAutoUpdate = true;
+  const layersMaskBefore = wrong.layers.mask;
+  const upBefore = wrong.up;
+  const scaleBefore = wrong.scale;
+  const rotationBefore = wrong.rotation;
+  const rotationXBefore = wrong.rotation.x;
+  const orderBefore = wrong.rotation.order;
+  assert.equal(isColorOnlyUnlitBasic(wrong.material), true, "color-only MeshBasic still passes the gate");
+  assert.equal(groups.length, 2, "DCC leftover groups are non-empty");
+  const returned = pinColorOnlyUnlitBasicGroups(wrong);
+  assert.equal(returned, wrong, "groups pin does not replace the mesh");
+  assert.equal(wrong.geometry.groups, groups, "pin mutates groups in place");
+  assertQuestSafeUnlitGroups(wrong, "leftover groups");
+  assert.equal(wrong.geometry.drawRange, drawRange, "pin keeps the drawRange object");
+  assert.equal(drawRange.start, 3, "pin does not change drawRange.start");
+  assert.equal(drawRange.count, 12, "pin does not change drawRange.count");
+  assert.equal(wrong.geometry.getAttribute("position"), positionBefore, "pin does not replace the position attribute");
+  assert.equal(wrong.geometry.index, indexBefore, "pin does not replace the index");
+  assert.equal(wrong.geometry.morphAttributes, bag, "pin does not replace morphAttributes");
+  assert.equal(bag.position[0], leftoverMorph, "pin does not clear morphAttributes");
+  assert.equal(wrong.geometry.morphTargetsRelative, true, "pin does not pin morphTargetsRelative");
+  assert.equal(wrong.morphTargetInfluences, influences, "pin does not touch Mesh morphTargetInfluences");
+  assert.equal(wrong.morphTargetDictionary, dictionary, "pin does not touch Mesh morphTargetDictionary");
+  assert.equal(wrong.animations, clips, "pin does not touch Object3D animations");
+  assert.equal(wrong.animations.length, 1, "pin does not clear leftover clips");
+  assert.equal(Array.isArray(wrong.material), false, "pin does not assign a material array");
+  assert.equal(wrong.material.glslVersion, "300 es", "pin does not touch Material glslVersion");
+  assert.equal(wrong.material.flatShading, true, "pin does not touch Material flatShading");
+  assert.deepEqual(wrong.material.defines, { USE_UV: "" }, "pin does not touch Material defines");
+  assert.equal(wrong.material.onBeforeCompile, compileBefore, "pin does not touch Material onBeforeCompile");
+  assert.equal(wrong.material.onBeforeRender, beforeRenderBefore, "pin does not touch Material onBeforeRender");
+  assert.equal(wrong.material.customProgramCacheKey, leftoverKey, "pin does not touch Material customProgramCacheKey");
+  assert.equal(wrong.onBeforeRender, meshBefore, "pin does not touch Mesh onBeforeRender");
+  assert.equal(wrong.onAfterRender, meshAfter, "pin does not touch Mesh onAfterRender");
+  assert.equal(wrong.onBeforeShadow, meshShadowBefore, "pin does not touch Mesh onBeforeShadow");
+  assert.equal(wrong.onAfterShadow, meshShadowAfter, "pin does not touch Mesh onAfterShadow");
+  assert.equal(wrong.customDepthMaterial, customDepthBefore, "pin does not touch customDepthMaterial");
+  assert.equal(wrong.customDistanceMaterial, customDistanceBefore, "pin does not touch customDistanceMaterial");
+  assert.equal(wrong.castShadow, false, "pin does not enable castShadow");
+  assert.equal(wrong.receiveShadow, false, "pin does not enable receiveShadow");
+  assert.equal(wrong.visible, true, "pin does not pin mesh.visible");
+  assert.equal(wrong.matrixAutoUpdate, true, "pin does not change matrixAutoUpdate");
+  assert.equal(wrong.matrixWorldAutoUpdate, true, "pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrong.layers.mask, layersMaskBefore, "pin does not change layers");
+  assert.equal(wrong.up, upBefore, "pin keeps the existing up Vector3");
+  assert.equal(wrong.scale, scaleBefore, "pin keeps the existing scale Vector3");
+  assert.equal(wrong.rotation, rotationBefore, "pin keeps the existing Euler");
+  assert.equal(wrong.rotation.x, rotationXBefore, "pin does not rewrite rotation.x");
+  assert.equal(wrong.rotation.order, orderBefore, "pin does not change rotation.order");
+
+  const already = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  const alreadyGroups = already.geometry.groups;
+  pinColorOnlyUnlitBasicGroups(already);
+  assert.equal(already.geometry.groups, alreadyGroups, "already-empty groups array is kept");
+  assert.equal(alreadyGroups.length, 0, "already-empty groups stay empty");
+
+  const missing = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  missing.geometry.groups = null;
+  pinColorOnlyUnlitBasicGroups(missing);
+  assertQuestSafeUnlitGroups(missing, "null groups is replaced with []");
+
+  const absent = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  absent.geometry.groups = undefined;
+  pinColorOnlyUnlitBasicGroups(absent);
+  assertQuestSafeUnlitGroups(absent, "undefined groups is replaced with []");
+
+  const objectGroups = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x8d5a23 }));
+  objectGroups.geometry.groups = { 0: { start: 0, count: 3, materialIndex: 0 } };
+  pinColorOnlyUnlitBasicGroups(objectGroups);
+  assertQuestSafeUnlitGroups(objectGroups, "non-array groups is replaced with []");
+});
+
+test("pinColorOnlyUnlitBasicGroups / pinColorOnlyVisualGroups skip mapped, lit, interleaved, colliders, shared blocked", () => {
+  const colorOnly = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  const colorGroups = colorOnly.geometry.groups;
+  colorOnly.geometry.addGroup(0, 3, 0);
+  const mappedMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mapped = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  const mappedGroups = mapped.geometry.groups;
+  mapped.geometry.addGroup(0, 6, 1);
+  const std = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshStandardMaterial());
+  const stdGroups = std.geometry.groups;
+  std.geometry.addGroup(0, 3, 0);
+  pinColorOnlyUnlitBasicGroups(colorOnly);
+  pinColorOnlyUnlitBasicGroups(mapped);
+  pinColorOnlyUnlitBasicGroups(std);
+  assert.equal(colorOnly.geometry.groups, colorGroups, "color-only groups array stays");
+  assertQuestSafeUnlitGroups(colorOnly, "color-only leftover groups are cleared");
+  assert.equal(mapped.geometry.groups, mappedGroups, "mapped MeshBasic keeps its groups array");
+  assert.equal(mapped.geometry.groups.length, 1, "mapped MeshBasic stays authored groups");
+  assert.equal(mapped.geometry.groups[0].materialIndex, 1, "mapped group materialIndex stays authored");
+  assert.equal(std.geometry.groups, stdGroups, "MeshStandard stays authored groups");
+  assert.equal(std.geometry.groups.length, 1, "MeshStandard group stays authored");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  interleavedGeo.addGroup(0, 3, 0);
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  pinColorOnlyUnlitBasicGroups(interleaved);
+  assert.equal(interleaved.geometry.groups.length, 1, "interleaved geometry stays authored");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  mappedMesh.geometry.addGroup(0, 6, 2);
+  const colorMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  const colorMeshGroups = colorMesh.geometry.groups;
+  colorMesh.geometry.addGroup(0, 3, 0);
+  colorMesh.geometry.drawRange.start = 1;
+  colorMesh.geometry.drawRange.count = 4;
+  const colorMorph = colorMesh.geometry.morphAttributes;
+  colorMorph.position = [];
+  colorMesh.geometry.morphTargetsRelative = true;
+  const collider = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.geometry.addGroup(0, 12, 0);
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  const sharedGroups = sharedVisual.geometry.groups;
+  sharedVisual.geometry.addGroup(0, 3, 0);
+  const sharedCollider = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedGeo = mappedMesh.geometry;
+  const sharedGeoVisual = new THREE.Mesh(sharedGeo, new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  body.add(mappedMesh, colorMesh, sharedVisual, sharedGeoVisual, interleaved);
+  root.add(body, collider, sharedCollider, std);
+  pinColorOnlyVisualGroups(root);
+  assert.equal(colorMesh.geometry.groups, colorMeshGroups, "entity helper keeps the color-only groups array");
+  assertQuestSafeUnlitGroups(colorMesh, "entity helper color-only");
+  assert.equal(colorMesh.geometry.drawRange.start, 1, "entity helper does not change drawRange.start");
+  assert.equal(colorMesh.geometry.drawRange.count, 4, "entity helper does not change drawRange.count");
+  assert.equal(colorMesh.geometry.morphAttributes, colorMorph, "entity helper does not replace morphAttributes");
+  assert.equal(colorMorph.position.length, 0, "entity helper does not delete morphAttributes keys");
+  assert.equal(colorMesh.geometry.morphTargetsRelative, true, "entity helper does not pin morphTargetsRelative");
+  assert.equal(mappedMesh.geometry.groups.length, 1, "mapped MeshBasic stays authored via entity helper");
+  assert.equal(mappedMesh.geometry.groups[0].materialIndex, 2);
+  assert.equal(interleaved.geometry.groups.length, 1, "interleaved stays authored via entity helper");
+  assert.equal(collider.geometry.groups.length, 1, "collider Mesh stays authored");
+  assert.equal(sharedVisual.geometry.groups, sharedGroups, "shared collider material visual stays unpinned");
+  assert.equal(sharedVisual.geometry.groups.length, 1);
+  assert.equal(sharedGeoVisual.geometry, sharedGeo, "shared mapped geometry is not replaced");
+  assert.equal(sharedGeoVisual.geometry.groups[0].materialIndex, 2, "geometry shared with a mapped mesh stays authored");
+  assert.equal(std.geometry.groups.length, 1, "MeshStandard stays authored via entity helper");
 });

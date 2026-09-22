@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.89.0] — 2026-09-22
+
+### Changed
+
+- `crate-toolbox` **v0.87.0** L3 packaging/perf UPGRADE: after the v0.86 BufferGeometry `morphAttributes` clear, also clear leftover BufferGeometry `groups` so `Array.isArray(geometry.groups) && geometry.groups.length === 0` on packed color-only unlit MeshBasic visual geometries (13 visual meshes; one geometry per visual; first-class measured groups-empty). Verified in-repo three@0.170.0: the BufferGeometry constructor assigns `this.groups = []`. `clearGroups()` assigns a new `[]` (it does not set length on the existing array); the helper mutates with `groups.length = 0`, and assigns `[]` only when `groups` is missing or not an array. r170 `WebGLRenderer.projectObject` pushes one render item per group only when `Array.isArray(material)`. A single MeshBasicMaterial pushes one item with `group = null`, so leftover groups do not multiply draws while the material stays a single MeshBasicMaterial. Clearing the list keeps a later material-array binding or `BufferGeometry.copy` round-trip from reviving per-group draws. Does not invent groups; does not assign a material array; does not touch `drawRange`; does not touch `morphAttributes` / `morphTargetsRelative`; does not touch Mesh `morphTargetInfluences` / `morphTargetDictionary`; does not touch Object3D `animations`. Mapped / lit / interleaved / colliders stay authored. Does not pin `mesh.visible` or change `matrixAutoUpdate` / `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `rotation.order` / prior material pins. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, morphAttributes-empty 13, morphTargets-absent 13, animations-empty 13 unchanged vs v0.86. groups-empty 13 is the new count. Headset ms / FFR still unmeasured.
+
 ## [0.88.0] — 2026-09-22
 
 ### Changed
