@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.91.0] — 2026-09-22
+
+### Changed
+
+- `crate-toolbox` **v0.89.0** L3 packaging/perf UPGRADE: after the v0.88 BufferGeometry `drawRange` pin, also strip leftover `skinIndex` / `skinWeight` on packed color-only unlit MeshBasic visual geometries (13 visual meshes; one geometry per visual; first-class measured skinAttributes-absent). `COLOR_ONLY_UNUSED_ATTRS` now includes those names via `COLOR_ONLY_UNUSED_SKIN_ATTRS`. `stripUnusedColorOnlyAttributes` drops them on the pack path after weld; `pinColorOnlyUnlitBasicSkinAttributes` / `pinColorOnlyVisualSkinAttributes` run after `pinColorOnlyVisualDrawRange` on procedural create and packaged ingest, including fail-soft (no lod groups). Verified in-repo three@0.170.0: `WebGLPrograms` sets `skinning` only when `object.isSkinnedMesh === true`; `WebGLProgram` emits `#define USE_SKINNING` and `attribute vec4 skinIndex` / `attribute vec4 skinWeight` only then, so a plain Mesh + MeshBasic never reads them. `WebGLGeometries.update` still uploads every `geometry.attributes` entry, so leftover skin attrs inflate pre-upload attrBytes. `GLTFLoader` maps `JOINTS_0` → `skinIndex` and `WEIGHTS_0` → `skinWeight` and builds a `SkinnedMesh` only when the node has a skin. This pulse deletes the leftover attributes (`BufferGeometry.deleteAttribute`) rather than enabling skinning. Does not invent a SkinnedMesh; does not touch bones / `skeleton` / `bindMatrix` / `bindMatrixInverse`; does not delete `position`; does not touch `drawRange` / `groups` / `morphAttributes` / `morphTargetsRelative`. Mapped / lit / interleaved / colliders stay authored. Does not pin `mesh.visible` or change `matrixAutoUpdate`. Clean procedural meshes have no skin attrs, so draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, drawRange-default 13, groups-empty 13, morphAttributes-empty 13 stay vs v0.88. skinAttributes-absent 13 is the new count. A 24-vert BoxGeometry fixture with leftover Uint16 `skinIndex` + Float32 `skinWeight` (itemSize 4) drops **576** pre-upload attrBytes. Headset ms / FFR still unmeasured.
+
 ## [0.90.0] — 2026-09-22
 
 ### Changed
