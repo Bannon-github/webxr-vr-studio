@@ -315,6 +315,15 @@ function assertQuestSafeUnlitMorphTargets(mesh, label = "color-only MeshBasic me
   assertR170MeshMorphTargetsAbsent(mesh, label);
 }
 
+function assertQuestSafeUnlitMorphAttributes(mesh, label = "color-only MeshBasic mesh") {
+  const geometry = mesh.geometry;
+  assert.equal(geometry.morphTargetsRelative, false, `${label} morphTargetsRelative is false`);
+  assert.ok(geometry.morphAttributes && typeof geometry.morphAttributes === "object", `${label} morphAttributes is an object`);
+  assert.equal(Array.isArray(geometry.morphAttributes), false, `${label} morphAttributes is not an array`);
+  assert.notEqual(geometry.morphAttributes, null, `${label} morphAttributes is not null`);
+  assert.equal(Object.keys(geometry.morphAttributes).length, 0, `${label} morphAttributes has no keys`);
+}
+
 function boxTris(mesh) {
   const idx = mesh.geometry.index;
   if (idx) return idx.count / 3;
@@ -4128,4 +4137,127 @@ test("packaged ingest without lod groups still clears leftover Mesh morph target
   assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
   assert.equal(colliderGrab.morphTargetInfluences, colliderInfluences, "fail-soft collider stays authored influences");
   assert.equal(colliderGrab.morphTargetDictionary, colliderDict, "fail-soft collider stays authored dictionary");
+});
+
+test("packaged ingest clears leftover BufferGeometry morphAttributes; mapped/lit stay authored", () => {
+  const fresh = new THREE.BufferGeometry();
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.deepEqual(fresh.morphAttributes, {}, "r170 BufferGeometry morphAttributes starts as {}");
+  assert.equal(fresh.morphTargetsRelative, false, "r170 morphTargetsRelative starts false");
+
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const mappedAttr = mappedMesh.geometry.getAttribute("position").clone();
+  mappedMesh.geometry.morphAttributes.position = [mappedAttr];
+  mappedMesh.geometry.morphTargetsRelative = true;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccMorphAttributes", wrong);
+  const bag = wrongMesh.geometry.morphAttributes;
+  const leftover = new THREE.BufferAttribute(new Float32Array(9), 3);
+  let disposed = 0;
+  leftover.dispose = () => {
+    disposed += 1;
+  };
+  bag.position = [leftover];
+  bag.color = [];
+  wrongMesh.geometry.morphTargetsRelative = true;
+  const influences = [0.8];
+  const dictionary = { lid: 0 };
+  wrongMesh.morphTargetInfluences = influences;
+  wrongMesh.morphTargetDictionary = dictionary;
+  const clips = [new THREE.AnimationClip("keep-clips", 0.4, [])];
+  wrongMesh.animations = clips;
+  wrong.glslVersion = THREE.GLSL3;
+  wrong.flatShading = true;
+  const visibleBefore = wrongMesh.visible;
+  const layersMaskBefore = wrongMesh.layers.mask;
+  const worldAutoBefore = wrongMesh.matrixWorldAutoUpdate;
+  const rotationOrderBefore = wrongMesh.rotation.order;
+  const scaleBefore = wrongMesh.scale;
+  const upBefore = wrongMesh.up;
+  let morphUpdates = 0;
+  wrongMesh.updateMorphTargets = () => {
+    morphUpdates += 1;
+  };
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  const colliderAttr = colliderGrabBefore.geometry.getAttribute("position").clone();
+  colliderGrabBefore.geometry.morphAttributes.position = [colliderAttr];
+  colliderGrabBefore.geometry.morphTargetsRelative = true;
+  const fastenerBag = fastener.geometry.morphAttributes;
+  fastener.geometry.morphAttributes.position = [];
+  fastener.geometry.morphTargetsRelative = true;
+
+  ingestPackagedRoot(root, sidecar);
+
+  const fixtureVisuals = groups[0]
+    .concat(groups[1], groups[2])
+    .flatMap((g) => visualMeshes(g))
+    .concat(fastener);
+  for (const mesh of fixtureVisuals) {
+    if (mesh.material === mapped) continue;
+    assertQuestSafeUnlitMorphAttributes(mesh, "packaged color-only MeshBasic");
+    if (mesh !== wrongMesh) assertQuestSafeUnlitMorphTargets(mesh, "packaged color-only MeshBasic");
+    assert.equal(mesh.castShadow, false, "color-only pin does not enable castShadow");
+    assert.equal(mesh.visible, true, "color-only pin does not pin mesh.visible");
+  }
+  assert.equal(morphUpdates, 0, "ingest does not call updateMorphTargets");
+  assert.equal(disposed, 1, "ingest disposes the leftover morph BufferAttribute");
+  assert.equal(wrongMesh.geometry.morphAttributes, bag, "ingest mutates morphAttributes in place");
+  assert.equal(wrongMesh.morphTargetInfluences, influences, "morphAttributes pin does not touch morphTargetInfluences");
+  assert.equal(wrongMesh.morphTargetDictionary, dictionary, "morphAttributes pin does not touch morphTargetDictionary");
+  assert.equal(influences.length, 1, "ingest does not rewrite the detached influences array");
+  assert.equal(wrongMesh.animations, clips, "morphAttributes pin does not replace the animations array");
+  assert.equal(wrongMesh.animations.length, 1, "morphAttributes pin does not clear leftover clips");
+  assert.equal(wrong.glslVersion, THREE.GLSL3, "morphAttributes pin does not clear Material glslVersion");
+  assert.equal(wrong.flatShading, true, "morphAttributes pin does not set Material flatShading");
+  assert.equal(wrongMesh.matrixWorldAutoUpdate, worldAutoBefore, "morphAttributes pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrongMesh.visible, visibleBefore, "morphAttributes pin does not change mesh.visible");
+  assert.equal(wrongMesh.layers.mask, layersMaskBefore, "morphAttributes pin does not change layers");
+  assert.equal(wrongMesh.rotation.order, rotationOrderBefore, "morphAttributes pin does not change rotation.order");
+  assert.equal(wrongMesh.scale, scaleBefore, "morphAttributes pin keeps the existing scale Vector3");
+  assert.equal(wrongMesh.up, upBefore, "morphAttributes pin keeps the existing up Vector3");
+  assert.equal(fastener.geometry.morphAttributes, fastenerBag, "fastener morphAttributes object is kept");
+  assertQuestSafeUnlitMorphAttributes(fastener, "fastener");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+  assert.equal(mappedMesh.geometry.morphAttributes.position[0], mappedAttr, "mapped MeshBasic stays authored morph attributes");
+  assert.equal(mappedMesh.geometry.morphTargetsRelative, true, "mapped MeshBasic stays authored morphTargetsRelative");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+  assert.equal(wrongMesh, root.getObjectByName("dccMorphAttributes"), "ingest does not replace the color-only mesh");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.geometry.morphAttributes.position[0], colliderAttr, "collider Mesh stays authored morph attributes");
+  assert.equal(colliderGrab.geometry.morphTargetsRelative, true, "collider morphTargetsRelative stays authored");
+});
+
+test("packaged ingest without lod groups still clears leftover BufferGeometry morphAttributes", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  const bodyBag = visualMeshes(body)[0].geometry.morphAttributes;
+  bodyBag.position = [new THREE.BufferAttribute(new Float32Array(3), 3)];
+  visualMeshes(body)[0].geometry.morphTargetsRelative = true;
+  visualMeshes(lid)[0].geometry.morphAttributes = null;
+  visualMeshes(latch)[0].geometry.morphAttributes.normal = [];
+  visualMeshes(latch)[0].geometry.morphTargetsRelative = true;
+  delete visualMeshes(tool)[0].geometry.morphAttributes;
+  fastener.geometry.morphAttributes.position = [];
+  fastener.geometry.morphTargetsRelative = true;
+  const colliderGrab = root.getObjectByName("collider_grab");
+  const colliderAttr = new THREE.BufferAttribute(new Float32Array(3), 3);
+  colliderGrab.geometry.morphAttributes.position = [colliderAttr];
+  colliderGrab.geometry.morphTargetsRelative = true;
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(visualMeshes(body)[0].geometry.morphAttributes, bodyBag, "fail-soft body bag is mutated in place");
+  assertQuestSafeUnlitMorphAttributes(visualMeshes(body)[0], "fail-soft body");
+  assertQuestSafeUnlitMorphAttributes(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitMorphAttributes(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitMorphAttributes(visualMeshes(tool)[0], "fail-soft tool");
+  assertQuestSafeUnlitMorphAttributes(fastener, "fail-soft fastener");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
+  assert.equal(colliderGrab.geometry.morphAttributes.position[0], colliderAttr, "fail-soft collider stays authored morph attributes");
+  assert.equal(colliderGrab.geometry.morphTargetsRelative, true, "fail-soft collider morphTargetsRelative stays authored");
 });

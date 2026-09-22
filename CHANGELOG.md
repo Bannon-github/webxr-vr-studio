@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.88.0] — 2026-09-22
+
+### Changed
+
+- `crate-toolbox` **v0.86.0** L3 packaging/perf UPGRADE: after the v0.85 Mesh `morphTargetInfluences` / `morphTargetDictionary` absence, also clear leftover BufferGeometry `morphAttributes` so `Object.keys(geometry.morphAttributes).length === 0` and pin `morphTargetsRelative` to the r170 default `false` (only when it is not already false) on packed color-only unlit MeshBasic visual geometries (13 visual meshes; one geometry per visual; first-class measured morphAttributes-empty). Verified in-repo three@0.170.0: the BufferGeometry constructor assigns `this.morphAttributes = {}` and `this.morphTargetsRelative = false`. r170 `WebGLRenderer` calls `WebGLMorphtargets.update` when `morphAttributes.position`, `.normal`, or `.color` is not `undefined` (an empty array or empty BufferAttribute under the key still counts). Mutate the existing object (delete own keys; dispose a leftover BufferAttribute only when `dispose` exists and it is not a live attribute). Do not reassign `null` / `undefined`. Does not invent morph targets; does not call `updateMorphTargets()`; does not add morphAttributes; does not enable morphing; does not touch Mesh `morphTargetInfluences` / `morphTargetDictionary`; does not touch Object3D `animations`. Mapped / lit / interleaved / colliders stay authored. Does not pin `mesh.visible` or change `matrixAutoUpdate` / `matrixWorldAutoUpdate` / `layers` / `up` / `scale` / `rotation.order` / prior material pins. Draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, morphTargets-absent 13 unchanged vs v0.85. morphAttributes-empty 13 is the new count. Headset ms / FFR still unmeasured.
+
 ## [0.87.0] — 2026-09-21
 
 ### Changed

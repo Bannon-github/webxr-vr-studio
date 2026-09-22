@@ -1018,6 +1018,59 @@
  * companions / polygonOffset
  * companions / dithering / A2C /
  * `blendColor` / `blendAlpha`.
+ *
+ * v0.86: after that Mesh morph-target
+ * absence,
+ * `pinColorOnlyVisualMorphAttributes`
+ * clears leftover BufferGeometry
+ * `morphAttributes` so
+ * `Object.keys(geometry.morphAttributes).length === 0`
+ * and pins `morphTargetsRelative`
+ * to the r170 default `false` on
+ * packed color-only unlit MeshBasic
+ * visual geometries (body LOD leaves
+ * + lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Verified r170 (three@0.170.0):**
+ * the BufferGeometry constructor
+ * assigns `this.morphAttributes = {}`
+ * and `this.morphTargetsRelative = false`.
+ * r170 `WebGLRenderer` calls
+ * `WebGLMorphtargets.update` when
+ * `morphAttributes.position`,
+ * `.normal`, or `.color` is not
+ * `undefined` (an empty array or
+ * empty BufferAttribute under the
+ * key still counts). Mutate the
+ * existing object: delete own keys;
+ * dispose a leftover BufferAttribute
+ * only when `dispose` exists and the
+ * attribute is not a live geometry
+ * attribute. Do **not** reassign
+ * `null` / `undefined`. Set
+ * `morphTargetsRelative = false`
+ * only when it is not already false.
+ * Does **not** invent morph targets.
+ * Does **not** call
+ * `updateMorphTargets()`. Does **not**
+ * add morphAttributes. Does **not**
+ * enable morphing. Does **not** touch
+ * Mesh `morphTargetInfluences` /
+ * `morphTargetDictionary` (v0.85).
+ * Does **not** touch Object3D
+ * `animations` (v0.84). Does **not**
+ * touch Material `glslVersion`. Does
+ * **not** enable shadows. Does not
+ * hex-dedupe or invent meshes.
+ * Mapped / lit / interleaved stay
+ * authored. Collider meshes stay
+ * untouched. Does **not** pin
+ * `mesh.visible`, change
+ * `matrixAutoUpdate`, change
+ * `matrixWorldAutoUpdate`, change
+ * `layers`, change `up`, change
+ * `scale`, change `rotation.order`,
+ * or change prior material pins.
  */
 
 import {
@@ -1040,6 +1093,7 @@ import {
   pinColorOnlyVisualShadowCallbacks,
   pinColorOnlyVisualAnimations,
   pinColorOnlyVisualMorphTargets,
+  pinColorOnlyVisualMorphAttributes,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1213,6 +1267,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualShadowCallbacks(root);
   pinColorOnlyVisualAnimations(root);
   pinColorOnlyVisualMorphTargets(root);
+  pinColorOnlyVisualMorphAttributes(root);
   return root;
 }
 
