@@ -1071,6 +1071,64 @@
  * `layers`, change `up`, change
  * `scale`, change `rotation.order`,
  * or change prior material pins.
+ *
+ * v0.87: after that morphAttributes
+ * clear,
+ * `pinColorOnlyVisualGroups`
+ * clears leftover BufferGeometry
+ * `groups` so
+ * `Array.isArray(geometry.groups) &&
+ * geometry.groups.length === 0`
+ * on packed color-only unlit
+ * MeshBasic visual geometries
+ * (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Verified r170 (three@0.170.0):**
+ * the BufferGeometry constructor
+ * assigns `this.groups = []`.
+ * `clearGroups()` assigns a new
+ * `[]` (it does not set length on
+ * the existing array). Mutate the
+ * existing array
+ * (`groups.length = 0`). If
+ * missing or non-array, assign
+ * `groups = []`. Do **not** call
+ * `clearGroups()`. Do **not**
+ * invent groups. Do **not** assign
+ * a material array. Do **not**
+ * touch `drawRange`. r170
+ * `WebGLRenderer.projectObject`
+ * pushes one render item per group
+ * only when `Array.isArray(material)`.
+ * A single MeshBasicMaterial pushes
+ * one item with `group = null`, so
+ * leftover groups do not multiply
+ * draws while the material stays a
+ * single MeshBasicMaterial.
+ * Clearing the list keeps a later
+ * material-array binding or
+ * `BufferGeometry.copy` round-trip
+ * from reviving per-group draws.
+ * Does **not** touch
+ * `morphAttributes` /
+ * `morphTargetsRelative` (v0.86).
+ * Does **not** touch Mesh
+ * `morphTargetInfluences` /
+ * `morphTargetDictionary` (v0.85).
+ * Does **not** touch Object3D
+ * `animations` (v0.84). Does **not**
+ * enable shadows. Does not
+ * hex-dedupe or invent meshes.
+ * Mapped / lit / interleaved stay
+ * authored. Collider meshes stay
+ * untouched. Does **not** pin
+ * `mesh.visible`, change
+ * `matrixAutoUpdate`, change
+ * `matrixWorldAutoUpdate`, change
+ * `layers`, change `up`, change
+ * `scale`, change `rotation.order`,
+ * or change prior material pins.
  */
 
 import {
@@ -1094,6 +1152,7 @@ import {
   pinColorOnlyVisualAnimations,
   pinColorOnlyVisualMorphTargets,
   pinColorOnlyVisualMorphAttributes,
+  pinColorOnlyVisualGroups,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1268,6 +1327,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualAnimations(root);
   pinColorOnlyVisualMorphTargets(root);
   pinColorOnlyVisualMorphAttributes(root);
+  pinColorOnlyVisualGroups(root);
   return root;
 }
 
