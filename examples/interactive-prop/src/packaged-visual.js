@@ -1447,6 +1447,56 @@
  * or invent meshes. Fail-soft (no lod
  * groups) still runs this pin,
  * including the fastener.
+ *
+ * v0.95: after that usage pin,
+ * `pinColorOnlyVisualNormalized` pins
+ * leftover BufferAttribute `normalized`
+ * to the r170 constructor default
+ * `false` (`normalized === false`) on
+ * every non-interleaved BufferAttribute
+ * plus `geometry.index` when it is a
+ * BufferAttribute, on those same packed
+ * color-only unlit MeshBasic visual
+ * geometries (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate and the
+ * same collider / interleaved / mapped /
+ * lit / shared-material /
+ * shared-geometry skip rules).
+ * **Checked installed three@0.170.0:**
+ * the BufferAttribute constructor is
+ * `(array, itemSize, normalized = false)`
+ * and assigns `this.normalized = normalized`.
+ * Omitting the argument leaves
+ * `normalized === false`.
+ * `Float16BufferAttribute` forwards that
+ * flag. `WebGLAttributes.createBuffer`
+ * does not read `normalized`.
+ * `WebGLBindingStates.setupVertexAttributes`
+ * passes `geometryAttribute.normalized`
+ * to `gl.vertexAttribPointer`. A leftover
+ * `normalized === true` on Float16 /
+ * Float32 `position` (or the index)
+ * incorrectly normalizes static packed
+ * color-only props and breaks Quest 3
+ * TBDR draws. Assign
+ * `attribute.normalized = false` in
+ * place only when it is not already
+ * false. Do **not** replace the
+ * attribute, the typed array, or the
+ * geometry. Do **not** call `setUsage`
+ * (v0.94 usage stays). Do **not** touch
+ * `updateRange` (v0.90) or `updateRanges`
+ * (v0.91). Do **not** touch geometry
+ * `boundingBox` / `boundingSphere`
+ * (v0.92). Do **not** touch Mesh
+ * `boundingSphere` (v0.93). Do **not**
+ * change `frustumCulled`. Mapped / lit /
+ * interleaved keep authored `normalized`.
+ * Collider meshes stay untouched. Does
+ * not hex-dedupe or invent meshes.
+ * Fail-soft (no lod groups) still runs
+ * this pin, including the fastener.
  */
 
 import {
@@ -1478,6 +1528,7 @@ import {
   pinColorOnlyVisualBounds,
   pinColorOnlyVisualMeshBoundingSphere,
   pinColorOnlyVisualUsage,
+  pinColorOnlyVisualNormalized,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1660,6 +1711,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualBounds(root);
   pinColorOnlyVisualMeshBoundingSphere(root);
   pinColorOnlyVisualUsage(root);
+  pinColorOnlyVisualNormalized(root);
   return root;
 }
 

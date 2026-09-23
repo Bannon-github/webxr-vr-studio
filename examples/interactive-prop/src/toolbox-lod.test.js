@@ -61,6 +61,7 @@ const {
   pinColorOnlyUnlitBasicBounds,
   pinColorOnlyUnlitBasicMeshBoundingSphere,
   pinColorOnlyUnlitBasicUsage,
+  pinColorOnlyUnlitBasicNormalized,
   pinColorOnlyUnlitBasicCustomShadowMaterials,
   pinColorOnlyUnlitBasicCustomProgramCacheKey,
   pinColorOnlyUnlitBasicDefines,
@@ -89,6 +90,7 @@ const {
   pinColorOnlyVisualBounds,
   pinColorOnlyVisualMeshBoundingSphere,
   pinColorOnlyVisualUsage,
+  pinColorOnlyVisualNormalized,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
@@ -13069,4 +13071,425 @@ test("pinColorOnlyUnlitBasicUsage / pinColorOnlyVisualUsage skip mapped, lit, in
   assert.equal(sharedGeoVisual.boundingSphere, sharedGeoSphere, "geometry shared with a mapped mesh keeps the visual object sphere");
   assert.equal(std.geometry.getAttribute("position").usage, THREE.DynamicDrawUsage, "MeshStandard usage stays authored via entity helper");
   assert.equal(std.geometry.index.usage, THREE.StreamDrawUsage, "MeshStandard index usage stays authored via entity helper");
+});
+
+function bufferAttributeNormalizedDefault(attribute) {
+  if (!attribute || attribute.isInterleavedBufferAttribute) return true;
+  if (attribute.isBufferAttribute !== true) return true;
+  return attribute.normalized === false;
+}
+
+function meshNormalizedDefault(mesh) {
+  const geometry = mesh.geometry;
+  for (const name of Object.keys(geometry?.attributes || {})) {
+    if (!bufferAttributeNormalizedDefault(geometry.getAttribute(name))) return false;
+  }
+  return bufferAttributeNormalizedDefault(geometry?.index);
+}
+
+function assertQuestSafeUnlitNormalized(mesh, label = "color-only MeshBasic mesh") {
+  const geometry = mesh.geometry;
+  for (const name of Object.keys(geometry?.attributes || {})) {
+    const attribute = geometry.getAttribute(name);
+    if (!attribute || attribute.isInterleavedBufferAttribute || attribute.isBufferAttribute !== true) continue;
+    assert.equal(attribute.normalized, false, `${label} ${name} normalized is false`);
+  }
+  if (geometry?.index?.isBufferAttribute && !geometry.index.isInterleavedBufferAttribute) {
+    assert.equal(geometry.index.normalized, false, `${label} index normalized is false`);
+  }
+}
+
+function countVisualNormalized(crate) {
+  let defaults = 0;
+  let leftover = 0;
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (meshNormalizedDefault(mesh)) defaults += 1;
+    else leftover += 1;
+  }
+  return { defaults, leftover, total: defaults + leftover };
+}
+
+function setUsageCallCounter(attribute) {
+  let calls = 0;
+  const original = attribute.setUsage.bind(attribute);
+  attribute.setUsage = function countedSetUsage(value) {
+    calls += 1;
+    return original(value);
+  };
+  return () => calls;
+}
+
+test("r170 BufferAttribute constructor defaults normalized to false", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const omitted = new THREE.BufferAttribute(new Float32Array(3), 3);
+  assert.equal(omitted.normalized, false, "omitted normalized defaults to false");
+  const flagged = new THREE.BufferAttribute(new Float32Array(3), 3, true);
+  assert.equal(flagged.normalized, true, "explicit true is stored");
+  const float16Omitted = new THREE.Float16BufferAttribute(new Uint16Array(3), 3);
+  assert.equal(float16Omitted.isFloat16BufferAttribute, true);
+  assert.equal(float16Omitted.normalized, false, "omitted Float16 normalized defaults to false");
+  const float16Flagged = new THREE.Float16BufferAttribute(new Uint16Array(3), 3, true);
+  assert.equal(float16Flagged.normalized, true, "explicit Float16 true is stored");
+  assert.equal(float16Flagged.usage, THREE.StaticDrawUsage, "Float16 usage stays the constructor default");
+});
+
+test("v0.95 pins leftover BufferAttribute normalized on packed color-only MeshBasic visuals; envelope stays v0.94", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v0\.95 pins leftover BufferAttribute normalized/);
+  assert.match(crate.userData.l2.note, /13 normalized-default/);
+  assert.match(crate.userData.l2.note, /v0\.94 pins leftover BufferAttribute usage/);
+  assert.match(crate.userData.l2.note, /13 usage-static/);
+  assert.match(crate.userData.l2.note, /13 mesh-boundingSphere-absent/);
+  assert.match(crate.userData.l2.note, /13 bounds-null/);
+  assert.match(crate.userData.l2.note, /13 updateRanges-empty/);
+  assert.match(crate.userData.l2.note, /13 updateRange-default/);
+  assert.match(crate.userData.l2.note, /13 skinAttributes-absent/);
+  assert.match(crate.userData.l2.note, /13 drawRange-default/);
+  assert.match(crate.userData.l2.note, /13 groups-empty/);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    const position = mesh.geometry.getAttribute("position");
+    assert.equal(position.isFloat16BufferAttribute, true, "packed visual position stays Float16");
+    assert.equal(position.normalized, false, "Float16 position normalized stays false");
+    assertQuestSafeUnlitNormalized(mesh);
+    assertQuestSafeUnlitUsage(mesh);
+    assertQuestSafeUnlitMeshBoundingSphere(mesh);
+    assertQuestSafeUnlitBounds(mesh);
+    assertQuestSafeUnlitUpdateRanges(mesh);
+    assertQuestSafeUnlitUpdateRange(mesh);
+    assertQuestSafeUnlitSkinAttributes(mesh);
+    assertQuestSafeUnlitDrawRange(mesh);
+    assertQuestSafeUnlitGroups(mesh);
+    assert.equal(mesh.frustumCulled, true, "v0.50 frustumCulled stays true");
+  }
+  const normalizedCounts = countVisualNormalized(crate);
+  assert.equal(normalizedCounts.defaults, 13, "normalized-default count is 13");
+  assert.equal(normalizedCounts.leftover, 0);
+  const usageCounts = countVisualUsage(crate);
+  assert.equal(usageCounts.staticCount, 13, "usage-static count stays 13");
+  const sphereCounts = countVisualMeshBoundingSphere(crate);
+  assert.equal(sphereCounts.absent, 13, "mesh-boundingSphere-absent count stays 13");
+  const boundCounts = countVisualBounds(crate);
+  assert.equal(boundCounts.uniqueGeometries, 13, "one geometry per visual; geometries are not shared");
+  assert.equal(boundCounts.nulled, 13, "bounds-null count stays 13");
+  const rangeCounts = countVisualUpdateRanges(crate);
+  assert.equal(rangeCounts.empty, 13, "updateRanges-empty count stays 13");
+  const updateRangeCounts = countVisualUpdateRange(crate);
+  assert.equal(updateRangeCounts.defaults, 13, "updateRange-default count stays 13");
+  const skinCounts = countVisualSkinAttributes(crate);
+  assert.equal(skinCounts.absent, 13, "skinAttributes-absent count stays 13");
+  const drawCounts = countVisualDrawRange(crate);
+  assert.equal(drawCounts.defaults, 13, "drawRange-default count stays 13");
+  const groupCounts = countVisualGroups(crate);
+  assert.equal(groupCounts.empty, 13, "groups-empty count stays 13");
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assert.equal(fastener.parent.name, "toolbox", "fastener stays outside the LOD merge skip set");
+  assert.equal(fastener.geometry.getAttribute("position").isFloat16BufferAttribute, true, "fastener position stays Float16");
+  assert.equal(fastener.geometry.getAttribute("position").normalized, false, "fastener Float16 normalized stays false");
+  assertQuestSafeUnlitNormalized(fastener, "fastenerMesh");
+  assertQuestSafeUnlitUsage(fastener, "fastenerMesh usage stays StaticDrawUsage");
+  assertQuestSafeUnlitMeshBoundingSphere(fastener, "fastenerMesh object sphere stays absent");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assertQuestSafeUnlitNormalized(bodyHero, "body LOD leaf");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitNormalized(fastener, "fastener after L5 drive");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+  assert.equal(fastener.frustumCulled, true, "fastener frustumCulled stays true");
+});
+
+test("pinColorOnlyUnlitBasicNormalized pins leftover normalized in place and leaves usage, bounds, ranges, and the object sphere", () => {
+  const fresh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const freshPosition = fresh.geometry.getAttribute("position");
+  const freshIndex = fresh.geometry.index;
+  const freshArray = freshPosition.array;
+  const freshVersion = freshPosition.version;
+  const freshUsageCalls = setUsageCallCounter(freshPosition);
+  pinColorOnlyUnlitBasicNormalized(fresh);
+  assert.equal(freshUsageCalls(), 0, "already-false pin does not call setUsage");
+  assert.equal(fresh.geometry.getAttribute("position"), freshPosition, "already-false pin does not replace position");
+  assert.equal(fresh.geometry.index, freshIndex, "already-false pin does not replace the index");
+  assert.equal(freshPosition.array, freshArray, "already-false pin does not replace the typed array");
+  assert.equal(freshPosition.version, freshVersion, "already-false pin does not bump version");
+  assert.equal(freshPosition.usage, THREE.StaticDrawUsage, "already-false pin leaves usage");
+  assertQuestSafeUnlitNormalized(fresh, "already-false normalized");
+  assert.equal(fresh.boundingSphere, undefined, "already-false pin leaves object boundingSphere absent");
+  assert.equal(fresh.geometry.boundingBox, null, "already-false pin leaves geometry boundingBox null");
+  assert.equal(fresh.geometry.boundingSphere, null, "already-false pin leaves geometry boundingSphere null");
+
+  const wrong = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const position = wrong.geometry.getAttribute("position");
+  const index = wrong.geometry.index;
+  const positionArray = position.array;
+  const indexArray = index.array;
+  const positionVersion = position.version;
+  const geometryBounds = spoilGeometryBounds(wrong.geometry);
+  const objectSphere = spoilMeshBoundingSphere(wrong);
+  position.addUpdateRange(1, 2);
+  index.addUpdateRange(4, 1);
+  const positionRanges = position.updateRanges;
+  const indexRanges = index.updateRanges;
+  position.updateRange = { offset: 8, count: 3 };
+  index.updateRange = { offset: 8, count: 3 };
+  const positionRange = position.updateRange;
+  const indexRange = index.updateRange;
+  position.setUsage(THREE.DynamicDrawUsage);
+  index.setUsage(THREE.StreamDrawUsage);
+  position.normalized = true;
+  index.normalized = true;
+  const positionUsageCalls = setUsageCallCounter(position);
+  const indexUsageCalls = setUsageCallCounter(index);
+  const skin = attachLeftoverSkinAttributes(wrong.geometry);
+  const drawRange = wrong.geometry.drawRange;
+  wrong.geometry.drawRange.start = 3;
+  wrong.geometry.drawRange.count = 12;
+  const groups = wrong.geometry.groups;
+  wrong.geometry.addGroup(0, 3, 0);
+  const bag = wrong.geometry.morphAttributes;
+  bag.position = [new THREE.BufferAttribute(new Float32Array(3), 3)];
+  wrong.geometry.morphTargetsRelative = true;
+  const influences = [0.4];
+  const dictionary = { smile: 0 };
+  wrong.morphTargetInfluences = influences;
+  wrong.morphTargetDictionary = dictionary;
+  const clips = [new THREE.AnimationClip("dcc-leftover", 1, [])];
+  wrong.animations = clips;
+  const geometryBefore = wrong.geometry;
+  let computeCalls = 0;
+  wrong.geometry.computeBoundingBox = () => {
+    computeCalls += 1;
+  };
+  wrong.geometry.computeBoundingSphere = () => {
+    computeCalls += 1;
+  };
+  const returned = pinColorOnlyUnlitBasicNormalized(wrong);
+  assert.equal(returned, wrong, "normalized pin does not replace the mesh");
+  assert.equal(wrong.geometry, geometryBefore, "pin does not replace the geometry");
+  assert.equal(wrong.geometry.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(wrong.geometry.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not replace the position array");
+  assert.equal(index.array, indexArray, "pin does not replace the index array");
+  assert.equal(position.version, positionVersion, "pin does not bump position version");
+  assert.equal(positionUsageCalls(), 0, "pin does not call setUsage on position");
+  assert.equal(indexUsageCalls(), 0, "pin does not call setUsage on the index");
+  assert.equal(computeCalls, 0, "pin does not call computeBoundingBox or computeBoundingSphere");
+  assert.equal(position.normalized, false, "leftover normalized true on position is pinned");
+  assert.equal(index.normalized, false, "leftover normalized true on the index is pinned");
+  assert.equal(position.usage, THREE.DynamicDrawUsage, "pin leaves the v0.94 usage field alone");
+  assert.equal(index.usage, THREE.StreamDrawUsage, "pin leaves index usage alone");
+  assert.equal(wrong.boundingSphere, objectSphere, "pin does not delete the object sphere");
+  assert.equal(objectSphere.radius, 0.01, "pin does not mutate the object Sphere");
+  assert.equal(wrong.geometry.boundingBox, geometryBounds.box, "pin does not replace geometry boundingBox");
+  assert.equal(wrong.geometry.boundingSphere, geometryBounds.sphere, "pin does not replace geometry boundingSphere");
+  assert.equal(geometryBounds.box.min.x, 9, "pin does not mutate the geometry Box3");
+  assert.equal(geometryBounds.sphere.radius, 0.01, "pin does not mutate the geometry Sphere");
+  assert.equal(position.updateRanges, positionRanges, "pin does not replace updateRanges");
+  assert.equal(positionRanges.length, 1, "pin does not clear authored updateRanges");
+  assert.equal(index.updateRanges, indexRanges, "pin does not replace index updateRanges");
+  assert.equal(indexRanges.length, 1, "pin does not clear index updateRanges");
+  assert.equal(position.updateRange, positionRange, "pin does not replace updateRange");
+  assert.equal(positionRange.offset, 8, "pin does not touch updateRange.offset");
+  assert.equal(positionRange.count, 3, "pin does not touch updateRange.count");
+  assert.equal(indexRange.offset, 8, "pin does not touch index updateRange.offset");
+  assert.equal(indexRange.count, 3, "pin does not touch index updateRange.count");
+  assert.equal(wrong.geometry.getAttribute("skinIndex"), skin.skinIndex, "pin does not delete or replace skinIndex");
+  assert.equal(wrong.geometry.getAttribute("skinWeight"), skin.skinWeight, "pin does not delete or replace skinWeight");
+  assert.equal(wrong.geometry.drawRange, drawRange, "pin does not replace drawRange");
+  assert.equal(drawRange.start, 3, "pin does not change drawRange.start");
+  assert.equal(drawRange.count, 12, "pin does not change drawRange.count");
+  assert.equal(wrong.geometry.groups, groups, "pin does not replace groups");
+  assert.equal(groups.length, 1, "pin does not clear groups");
+  assert.equal(wrong.geometry.morphAttributes, bag, "pin does not replace morphAttributes");
+  assert.equal(bag.position.length, 1, "pin does not clear morphAttributes");
+  assert.equal(wrong.geometry.morphTargetsRelative, true, "pin does not pin morphTargetsRelative");
+  assert.equal(wrong.morphTargetInfluences, influences, "pin does not touch Mesh morphTargetInfluences");
+  assert.equal(wrong.morphTargetDictionary, dictionary, "pin does not touch Mesh morphTargetDictionary");
+  assert.equal(wrong.animations, clips, "pin does not touch Object3D animations");
+  assert.equal(wrong.frustumCulled, true, "pin does not change frustumCulled");
+
+  const half = new THREE.BufferGeometry();
+  const halfPosition = new THREE.Float16BufferAttribute(new Uint16Array(9), 3, true);
+  const halfArray = halfPosition.array;
+  half.setAttribute("position", halfPosition);
+  half.setIndex(new THREE.BufferAttribute(new Uint16Array([0, 1, 2]), 1, true));
+  const halfIndex = half.index;
+  const halfMesh = new THREE.Mesh(half, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const halfUsageCalls = setUsageCallCounter(halfPosition);
+  pinColorOnlyUnlitBasicNormalized(halfMesh);
+  assert.equal(halfMesh.geometry.getAttribute("position"), halfPosition, "Float16 pin keeps the position attribute");
+  assert.equal(halfPosition.array, halfArray, "Float16 pin keeps the typed array");
+  assert.equal(halfPosition.isFloat16BufferAttribute, true, "Float16 position stays Float16");
+  assert.equal(halfPosition.normalized, false, "Float16 position normalized is pinned false");
+  assert.equal(halfIndex.normalized, false, "Float16 mesh index normalized is pinned false");
+  assert.equal(halfPosition.usage, THREE.StaticDrawUsage, "Float16 pin does not rewrite usage");
+  assert.equal(halfUsageCalls(), 0, "Float16 pin does not call setUsage");
+
+  const missing = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const missingPosition = missing.geometry.getAttribute("position");
+  const missingIndex = missing.geometry.index;
+  delete missingPosition.normalized;
+  missingIndex.normalized = true;
+  missingPosition.setUsage(THREE.DynamicCopyUsage);
+  pinColorOnlyUnlitBasicNormalized(missing);
+  assert.equal(missing.geometry.getAttribute("position"), missingPosition, "deleted-normalized pin keeps the position attribute");
+  assert.equal(missing.geometry.index, missingIndex, "deleted-normalized pin keeps the index attribute");
+  assert.equal(missingPosition.normalized, false, "deleted normalized is restored to false");
+  assert.equal(missingIndex.normalized, false, "leftover index normalized true is pinned");
+  assert.equal(missingPosition.usage, THREE.DynamicCopyUsage, "deleted-normalized pin does not call setUsage");
+
+  const arrayMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    [new THREE.MeshBasicMaterial({ color: 0x633318 }), new THREE.MeshBasicMaterial({ color: 0xbe7e31 })]
+  );
+  arrayMesh.geometry.getAttribute("position").normalized = true;
+  pinColorOnlyUnlitBasicNormalized(arrayMesh);
+  assert.equal(arrayMesh.geometry.getAttribute("position").normalized, true, "material array keeps authored normalized");
+});
+
+test("pinColorOnlyUnlitBasicNormalized / pinColorOnlyVisualNormalized skip mapped, lit, interleaved, colliders, shared blocked", () => {
+  const colorOnly = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  const colorBounds = spoilGeometryBounds(colorOnly.geometry);
+  const colorSphere = spoilMeshBoundingSphere(colorOnly);
+  colorOnly.geometry.getAttribute("position").normalized = true;
+  colorOnly.geometry.index.normalized = true;
+  colorOnly.geometry.getAttribute("position").setUsage(THREE.DynamicDrawUsage);
+  colorOnly.geometry.getAttribute("position").addUpdateRange(4, 2);
+  const colorRanges = colorOnly.geometry.getAttribute("position").updateRanges;
+  colorOnly.geometry.getAttribute("position").updateRange = { offset: 2, count: 2 };
+  const colorUpdateRange = colorOnly.geometry.getAttribute("position").updateRange;
+  pinColorOnlyUnlitBasicNormalized(colorOnly);
+  assertQuestSafeUnlitNormalized(colorOnly, "color-only leftover normalized is pinned");
+  assert.equal(colorOnly.geometry.getAttribute("position").usage, THREE.DynamicDrawUsage, "per-mesh pin does not call setUsage");
+  assert.equal(colorOnly.boundingSphere, colorSphere, "per-mesh pin leaves the object sphere");
+  assert.equal(colorOnly.geometry.boundingBox, colorBounds.box, "per-mesh pin leaves geometry boundingBox");
+  assert.equal(colorOnly.geometry.boundingSphere, colorBounds.sphere, "per-mesh pin leaves geometry boundingSphere");
+  assert.equal(colorRanges.length, 1, "per-mesh pin does not clear updateRanges");
+  assert.equal(colorUpdateRange.offset, 2, "per-mesh pin does not rewrite updateRange.offset");
+
+  const mappedMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mapped = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  mapped.geometry.getAttribute("position").normalized = true;
+  const std = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshStandardMaterial());
+  std.geometry.getAttribute("position").normalized = true;
+  std.geometry.index.normalized = true;
+  pinColorOnlyUnlitBasicNormalized(mapped);
+  pinColorOnlyUnlitBasicNormalized(std);
+  assert.equal(mapped.geometry.getAttribute("position").normalized, true, "mapped MeshBasic keeps authored normalized");
+  assert.equal(std.geometry.getAttribute("position").normalized, true, "MeshStandard keeps authored normalized");
+  assert.equal(std.geometry.index.normalized, true, "MeshStandard index normalized stays authored");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  const interleavedPosition = new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0);
+  interleavedPosition.normalized = true;
+  interleavedGeo.setAttribute("position", interleavedPosition);
+  interleavedGeo.setIndex([0, 1, 2]);
+  interleavedGeo.index.normalized = true;
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  pinColorOnlyUnlitBasicNormalized(interleaved);
+  assert.equal(interleaved.geometry.getAttribute("position"), interleavedPosition, "interleaved position stays");
+  assert.equal(interleavedPosition.normalized, true, "interleaved position normalized stays authored");
+  assert.equal(interleavedGeo.index.normalized, true, "interleaved geometry index normalized stays authored");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  mappedMesh.geometry.getAttribute("position").normalized = true;
+  const mappedBounds = spoilGeometryBounds(mappedMesh.geometry);
+  const mappedSphere = spoilMeshBoundingSphere(mappedMesh, 0.05);
+  const colorMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  const colorMeshBounds = spoilGeometryBounds(colorMesh.geometry);
+  const colorMeshSphere = spoilMeshBoundingSphere(colorMesh);
+  colorMesh.geometry.getAttribute("position").normalized = true;
+  colorMesh.geometry.index.normalized = true;
+  colorMesh.geometry.getAttribute("position").setUsage(THREE.DynamicDrawUsage);
+  colorMesh.geometry.getAttribute("position").updateRange = { offset: 2, count: 2 };
+  const authoredUpdateRange = colorMesh.geometry.getAttribute("position").updateRange;
+  colorMesh.geometry.getAttribute("position").addUpdateRange(1, 1);
+  const colorUpdateRanges = colorMesh.geometry.getAttribute("position").updateRanges;
+  const collider = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.geometry.getAttribute("position").normalized = true;
+  collider.geometry.index.normalized = true;
+  const colliderSphere = spoilMeshBoundingSphere(collider, 0.06);
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedVisual.geometry.getAttribute("position").normalized = true;
+  const sharedVisualSphere = spoilMeshBoundingSphere(sharedVisual, 0.07);
+  const sharedCollider = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedGeo = mappedMesh.geometry;
+  const sharedGeoVisual = new THREE.Mesh(sharedGeo, new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  const sharedGeoSphere = spoilMeshBoundingSphere(sharedGeoVisual, 0.09);
+  body.add(mappedMesh, colorMesh, sharedVisual, sharedGeoVisual, interleaved);
+  root.add(body, collider, sharedCollider, std);
+  pinColorOnlyVisualNormalized(root);
+  assertQuestSafeUnlitNormalized(colorMesh, "entity helper color-only");
+  assert.equal(colorMesh.geometry.getAttribute("position").usage, THREE.DynamicDrawUsage, "entity helper does not call setUsage");
+  assert.equal(colorMesh.boundingSphere, colorMeshSphere, "entity helper does not delete the object sphere");
+  assert.equal(colorMesh.geometry.boundingBox, colorMeshBounds.box, "entity helper does not replace geometry boundingBox");
+  assert.equal(colorMesh.geometry.boundingSphere, colorMeshBounds.sphere, "entity helper does not replace geometry boundingSphere");
+  assert.equal(colorMesh.geometry.getAttribute("position").updateRange, authoredUpdateRange, "entity helper does not replace updateRange");
+  assert.equal(authoredUpdateRange.offset, 2, "entity helper does not change updateRange.offset");
+  assert.equal(colorUpdateRanges.length, 1, "entity helper does not clear updateRanges");
+  assert.equal(mappedMesh.geometry.getAttribute("position").normalized, true, "mapped MeshBasic keeps authored normalized via entity helper");
+  assert.equal(mappedMesh.boundingSphere, mappedSphere, "mapped object sphere stays authored via entity helper");
+  assert.equal(mappedMesh.geometry.boundingBox, mappedBounds.box, "mapped geometry box stays authored via entity helper");
+  assert.equal(interleavedPosition.normalized, true, "interleaved position normalized stays authored via entity helper");
+  assert.equal(interleaved.geometry.index.normalized, true, "interleaved index normalized stays authored via entity helper");
+  assert.equal(collider.geometry.getAttribute("position").normalized, true, "collider position normalized stays authored");
+  assert.equal(collider.geometry.index.normalized, true, "collider index normalized stays authored");
+  assert.equal(collider.boundingSphere, colliderSphere, "collider object sphere stays authored");
+  assert.equal(sharedVisual.geometry.getAttribute("position").normalized, true, "shared collider material visual keeps authored normalized");
+  assert.equal(sharedVisual.boundingSphere, sharedVisualSphere, "shared collider material visual keeps its object sphere");
+  assert.equal(sharedGeoVisual.geometry, sharedGeo, "shared mapped geometry is not replaced");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("position").normalized, true, "geometry shared with a mapped mesh keeps authored normalized");
+  assert.equal(sharedGeoVisual.boundingSphere, sharedGeoSphere, "geometry shared with a mapped mesh keeps the visual object sphere");
+  assert.equal(std.geometry.getAttribute("position").normalized, true, "MeshStandard normalized stays authored via entity helper");
+  assert.equal(std.geometry.index.normalized, true, "MeshStandard index normalized stays authored via entity helper");
 });
