@@ -1406,6 +1406,47 @@
  * Fail-soft (no lod groups) still
  * runs this pin, including the
  * fastener.
+ *
+ * v0.94: after that object-sphere
+ * clear, `pinColorOnlyVisualUsage`
+ * pins leftover BufferAttribute
+ * `usage` to the r170 constructor
+ * default `StaticDrawUsage` on every
+ * non-interleaved BufferAttribute
+ * plus `geometry.index` when it is a
+ * BufferAttribute, on those same
+ * packed color-only unlit MeshBasic
+ * visual geometries (body LOD leaves
+ * + lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate and
+ * the same collider / interleaved /
+ * mapped / lit / shared-material /
+ * shared-geometry skip rules).
+ * **Checked installed three@0.170.0:**
+ * the BufferAttribute constructor
+ * assigns `this.usage = StaticDrawUsage`.
+ * `setUsage` writes that field in
+ * place. `WebGLAttributes.createBuffer`
+ * passes `attribute.usage` to
+ * `gl.bufferData`. A leftover
+ * `DynamicDrawUsage` (or any other
+ * non-static usage) on static packed
+ * color-only props is a wasteful
+ * buffer hint on Quest 3 TBDR.
+ * Do **not** replace the attribute
+ * or the geometry. Do **not** touch
+ * `updateRange` (v0.90) or
+ * `updateRanges` (v0.91). Do **not**
+ * touch geometry `boundingBox` /
+ * `boundingSphere` (v0.92). Do **not**
+ * touch Mesh `boundingSphere` (v0.93).
+ * Do **not** change `frustumCulled`.
+ * Mapped / lit / interleaved keep
+ * authored usage. Collider meshes
+ * stay untouched. Does not hex-dedupe
+ * or invent meshes. Fail-soft (no lod
+ * groups) still runs this pin,
+ * including the fastener.
  */
 
 import {
@@ -1436,6 +1477,7 @@ import {
   pinColorOnlyVisualUpdateRanges,
   pinColorOnlyVisualBounds,
   pinColorOnlyVisualMeshBoundingSphere,
+  pinColorOnlyVisualUsage,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1617,6 +1659,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualUpdateRanges(root);
   pinColorOnlyVisualBounds(root);
   pinColorOnlyVisualMeshBoundingSphere(root);
+  pinColorOnlyVisualUsage(root);
   return root;
 }
 
