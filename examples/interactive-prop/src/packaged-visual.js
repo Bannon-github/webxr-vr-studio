@@ -1314,6 +1314,50 @@
  * or invent meshes. Fail-soft
  * (no lod groups) still runs this
  * pin, including the fastener.
+ *
+ * v0.92: after that updateRanges
+ * clear, `pinColorOnlyVisualBounds`
+ * pins leftover BufferGeometry
+ * `boundingBox` and `boundingSphere`
+ * to the r170 constructor `null`
+ * on packed color-only unlit
+ * MeshBasic visual geometries
+ * (body LOD leaves + lid/latch/tool
+ * + fastener; same
+ * `isColorOnlyUnlitBasic` gate).
+ * **Checked installed three@0.170.0:**
+ * the BufferGeometry constructor
+ * assigns `this.boundingBox = null`
+ * and `this.boundingSphere = null`.
+ * `Frustum.intersectsObject` uses
+ * `geometry.boundingSphere` when
+ * the Mesh has no own
+ * `boundingSphere`, and calls
+ * `computeBoundingSphere` only when
+ * that sphere is `null`. A leftover
+ * non-null sphere is tested as-is
+ * while `frustumCulled` stays true
+ * (v0.50). Assign `null`. Do **not**
+ * invent `Box3` / `Sphere`. Do
+ * **not** call `computeBoundingBox`
+ * or `computeBoundingSphere` in the
+ * pin. Do **not** touch
+ * `updateRanges` (v0.91). Do **not**
+ * touch `updateRange` (v0.90). Do
+ * **not** change `usage`. Do **not**
+ * replace attributes or the
+ * geometry. Do **not** change
+ * `frustumCulled`. Mapped / lit /
+ * interleaved stay authored.
+ * Collider meshes stay untouched.
+ * Does not hex-dedupe or invent
+ * meshes. Fail-soft (no lod groups)
+ * still runs this pin, including
+ * the fastener. The v0.43 `onUpload`
+ * callback recomputes bounds when
+ * they are null while CPU arrays
+ * are still present, then releases
+ * the arrays.
  */
 
 import {
@@ -1342,6 +1386,7 @@ import {
   pinColorOnlyVisualSkinAttributes,
   pinColorOnlyVisualUpdateRange,
   pinColorOnlyVisualUpdateRanges,
+  pinColorOnlyVisualBounds,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1521,6 +1566,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualSkinAttributes(root);
   pinColorOnlyVisualUpdateRange(root);
   pinColorOnlyVisualUpdateRanges(root);
+  pinColorOnlyVisualBounds(root);
   return root;
 }
 

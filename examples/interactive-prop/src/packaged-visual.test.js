@@ -4980,3 +4980,158 @@ test("packaged ingest without lod groups still clears leftover BufferAttribute u
   assert.equal(colliderRanges[0].start, 6, "fail-soft collider updateRanges.start stays authored");
   assert.equal(colliderRanges[0].count, 3, "fail-soft collider updateRanges.count stays authored");
 });
+
+function assertQuestSafeUnlitBounds(mesh, label = "color-only MeshBasic mesh") {
+  assert.equal(mesh.geometry.boundingBox, null, `${label} boundingBox is null`);
+  assert.equal(mesh.geometry.boundingSphere, null, `${label} boundingSphere is null`);
+}
+
+function spoilGeometryBounds(geometry) {
+  const box = new THREE.Box3(new THREE.Vector3(9, 8, 7), new THREE.Vector3(10, 11, 12));
+  const sphere = new THREE.Sphere(new THREE.Vector3(4, 5, 6), 0.01);
+  geometry.boundingBox = box;
+  geometry.boundingSphere = sphere;
+  return { box, sphere };
+}
+
+test("packaged ingest pins leftover BufferGeometry bounds to null after updateRanges clear; mapped/lit/collider stay authored", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const mappedSpoiled = spoilGeometryBounds(mappedMesh.geometry);
+  mappedMesh.geometry.getAttribute("position").addUpdateRange(3, 6);
+  const mappedRanges = mappedMesh.geometry.getAttribute("position").updateRanges;
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const wrongMesh = boxMesh("dccBounds", wrong);
+  const geometryBefore = wrongMesh.geometry;
+  const position = wrongMesh.geometry.getAttribute("position");
+  const index = wrongMesh.geometry.index;
+  const spoiled = spoilGeometryBounds(wrongMesh.geometry);
+  position.addUpdateRange(2, 4);
+  const positionRanges = position.updateRanges;
+  position.updateRange = { offset: 8, count: 3 };
+  const positionRange = position.updateRange;
+  position.setUsage(THREE.DynamicDrawUsage);
+  const drawRange = wrongMesh.geometry.drawRange;
+  wrongMesh.geometry.drawRange.start = 2;
+  wrongMesh.geometry.drawRange.count = 9;
+  const bag = wrongMesh.geometry.groups;
+  wrongMesh.geometry.addGroup(0, 3, 0);
+  const morphBag = wrongMesh.geometry.morphAttributes;
+  morphBag.position = [];
+  wrongMesh.geometry.morphTargetsRelative = true;
+  let computeCalls = 0;
+  const realBox = wrongMesh.geometry.computeBoundingBox.bind(wrongMesh.geometry);
+  const realSphere = wrongMesh.geometry.computeBoundingSphere.bind(wrongMesh.geometry);
+  wrongMesh.geometry.computeBoundingBox = (...args) => {
+    computeCalls += 1;
+    return realBox(...args);
+  };
+  wrongMesh.geometry.computeBoundingSphere = (...args) => {
+    computeCalls += 1;
+    return realSphere(...args);
+  };
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  const colliderSpoiled = spoilGeometryBounds(colliderGrabBefore.geometry);
+  colliderGrabBefore.geometry.getAttribute("position").addUpdateRange(4, 8);
+  const colliderRanges = colliderGrabBefore.geometry.getAttribute("position").updateRanges;
+  fastener.geometry.morphAttributes.position = [];
+  const fastenerPosition = fastener.geometry.getAttribute("position");
+  const fastenerSpoiled = spoilGeometryBounds(fastener.geometry);
+  fastenerPosition.addUpdateRange(5, 1);
+  const fastenerRanges = fastenerPosition.updateRanges;
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(wrongMesh.geometry, geometryBefore, "ingest does not replace the geometry");
+  assert.equal(wrongMesh.geometry.getAttribute("position"), position, "morph-blocked position stays");
+  assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
+  assert.equal(computeCalls, 0, "bounds pin does not call compute*");
+  assertQuestSafeUnlitBounds(wrongMesh, "packaged color-only MeshBasic");
+  assert.equal(spoiled.box.min.x, 9, "pin does not mutate the detached Box3");
+  assert.equal(spoiled.sphere.radius, 0.01, "pin does not mutate the detached Sphere");
+  assert.equal(position.updateRanges, positionRanges, "ingest still clears updateRanges in place");
+  assert.equal(positionRanges.length, 0, "v0.91 updateRanges clear still holds");
+  assert.equal(position.updateRange, positionRange, "ingest does not replace updateRange");
+  assert.equal(positionRange.offset, 0, "v0.90 updateRange pin still holds");
+  assert.equal(positionRange.count, -1, "v0.90 updateRange count still holds");
+  assert.equal(position.usage, THREE.DynamicDrawUsage, "ingest does not change a leftover DynamicDrawUsage");
+  assert.equal(wrongMesh.geometry.drawRange, drawRange, "bounds pin does not replace drawRange");
+  assertQuestSafeUnlitDrawRange(wrongMesh, "drawRange pin still holds");
+  assert.equal(wrongMesh.geometry.groups, bag, "bounds pin does not replace groups");
+  assert.equal(bag.length, 0, "earlier groups pin still clears leftover groups");
+  assert.equal(wrongMesh.geometry.morphAttributes, morphBag, "bounds pin does not replace morphAttributes");
+  assert.equal(Object.keys(morphBag).length, 0, "earlier morphAttributes pin still clears leftover keys");
+  assert.equal(wrongMesh.geometry.morphTargetsRelative, false, "earlier morphAttributes pin still pins morphTargetsRelative");
+  assert.equal(fastener.geometry.getAttribute("position"), fastenerPosition, "morph-blocked fastener position stays");
+  assert.equal(fastenerPosition.updateRanges, fastenerRanges, "fastener updateRanges array is kept");
+  assert.equal(fastenerRanges.length, 0, "fastener leftover updateRanges is cleared");
+  assertQuestSafeUnlitBounds(fastener, "fastener");
+  assert.equal(fastenerSpoiled.box.min.x, 9, "fastener pin does not mutate the detached Box3");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+  assert.equal(fastener.frustumCulled, true, "fastener frustumCulled stays true");
+  assert.equal(mappedMesh.geometry.boundingBox, mappedSpoiled.box, "mapped MeshBasic keeps its boundingBox");
+  assert.equal(mappedMesh.geometry.boundingSphere, mappedSpoiled.sphere, "mapped MeshBasic keeps its boundingSphere");
+  assert.equal(mappedRanges.length, 1, "mapped MeshBasic keeps authored updateRanges");
+  assert.equal(mappedRanges[0].start, 3, "mapped updateRanges.start stays authored");
+  assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
+  assert.equal(wrongMesh, root.getObjectByName("dccBounds"), "ingest does not replace the color-only mesh");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.geometry.boundingBox, colliderSpoiled.box, "collider Mesh keeps its boundingBox");
+  assert.equal(colliderGrab.geometry.boundingSphere, colliderSpoiled.sphere, "collider Mesh keeps its boundingSphere");
+  assert.equal(colliderRanges.length, 1, "collider updateRanges stays authored");
+  assert.equal(colliderRanges[0].start, 4, "collider updateRanges.start stays authored");
+});
+
+test("packaged ingest without lod groups still pins leftover BufferGeometry bounds to null", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  const bodyMesh = visualMeshes(body)[0];
+  const bodyPosition = bodyMesh.geometry.getAttribute("position");
+  const bodySpoiled = spoilGeometryBounds(bodyMesh.geometry);
+  bodyPosition.addUpdateRange(2, 4);
+  const bodyRanges = bodyPosition.updateRanges;
+  bodyPosition.updateRange = { offset: 2, count: 4 };
+  const bodyRange = bodyPosition.updateRange;
+  bodyMesh.geometry.drawRange.start = 2;
+  bodyMesh.geometry.drawRange.count = 4;
+  bodyMesh.geometry.addGroup(0, 3, 0);
+  spoilGeometryBounds(visualMeshes(lid)[0].geometry);
+  visualMeshes(latch)[0].geometry.boundingBox = null;
+  visualMeshes(latch)[0].geometry.boundingSphere = null;
+  delete visualMeshes(tool)[0].geometry.boundingBox;
+  delete visualMeshes(tool)[0].geometry.boundingSphere;
+  fastener.geometry.morphAttributes.position = [];
+  const fastenerPosition = fastener.geometry.getAttribute("position");
+  spoilGeometryBounds(fastener.geometry);
+  const colliderGrab = root.getObjectByName("collider_grab");
+  const colliderSpoiled = spoilGeometryBounds(colliderGrab.geometry);
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(bodyMesh.geometry.getAttribute("position"), bodyPosition, "fail-soft body position stays");
+  assert.equal(bodyMesh.geometry.boundingBox, null, "fail-soft body boundingBox is null");
+  assert.equal(bodyMesh.geometry.boundingSphere, null, "fail-soft body boundingSphere is null");
+  assert.equal(bodySpoiled.box.min.x, 9, "fail-soft pin does not mutate the detached Box3");
+  assert.equal(bodySpoiled.sphere.radius, 0.01, "fail-soft pin does not mutate the detached Sphere");
+  assert.equal(bodyPosition.updateRanges, bodyRanges, "fail-soft updateRanges array is kept");
+  assert.equal(bodyRanges.length, 0, "fail-soft updateRanges clear still holds");
+  assert.equal(bodyPosition.updateRange, bodyRange, "fail-soft bounds pin does not replace updateRange");
+  assert.equal(bodyRange.offset, 0, "fail-soft updateRange pin still rewrites offset");
+  assert.equal(bodyRange.count, -1, "fail-soft updateRange pin still rewrites count");
+  assertQuestSafeUnlitDrawRange(bodyMesh, "fail-soft body drawRange still pinned");
+  assert.equal(bodyMesh.geometry.groups.length, 0, "fail-soft groups pin still clears groups");
+  assertQuestSafeUnlitBounds(visualMeshes(lid)[0], "fail-soft lid");
+  assertQuestSafeUnlitBounds(visualMeshes(latch)[0], "fail-soft latch");
+  assertQuestSafeUnlitBounds(visualMeshes(tool)[0], "fail-soft tool");
+  assert.equal(fastener.geometry.getAttribute("position"), fastenerPosition, "fail-soft fastener position stays");
+  assertQuestSafeUnlitBounds(fastener, "fail-soft fastener");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastener.matrixAutoUpdate, true, "fail-soft fastener stays matrix-live");
+  assert.equal(colliderGrab.geometry.boundingBox, colliderSpoiled.box, "fail-soft collider keeps its boundingBox");
+  assert.equal(colliderGrab.geometry.boundingSphere, colliderSpoiled.sphere, "fail-soft collider keeps its boundingSphere");
+  assert.equal(colliderSpoiled.box.min.y, 8, "fail-soft collider box stays authored");
+});

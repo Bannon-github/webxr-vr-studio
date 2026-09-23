@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.94.0] — 2026-09-22
+
+### Changed
+
+- `crate-toolbox` **v0.92.0** L3 packaging/perf UPGRADE: after the v0.91 BufferAttribute `updateRanges` clear, also pin leftover BufferGeometry `boundingBox` and `boundingSphere` to the r170 constructor `null` on packed color-only unlit MeshBasic visual geometries (13 visual meshes; one geometry per visual; first-class measured bounds-null). `pinColorOnlyUnlitBasicBounds` / `pinColorOnlyVisualBounds` run after `pinColorOnlyVisualUpdateRanges` on procedural create and packaged ingest, including fail-soft (no lod groups) and the fastener. Assign `null`. Do not invent `Box3` / `Sphere`. Do not call `computeBoundingBox` / `computeBoundingSphere` in the pin. Checked installed three@0.170.0: the BufferGeometry constructor assigns both `null`. `Frustum.intersectsObject` uses `geometry.boundingSphere` when the Mesh has no own `boundingSphere` and calls `computeBoundingSphere` only when that sphere is `null`; a leftover non-null sphere is tested as-is while `frustumCulled` stays true (v0.50). Does not touch `updateRanges` (v0.91). Does not touch `updateRange` (v0.90). Does not change `usage` (v0.43 StaticDrawUsage stays). Does not replace attributes or geometry. Does not delete `skinIndex` / `skinWeight`. Does not touch `drawRange` / `groups` / `morphAttributes` / `morphTargetsRelative`. Does not change `frustumCulled`. Mapped / lit / interleaved / colliders stay authored. The v0.43 `onUpload` callback recomputes bounds when they are null while CPU arrays are still present, then releases the arrays. Clean procedural pre-upload draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, updateRanges-empty 13, updateRange-default 13, skinAttributes-absent 13, drawRange-default 13, groups-empty 13 stay vs v0.91. bounds-null 13 is the new count (13 unique geometries). Quest 3 90 Hz / 72 fallback requested, not measured. Headset ms / FFR still unmeasured. Do not require 207/240 Hz.
+
 ## [0.93.0] — 2026-09-22
 
 ### Changed
