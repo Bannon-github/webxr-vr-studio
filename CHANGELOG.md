@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.96.0] — 2026-09-23
+
+### Changed
+
+- `crate-toolbox` **v0.94.0** L3 packaging/perf UPGRADE: after the v0.93 Mesh / Object3D `boundingSphere` clear (`mesh.boundingSphere === undefined` on the 13 packed color-only unlit MeshBasic visual meshes), also pin leftover BufferAttribute `usage` to the r170 constructor default `StaticDrawUsage` on every non-interleaved BufferAttribute plus `geometry.index` when it is a BufferAttribute, on those same visual geometries (13 visuals; one geometry per visual; first-class measured usage-static). `pinColorOnlyUnlitBasicUsage` / `pinColorOnlyVisualUsage` run after `pinColorOnlyVisualMeshBoundingSphere` on procedural create and packaged ingest, including fail-soft (no lod groups) and the fastener. Same `isColorOnlyUnlitBasic` gate and the same collider / interleaved / mapped / lit / shared-material / shared-geometry skip rules. `setUsage` assigns the value in place. Do not replace the attribute or the geometry. Checked installed three@0.170.0: the BufferAttribute constructor assigns `this.usage = StaticDrawUsage` (35044, `gl.STATIC_DRAW`). `WebGLAttributes.createBuffer` passes `attribute.usage` to `gl.bufferData`. A leftover `DynamicDrawUsage` (35048) or any other non-static usage on static packed color-only props is a wasteful buffer hint on Quest 3 TBDR. Does not touch `updateRange` (v0.90). Does not touch `updateRanges` (v0.91). Does not touch geometry `boundingBox` / `boundingSphere` (v0.92). Does not touch Mesh `boundingSphere` (v0.93). Does not change `frustumCulled`. Mapped / lit / interleaved / colliders keep authored usage. Clean procedural pre-upload draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, mesh-boundingSphere-absent 13, bounds-null 13, updateRanges-empty 13, updateRange-default 13, skinAttributes-absent 13, drawRange-default 13, groups-empty 13 stay vs v0.93. usage-static 13 is the new count. Quest 3 90 Hz / 72 fallback requested, not measured. Headset ms / FFR still unmeasured. Do not require 207/240 Hz.
+
 ## [0.95.0] — 2026-09-23
 
 ### Changed
