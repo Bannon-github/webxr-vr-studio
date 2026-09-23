@@ -59,6 +59,7 @@ const {
   pinColorOnlyUnlitBasicUpdateRange,
   pinColorOnlyUnlitBasicUpdateRanges,
   pinColorOnlyUnlitBasicBounds,
+  pinColorOnlyUnlitBasicMeshBoundingSphere,
   pinColorOnlyUnlitBasicCustomShadowMaterials,
   pinColorOnlyUnlitBasicCustomProgramCacheKey,
   pinColorOnlyUnlitBasicDefines,
@@ -85,6 +86,7 @@ const {
   pinColorOnlyVisualUpdateRange,
   pinColorOnlyVisualUpdateRanges,
   pinColorOnlyVisualBounds,
+  pinColorOnlyVisualMeshBoundingSphere,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
@@ -12327,4 +12329,381 @@ test("v0.43 onUpload recomputes bounds the v0.92 pin cleared, then releases CPU 
     assert.ok(mesh, name);
     assert.ok(mesh.geometry.boundingSphere.radius > 0, `${name} recomputed sphere covers the packed mesh`);
   }
+});
+
+function assertQuestSafeUnlitMeshBoundingSphere(mesh, label = "color-only MeshBasic mesh") {
+  assert.equal(mesh.boundingSphere, undefined, `${label} object boundingSphere is absent`);
+  assert.equal(Object.hasOwn(mesh, "boundingSphere"), false, `${label} has no own boundingSphere`);
+}
+
+function countVisualMeshBoundingSphere(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.boundingSphere === undefined) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+function spoilMeshBoundingSphere(mesh, radius = 0.01) {
+  const sphere = new THREE.Sphere(new THREE.Vector3(4, 5, 6), radius);
+  mesh.boundingSphere = sphere;
+  return sphere;
+}
+
+test("r170 Frustum.intersectsObject treats only undefined object.boundingSphere as absent", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), 3));
+  geometry.setIndex([0, 1, 2]);
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  assert.equal(mesh.boundingSphere, undefined, "fresh Mesh leaves object.boundingSphere absent");
+  assert.equal(Object.hasOwn(mesh, "boundingSphere"), false, "fresh Mesh has no own boundingSphere");
+  assert.equal(Object.hasOwn(THREE.Mesh.prototype, "boundingSphere"), false, "Mesh.prototype has no boundingSphere");
+  assert.equal(Object.hasOwn(THREE.Object3D.prototype, "boundingSphere"), false, "Object3D.prototype has no boundingSphere");
+  assert.equal(mesh.computeBoundingSphere, undefined, "Mesh has no computeBoundingSphere");
+  assert.equal(mesh.frustumCulled, true, "Mesh frustumCulled defaults true");
+
+  const frustum = new THREE.Frustum();
+  let geometrySphereCalls = 0;
+  geometry.computeBoundingSphere = () => {
+    geometrySphereCalls += 1;
+    geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 2);
+  };
+  frustum.intersectsObject(mesh);
+  assert.equal(geometrySphereCalls, 1, "undefined object sphere uses geometry.computeBoundingSphere when the geometry sphere is null");
+
+  geometrySphereCalls = 0;
+  geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 3);
+  const stale = new THREE.Sphere(new THREE.Vector3(9, 0, 0), 0.001);
+  mesh.boundingSphere = stale;
+  frustum.intersectsObject(mesh);
+  assert.equal(geometrySphereCalls, 0, "a non-undefined object sphere skips the geometry path");
+  assert.equal(mesh.boundingSphere, stale, "Frustum test does not replace the object sphere");
+
+  geometrySphereCalls = 0;
+  mesh.boundingSphere = null;
+  let objectCalls = 0;
+  mesh.computeBoundingSphere = () => {
+    objectCalls += 1;
+    mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1);
+  };
+  frustum.intersectsObject(mesh);
+  assert.equal(objectCalls, 1, "null object.boundingSphere still takes the object branch");
+  assert.equal(geometrySphereCalls, 0, "null object sphere does not fall through to geometry.computeBoundingSphere");
+});
+
+test("v0.93 deletes leftover object boundingSphere on packed color-only MeshBasic visuals; envelope stays v0.92", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v0\.93 deletes leftover Mesh\/Object3D boundingSphere/);
+  assert.match(crate.userData.l2.note, /13 mesh-boundingSphere-absent/);
+  assert.match(crate.userData.l2.note, /v0\.92 pins leftover BufferGeometry boundingBox\/boundingSphere/);
+  assert.match(crate.userData.l2.note, /13 bounds-null/);
+  assert.match(crate.userData.l2.note, /13 updateRanges-empty/);
+  assert.match(crate.userData.l2.note, /13 updateRange-default/);
+  assert.match(crate.userData.l2.note, /13 skinAttributes-absent/);
+  assert.match(crate.userData.l2.note, /13 drawRange-default/);
+  assert.match(crate.userData.l2.note, /13 groups-empty/);
+  assert.match(crate.userData.l2.note, /13 morphAttributes-empty/);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assertQuestSafeUnlitMeshBoundingSphere(mesh);
+    assertQuestSafeUnlitBounds(mesh);
+    assertQuestSafeUnlitUpdateRanges(mesh);
+    assertQuestSafeUnlitUpdateRange(mesh);
+    assertQuestSafeUnlitSkinAttributes(mesh);
+    assertQuestSafeUnlitDrawRange(mesh);
+    assertQuestSafeUnlitGroups(mesh);
+    assertQuestSafeUnlitMorphAttributes(mesh);
+    const position = mesh.geometry.getAttribute("position");
+    assert.equal(position.usage, THREE.StaticDrawUsage, "v0.43 StaticDrawUsage stays");
+    assert.equal(mesh.frustumCulled, true, "v0.50 frustumCulled stays true");
+  }
+  const sphereCounts = countVisualMeshBoundingSphere(crate);
+  assert.equal(sphereCounts.absent, 13, "mesh-boundingSphere-absent count is 13");
+  assert.equal(sphereCounts.leftover, 0);
+  const boundCounts = countVisualBounds(crate);
+  assert.equal(boundCounts.uniqueGeometries, 13, "one geometry per visual; geometries are not shared");
+  assert.equal(boundCounts.nulled, 13, "bounds-null count stays 13");
+  assert.equal(boundCounts.leftover, 0);
+  const rangeCounts = countVisualUpdateRanges(crate);
+  assert.equal(rangeCounts.empty, 13, "updateRanges-empty count stays 13");
+  const updateRangeCounts = countVisualUpdateRange(crate);
+  assert.equal(updateRangeCounts.defaults, 13, "updateRange-default count stays 13");
+  const skinCounts = countVisualSkinAttributes(crate);
+  assert.equal(skinCounts.absent, 13, "skinAttributes-absent count stays 13");
+  const drawCounts = countVisualDrawRange(crate);
+  assert.equal(drawCounts.defaults, 13, "drawRange-default count stays 13");
+  const groupCounts = countVisualGroups(crate);
+  assert.equal(groupCounts.empty, 13, "groups-empty count stays 13");
+  const morphAttrCounts = countVisualMorphAttributes(crate);
+  assert.equal(morphAttrCounts.empty, 13, "morphAttributes-empty count stays 13");
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assert.equal(fastener.parent.name, "toolbox", "fastener stays outside the LOD merge skip set");
+  assertQuestSafeUnlitMeshBoundingSphere(fastener, "fastenerMesh");
+  assertQuestSafeUnlitBounds(fastener, "fastenerMesh geometry bounds stay null");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assertQuestSafeUnlitMeshBoundingSphere(bodyHero, "body LOD leaf");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assertQuestSafeUnlitMeshBoundingSphere(fastener, "fastener after L5 drive");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+  assert.equal(fastener.frustumCulled, true, "fastener frustumCulled stays true");
+});
+
+test("pinColorOnlyUnlitBasicMeshBoundingSphere deletes leftover object spheres and leaves geometry bounds", () => {
+  const fresh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  assert.equal(fresh.boundingSphere, undefined, "fresh object boundingSphere is absent");
+  let freshComputes = 0;
+  fresh.geometry.computeBoundingBox = () => {
+    freshComputes += 1;
+  };
+  fresh.geometry.computeBoundingSphere = () => {
+    freshComputes += 1;
+  };
+  fresh.computeBoundingSphere = () => {
+    freshComputes += 1;
+  };
+  pinColorOnlyUnlitBasicMeshBoundingSphere(fresh);
+  assert.equal(freshComputes, 0, "already-absent object sphere pin does not call compute*");
+  assertQuestSafeUnlitMeshBoundingSphere(fresh, "already-absent object sphere");
+  assert.equal(fresh.geometry.boundingBox, null, "already-absent pin leaves geometry boundingBox null");
+  assert.equal(fresh.geometry.boundingSphere, null, "already-absent pin leaves geometry boundingSphere null");
+
+  const wrong = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const position = wrong.geometry.getAttribute("position");
+  const index = wrong.geometry.index;
+  const positionArray = position.array;
+  const indexArray = index.array;
+  const geometryBounds = spoilGeometryBounds(wrong.geometry);
+  const objectSphere = spoilMeshBoundingSphere(wrong);
+  position.addUpdateRange(1, 2);
+  index.addUpdateRange(4, 1);
+  const positionRanges = position.updateRanges;
+  const indexRanges = index.updateRanges;
+  position.updateRange = { offset: 8, count: 3 };
+  index.updateRange = { offset: 8, count: 3 };
+  const positionRange = position.updateRange;
+  const indexRange = index.updateRange;
+  position.setUsage(THREE.DynamicDrawUsage);
+  const skin = attachLeftoverSkinAttributes(wrong.geometry);
+  const drawRange = wrong.geometry.drawRange;
+  wrong.geometry.drawRange.start = 3;
+  wrong.geometry.drawRange.count = 12;
+  const groups = wrong.geometry.groups;
+  wrong.geometry.addGroup(0, 3, 0);
+  const bag = wrong.geometry.morphAttributes;
+  bag.position = [new THREE.BufferAttribute(new Float32Array(3), 3)];
+  wrong.geometry.morphTargetsRelative = true;
+  const influences = [0.4];
+  const dictionary = { smile: 0 };
+  wrong.morphTargetInfluences = influences;
+  wrong.morphTargetDictionary = dictionary;
+  const clips = [new THREE.AnimationClip("dcc-leftover", 1, [])];
+  wrong.animations = clips;
+  const geometryBefore = wrong.geometry;
+  let computeCalls = 0;
+  wrong.geometry.computeBoundingBox = () => {
+    computeCalls += 1;
+  };
+  wrong.geometry.computeBoundingSphere = () => {
+    computeCalls += 1;
+  };
+  wrong.computeBoundingSphere = () => {
+    computeCalls += 1;
+  };
+  const returned = pinColorOnlyUnlitBasicMeshBoundingSphere(wrong);
+  assert.equal(returned, wrong, "object-sphere pin does not replace the mesh");
+  assert.equal(wrong.geometry, geometryBefore, "pin does not replace the geometry");
+  assert.equal(wrong.geometry.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(wrong.geometry.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not replace the position array");
+  assert.equal(index.array, indexArray, "pin does not replace the index array");
+  assert.equal(computeCalls, 0, "pin does not call computeBoundingSphere on the mesh or the geometry");
+  assertQuestSafeUnlitMeshBoundingSphere(wrong, "leftover object sphere");
+  assert.equal(objectSphere.radius, 0.01, "pin does not mutate the detached Sphere");
+  assert.equal(objectSphere.center.x, 4, "pin does not mutate the detached Sphere center");
+  assert.equal(wrong.geometry.boundingBox, geometryBounds.box, "pin does not replace geometry boundingBox");
+  assert.equal(wrong.geometry.boundingSphere, geometryBounds.sphere, "pin does not replace geometry boundingSphere");
+  assert.equal(geometryBounds.box.min.x, 9, "pin does not mutate the geometry Box3");
+  assert.equal(geometryBounds.sphere.radius, 0.01, "pin does not mutate the geometry Sphere");
+  assert.equal(position.updateRanges, positionRanges, "pin does not replace updateRanges");
+  assert.equal(positionRanges.length, 1, "pin does not clear authored updateRanges");
+  assert.equal(index.updateRanges, indexRanges, "pin does not replace index updateRanges");
+  assert.equal(indexRanges.length, 1, "pin does not clear index updateRanges");
+  assert.equal(position.updateRange, positionRange, "pin does not replace updateRange");
+  assert.equal(positionRange.offset, 8, "pin does not touch updateRange.offset");
+  assert.equal(positionRange.count, 3, "pin does not touch updateRange.count");
+  assert.equal(indexRange.offset, 8, "pin does not touch index updateRange.offset");
+  assert.equal(indexRange.count, 3, "pin does not touch index updateRange.count");
+  assert.equal(position.usage, THREE.DynamicDrawUsage, "pin does not change usage");
+  assert.equal(wrong.geometry.getAttribute("skinIndex"), skin.skinIndex, "pin does not delete or replace skinIndex");
+  assert.equal(wrong.geometry.getAttribute("skinWeight"), skin.skinWeight, "pin does not delete or replace skinWeight");
+  assert.equal(wrong.geometry.drawRange, drawRange, "pin does not replace drawRange");
+  assert.equal(drawRange.start, 3, "pin does not change drawRange.start");
+  assert.equal(drawRange.count, 12, "pin does not change drawRange.count");
+  assert.equal(wrong.geometry.groups, groups, "pin does not replace groups");
+  assert.equal(groups.length, 1, "pin does not clear groups");
+  assert.equal(wrong.geometry.morphAttributes, bag, "pin does not replace morphAttributes");
+  assert.equal(bag.position.length, 1, "pin does not clear morphAttributes");
+  assert.equal(wrong.geometry.morphTargetsRelative, true, "pin does not pin morphTargetsRelative");
+  assert.equal(wrong.morphTargetInfluences, influences, "pin does not touch Mesh morphTargetInfluences");
+  assert.equal(wrong.morphTargetDictionary, dictionary, "pin does not touch Mesh morphTargetDictionary");
+  assert.equal(wrong.animations, clips, "pin does not touch Object3D animations");
+  assert.equal(wrong.frustumCulled, true, "pin does not change frustumCulled");
+
+  const nulled = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  nulled.boundingSphere = null;
+  assert.equal(Object.hasOwn(nulled, "boundingSphere"), true, "null is an own leftover");
+  pinColorOnlyUnlitBasicMeshBoundingSphere(nulled);
+  assert.equal(nulled.boundingSphere, undefined, "null object boundingSphere is deleted to absent");
+  assert.equal(Object.hasOwn(nulled, "boundingSphere"), false, "null own property is deleted");
+  assert.equal(nulled.geometry.boundingBox, null, "null-object pin leaves geometry boundingBox");
+  assert.equal(nulled.geometry.boundingSphere, null, "null-object pin leaves geometry boundingSphere");
+
+  const arrayMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    [new THREE.MeshBasicMaterial({ color: 0x633318 }), new THREE.MeshBasicMaterial({ color: 0xbe7e31 })]
+  );
+  const arraySphere = spoilMeshBoundingSphere(arrayMesh);
+  const arrayBounds = spoilGeometryBounds(arrayMesh.geometry);
+  pinColorOnlyUnlitBasicMeshBoundingSphere(arrayMesh);
+  assert.equal(arrayMesh.boundingSphere, arraySphere, "material array keeps its object sphere");
+  assert.equal(arrayMesh.geometry.boundingBox, arrayBounds.box, "material array leaves geometry boundingBox");
+  assert.equal(arrayMesh.geometry.boundingSphere, arrayBounds.sphere, "material array leaves geometry boundingSphere");
+});
+
+test("pinColorOnlyUnlitBasicMeshBoundingSphere / pinColorOnlyVisualMeshBoundingSphere skip mapped, lit, interleaved, colliders, shared blocked", () => {
+  const colorOnly = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  const colorBounds = spoilGeometryBounds(colorOnly.geometry);
+  spoilMeshBoundingSphere(colorOnly);
+  colorOnly.geometry.getAttribute("position").addUpdateRange(4, 2);
+  const colorRanges = colorOnly.geometry.getAttribute("position").updateRanges;
+  pinColorOnlyUnlitBasicMeshBoundingSphere(colorOnly);
+  assertQuestSafeUnlitMeshBoundingSphere(colorOnly, "color-only leftover object sphere is cleared");
+  assert.equal(colorOnly.geometry.boundingBox, colorBounds.box, "per-mesh pin leaves geometry boundingBox");
+  assert.equal(colorOnly.geometry.boundingSphere, colorBounds.sphere, "per-mesh pin leaves geometry boundingSphere");
+  assert.equal(colorRanges.length, 1, "per-mesh pin does not clear updateRanges");
+  assert.equal(colorRanges[0].start, 4, "per-mesh pin does not rewrite updateRanges start");
+
+  const mappedMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mapped = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  const mappedSphere = spoilMeshBoundingSphere(mapped, 0.02);
+  const mappedBounds = spoilGeometryBounds(mapped.geometry);
+  const std = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshStandardMaterial());
+  const stdSphere = spoilMeshBoundingSphere(std, 0.03);
+  const stdBounds = spoilGeometryBounds(std.geometry);
+  pinColorOnlyUnlitBasicMeshBoundingSphere(mapped);
+  pinColorOnlyUnlitBasicMeshBoundingSphere(std);
+  assert.equal(mapped.boundingSphere, mappedSphere, "mapped MeshBasic keeps its object sphere");
+  assert.equal(mapped.geometry.boundingSphere, mappedBounds.sphere, "mapped geometry sphere stays authored");
+  assert.equal(std.boundingSphere, stdSphere, "MeshStandard keeps its object sphere");
+  assert.equal(std.geometry.boundingBox, stdBounds.box, "MeshStandard geometry box stays authored");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  const interleavedPosition = new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0);
+  interleavedGeo.setAttribute("position", interleavedPosition);
+  const interleavedBounds = spoilGeometryBounds(interleavedGeo);
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const interleavedSphere = spoilMeshBoundingSphere(interleaved, 0.04);
+  pinColorOnlyUnlitBasicMeshBoundingSphere(interleaved);
+  assert.equal(interleaved.boundingSphere, interleavedSphere, "interleaved mesh keeps its object sphere");
+  assert.equal(interleavedGeo.boundingBox, interleavedBounds.box, "interleaved geometry boundingBox stays authored");
+  assert.equal(interleavedGeo.boundingSphere, interleavedBounds.sphere, "interleaved geometry boundingSphere stays authored");
+
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  const mappedMeshSphere = spoilMeshBoundingSphere(mappedMesh, 0.05);
+  const mappedMeshBounds = spoilGeometryBounds(mappedMesh.geometry);
+  const colorMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  const colorMeshBounds = spoilGeometryBounds(colorMesh.geometry);
+  spoilMeshBoundingSphere(colorMesh);
+  colorMesh.geometry.getAttribute("position").updateRange = { offset: 2, count: 2 };
+  const authoredUpdateRange = colorMesh.geometry.getAttribute("position").updateRange;
+  colorMesh.geometry.getAttribute("position").addUpdateRange(1, 1);
+  const colorUpdateRanges = colorMesh.geometry.getAttribute("position").updateRanges;
+  const collider = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  const colliderSphere = spoilMeshBoundingSphere(collider, 0.06);
+  const colliderBounds = spoilGeometryBounds(collider.geometry);
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  const sharedVisualSphere = spoilMeshBoundingSphere(sharedVisual, 0.07);
+  const sharedVisualBounds = spoilGeometryBounds(sharedVisual.geometry);
+  const sharedCollider = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  spoilMeshBoundingSphere(sharedCollider, 0.08);
+  const sharedGeo = mappedMesh.geometry;
+  const sharedGeoVisual = new THREE.Mesh(sharedGeo, new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  const sharedGeoSphere = spoilMeshBoundingSphere(sharedGeoVisual, 0.09);
+  body.add(mappedMesh, colorMesh, sharedVisual, sharedGeoVisual, interleaved);
+  root.add(body, collider, sharedCollider, std);
+  pinColorOnlyVisualMeshBoundingSphere(root);
+  assertQuestSafeUnlitMeshBoundingSphere(colorMesh, "entity helper color-only");
+  assert.equal(colorMesh.geometry.boundingBox, colorMeshBounds.box, "entity helper does not replace geometry boundingBox");
+  assert.equal(colorMesh.geometry.boundingSphere, colorMeshBounds.sphere, "entity helper does not replace geometry boundingSphere");
+  assert.equal(colorMesh.geometry.getAttribute("position").updateRange, authoredUpdateRange, "entity helper does not replace updateRange");
+  assert.equal(authoredUpdateRange.offset, 2, "entity helper does not change updateRange.offset");
+  assert.equal(colorUpdateRanges.length, 1, "entity helper does not clear updateRanges");
+  assert.equal(mappedMesh.boundingSphere, mappedMeshSphere, "mapped MeshBasic keeps its object sphere via entity helper");
+  assert.equal(mappedMesh.geometry.boundingSphere, mappedMeshBounds.sphere, "mapped geometry sphere stays authored via entity helper");
+  assert.equal(interleaved.boundingSphere, interleavedSphere, "interleaved object sphere stays authored via entity helper");
+  assert.equal(collider.boundingSphere, colliderSphere, "collider Mesh keeps its object sphere");
+  assert.equal(collider.geometry.boundingBox, colliderBounds.box, "collider geometry boundingBox stays authored");
+  assert.equal(collider.geometry.boundingSphere, colliderBounds.sphere, "collider geometry boundingSphere stays authored");
+  assert.equal(colliderSphere.radius, 0.06, "collider object sphere radius stays authored");
+  assert.equal(sharedVisual.boundingSphere, sharedVisualSphere, "shared collider material visual keeps its object sphere");
+  assert.equal(sharedVisual.geometry.boundingBox, sharedVisualBounds.box, "shared collider material visual geometry box stays authored");
+  assert.equal(sharedGeoVisual.geometry, sharedGeo, "shared mapped geometry is not replaced");
+  assert.equal(sharedGeoVisual.boundingSphere, sharedGeoSphere, "geometry shared with a mapped mesh keeps the visual object sphere");
+  assert.equal(std.boundingSphere, stdSphere, "MeshStandard object sphere stays authored via entity helper");
+  assert.equal(std.geometry.boundingSphere.radius, 0.01, "MeshStandard geometry sphere radius stays authored via entity helper");
 });

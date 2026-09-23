@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.95.0] — 2026-09-23
+
+### Changed
+
+- `crate-toolbox` **v0.93.0** L3 packaging/perf UPGRADE: after the v0.92 BufferGeometry `boundingBox` / `boundingSphere` pin (`null` on the 13 packed color-only unlit MeshBasic visual geometries), also delete leftover Mesh / Object3D `boundingSphere` so the property is absent (`mesh.boundingSphere === undefined`) on those same visual meshes (13 visuals; first-class measured mesh-boundingSphere-absent). `pinColorOnlyUnlitBasicMeshBoundingSphere` / `pinColorOnlyVisualMeshBoundingSphere` run after `pinColorOnlyVisualBounds` on procedural create and packaged ingest, including fail-soft (no lod groups) and the fastener. Same `isColorOnlyUnlitBasic` gate and the same collider / interleaved / mapped / lit / shared-material / shared-geometry skip rules. Prefer `delete`. Do not assign `null` (`null !== undefined`, so a null own property still takes the `Frustum.intersectsObject` object branch and calls `object.computeBoundingSphere`, which Mesh does not implement). Do not invent a `Sphere`. Do not call `computeBoundingSphere` on the mesh. Do not touch geometry `boundingBox` / `boundingSphere` (v0.92). Checked installed three@0.170.0: `Frustum.intersectsObject` uses `object.boundingSphere` when that property is not `undefined`. A Mesh does not assign `object.boundingSphere`, so the else branch copies `geometry.boundingSphere` and calls `geometry.computeBoundingSphere()` only when that sphere is `null`. A leftover non-undefined `mesh.boundingSphere` short-circuits that path while `frustumCulled` stays true (v0.50). Does not touch `updateRanges` (v0.91). Does not touch `updateRange` (v0.90). Does not change `usage` (v0.43 StaticDrawUsage stays). Does not touch `skinIndex` / `skinWeight`, `drawRange`, `groups`, `morphAttributes` / `morphTargetsRelative`, Mesh morph targets, or Object3D `animations`. Does not change `frustumCulled`. Mapped / lit / interleaved / colliders keep authored object spheres. Clean procedural pre-upload draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, bounds-null 13, updateRanges-empty 13, updateRange-default 13, skinAttributes-absent 13, drawRange-default 13, groups-empty 13 stay vs v0.92. mesh-boundingSphere-absent 13 is the new count. Quest 3 90 Hz / 72 fallback requested, not measured. Headset ms / FFR still unmeasured. Do not require 207/240 Hz.
+
 ## [0.94.0] — 2026-09-22
 
 ### Changed
