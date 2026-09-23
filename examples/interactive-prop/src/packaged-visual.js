@@ -1497,6 +1497,56 @@
  * not hex-dedupe or invent meshes.
  * Fail-soft (no lod groups) still runs
  * this pin, including the fastener.
+ *
+ * v0.96: after that normalized pin,
+ * `pinColorOnlyVisualGpuType` pins
+ * leftover BufferAttribute `gpuType`
+ * to the r170 constructor default
+ * `FloatType` (`gpuType === FloatType`)
+ * on every non-interleaved BufferAttribute
+ * plus `geometry.index` when it is a
+ * BufferAttribute, on those same packed
+ * color-only unlit MeshBasic visual
+ * geometries (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate and the
+ * same collider / interleaved / mapped /
+ * lit / shared-material /
+ * shared-geometry skip rules).
+ * **Checked installed three@0.170.0:**
+ * the BufferAttribute constructor assigns
+ * `this.gpuType = FloatType` (1015).
+ * `Float16BufferAttribute` does not
+ * override `gpuType`.
+ * `WebGLAttributes.createBuffer` chooses
+ * the GL component type from the typed
+ * array and does not read `gpuType`.
+ * `WebGLBindingStates.setupVertexAttributes`
+ * calls `gl.vertexAttribIPointer` when
+ * `geometryAttribute.gpuType === IntType`.
+ * A leftover `IntType` on Float16 /
+ * Float32 `position` (or the index)
+ * mis-types static packed color-only
+ * props and breaks Quest 3 TBDR draws.
+ * Assign `attribute.gpuType = FloatType`
+ * in place only when it is not already
+ * `FloatType`. Do **not** replace the
+ * attribute, the typed array, or the
+ * geometry. Do **not** call `setUsage`
+ * (v0.94 usage stays). Do **not**
+ * reassign `normalized` (v0.95 stays).
+ * Do **not** touch `updateRange` (v0.90)
+ * or `updateRanges` (v0.91). Do **not**
+ * touch geometry `boundingBox` /
+ * `boundingSphere` (v0.92). Do **not**
+ * touch Mesh `boundingSphere` (v0.93).
+ * Do **not** change `frustumCulled`.
+ * Mapped / lit / interleaved keep
+ * authored `gpuType`. Collider meshes
+ * stay untouched. Does not hex-dedupe
+ * or invent meshes. Fail-soft (no lod
+ * groups) still runs this pin,
+ * including the fastener.
  */
 
 import {
@@ -1529,6 +1579,7 @@ import {
   pinColorOnlyVisualMeshBoundingSphere,
   pinColorOnlyVisualUsage,
   pinColorOnlyVisualNormalized,
+  pinColorOnlyVisualGpuType,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1712,6 +1763,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMeshBoundingSphere(root);
   pinColorOnlyVisualUsage(root);
   pinColorOnlyVisualNormalized(root);
+  pinColorOnlyVisualGpuType(root);
   return root;
 }
 
