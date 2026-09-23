@@ -1600,6 +1600,65 @@
  * or invent meshes. Fail-soft (no lod
  * groups) still runs this pin,
  * including the fastener.
+ *
+ * v0.98: after that name pin,
+ * `pinColorOnlyVisualVersion` pins
+ * leftover BufferAttribute `version`
+ * to the r170 constructor default
+ * `0` (`version === 0`) on every
+ * non-interleaved BufferAttribute
+ * plus `geometry.index` when it is a
+ * BufferAttribute, on those same packed
+ * color-only unlit MeshBasic visual
+ * geometries (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate and the
+ * same collider / interleaved / mapped /
+ * lit / shared-material /
+ * shared-geometry skip rules).
+ * **Checked installed three@0.170.0:**
+ * the BufferAttribute constructor assigns
+ * `this.version = 0`. The `needsUpdate`
+ * setter increments `version` when
+ * `value === true`.
+ * `Float16BufferAttribute` does not
+ * override `version`.
+ * `WebGLAttributes.update` stores
+ * `attribute.version` on the first
+ * upload and calls `updateBuffer`
+ * (`gl.bufferSubData`, then
+ * `onUploadCallback`) when the stored
+ * buffer version is less than
+ * `attribute.version`. A leftover
+ * non-zero `version` on static packed
+ * color-only props before first upload
+ * forces extra TBDR buffer work.
+ * Assign `attribute.version = 0` in
+ * place only when it is not already
+ * `0`. Do **not** replace the
+ * attribute, the typed array, or the
+ * geometry. Do **not** touch `name`
+ * (v0.97 name-empty stays). Do **not**
+ * touch `gpuType` (v0.96 gpuType-float
+ * stays). Do **not** call `setUsage`
+ * (v0.94 usage stays). Do **not**
+ * reassign `normalized` (v0.95 stays).
+ * Do **not** touch `onUpload` /
+ * `onUploadCallback` (v0.43 CPU-release
+ * hook stays). Do **not** touch
+ * `updateRange` (v0.90) or
+ * `updateRanges` (v0.91). Do **not**
+ * touch geometry `boundingBox` /
+ * `boundingSphere` (v0.92). Do **not**
+ * touch Mesh `boundingSphere` (v0.93).
+ * Do **not** change `frustumCulled`.
+ * Do **not** rename the Mesh.
+ * Mapped / lit / interleaved keep
+ * authored `version`. Collider meshes
+ * stay untouched. Does not hex-dedupe
+ * or invent meshes. Fail-soft (no lod
+ * groups) still runs this pin,
+ * including the fastener.
  */
 
 import {
@@ -1634,6 +1693,7 @@ import {
   pinColorOnlyVisualNormalized,
   pinColorOnlyVisualGpuType,
   pinColorOnlyVisualName,
+  pinColorOnlyVisualVersion,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1819,6 +1879,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualNormalized(root);
   pinColorOnlyVisualGpuType(root);
   pinColorOnlyVisualName(root);
+  pinColorOnlyVisualVersion(root);
   return root;
 }
 
