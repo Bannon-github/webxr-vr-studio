@@ -1358,6 +1358,54 @@
  * they are null while CPU arrays
  * are still present, then releases
  * the arrays.
+ *
+ * v0.93: after that geometry bounds
+ * pin, `pinColorOnlyVisualMeshBoundingSphere`
+ * deletes leftover Mesh / Object3D
+ * `boundingSphere` so the property is
+ * absent (`mesh.boundingSphere === undefined`)
+ * on those same packed color-only
+ * unlit MeshBasic visual meshes
+ * (body LOD leaves + lid/latch/tool
+ * + fastener; same
+ * `isColorOnlyUnlitBasic` gate and
+ * the same collider / interleaved /
+ * mapped / lit / shared-material /
+ * shared-geometry skip rules).
+ * **Checked installed three@0.170.0:**
+ * `Frustum.intersectsObject` uses
+ * `object.boundingSphere` when that
+ * property is not `undefined`. A Mesh
+ * does not assign it, so the else
+ * branch copies
+ * `geometry.boundingSphere` and calls
+ * `geometry.computeBoundingSphere()`
+ * only when that sphere is `null`
+ * (v0.92 restores that path). A
+ * leftover non-undefined
+ * `mesh.boundingSphere` short-circuits
+ * past the geometry path while
+ * `frustumCulled` stays true (v0.50).
+ * `null !== undefined`, so assigning
+ * `null` would still take the object
+ * branch. Prefer `delete`. Do **not**
+ * assign `null`. Do **not** invent a
+ * `Sphere`. Do **not** call
+ * `computeBoundingSphere` on the mesh.
+ * Do **not** touch
+ * `geometry.boundingBox` /
+ * `geometry.boundingSphere` (v0.92).
+ * Do **not** touch `updateRanges`
+ * (v0.91) or `updateRange` (v0.90).
+ * Do **not** change `usage`. Do
+ * **not** change `frustumCulled`.
+ * Mapped / lit / interleaved keep
+ * authored object spheres. Collider
+ * meshes stay untouched. Does not
+ * hex-dedupe or invent meshes.
+ * Fail-soft (no lod groups) still
+ * runs this pin, including the
+ * fastener.
  */
 
 import {
@@ -1387,6 +1435,7 @@ import {
   pinColorOnlyVisualUpdateRange,
   pinColorOnlyVisualUpdateRanges,
   pinColorOnlyVisualBounds,
+  pinColorOnlyVisualMeshBoundingSphere,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1567,6 +1616,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualUpdateRange(root);
   pinColorOnlyVisualUpdateRanges(root);
   pinColorOnlyVisualBounds(root);
+  pinColorOnlyVisualMeshBoundingSphere(root);
   return root;
 }
 
