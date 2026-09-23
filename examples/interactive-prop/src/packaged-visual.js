@@ -1547,6 +1547,59 @@
  * or invent meshes. Fail-soft (no lod
  * groups) still runs this pin,
  * including the fastener.
+ *
+ * v0.97: after that gpuType pin,
+ * `pinColorOnlyVisualName` pins
+ * leftover BufferAttribute `name`
+ * to the r170 constructor default
+ * empty string (`name === ''`) on
+ * every non-interleaved BufferAttribute
+ * plus `geometry.index` when it is a
+ * BufferAttribute, on those same packed
+ * color-only unlit MeshBasic visual
+ * geometries (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate and the
+ * same collider / interleaved / mapped /
+ * lit / shared-material /
+ * shared-geometry skip rules).
+ * **Checked installed three@0.170.0:**
+ * the BufferAttribute constructor assigns
+ * `this.name = ''`. `Float16BufferAttribute`
+ * does not override `name`.
+ * `BufferAttribute.toJSON` writes
+ * `data.name` only when `this.name !== ''`.
+ * `BufferGeometryLoader` copies a JSON
+ * attribute name onto the BufferAttribute.
+ * `WebGLAttributes` and `WebGLBindingStates`
+ * do not read `attribute.name`. GLTF / DCC
+ * ingest often leaves accessor or exporter
+ * names on attributes and the index.
+ * Clearing them to `''` is load-time
+ * packaging only: no draw / tri /
+ * attrBytes change; it drops leftover
+ * string retention on Quest 3 TBDR static
+ * props. Assign `attribute.name = ''` in
+ * place only when it is not already `''`.
+ * Do **not** replace the attribute, the
+ * typed array, or the geometry. Do **not**
+ * touch `gpuType` (v0.96 gpuType-float
+ * stays). Do **not** call `setUsage`
+ * (v0.94 usage stays). Do **not**
+ * reassign `normalized` (v0.95 stays).
+ * Do **not** touch `updateRange` (v0.90)
+ * or `updateRanges` (v0.91). Do **not**
+ * touch geometry `boundingBox` /
+ * `boundingSphere` (v0.92). Do **not**
+ * touch Mesh `boundingSphere` (v0.93).
+ * Do **not** change `frustumCulled`.
+ * Do **not** rename the Mesh.
+ * Mapped / lit / interleaved keep
+ * authored `name`. Collider meshes
+ * stay untouched. Does not hex-dedupe
+ * or invent meshes. Fail-soft (no lod
+ * groups) still runs this pin,
+ * including the fastener.
  */
 
 import {
@@ -1580,6 +1633,7 @@ import {
   pinColorOnlyVisualUsage,
   pinColorOnlyVisualNormalized,
   pinColorOnlyVisualGpuType,
+  pinColorOnlyVisualName,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1764,6 +1818,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualUsage(root);
   pinColorOnlyVisualNormalized(root);
   pinColorOnlyVisualGpuType(root);
+  pinColorOnlyVisualName(root);
   return root;
 }
 
