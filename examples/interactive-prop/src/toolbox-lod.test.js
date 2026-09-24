@@ -111,6 +111,8 @@ const {
   pinColorOnlyVisualMeshUserData,
   pinColorOnlyUnlitBasicMaterialVersion,
   pinColorOnlyVisualMaterialVersion,
+  pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate,
+  pinColorOnlyVisualMatrixWorldNeedsUpdate,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
@@ -18278,4 +18280,437 @@ test("pinColorOnlyUnlitBasicMaterialVersion / pinColorOnlyVisualMaterialVersion 
   assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
   assert.equal(sharedGeoVisual.material.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+});
+
+function countVisualMatrixWorldNeedsUpdate(crate) {
+  let cleared = 0;
+  let leftover = 0;
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.matrixWorldNeedsUpdate === false) cleared += 1;
+    else leftover += 1;
+  }
+  return { cleared, leftover, total: cleared + leftover };
+}
+
+test("r170 Object3D constructor defaults matrixWorldNeedsUpdate to false and updateMatrixWorld clears a leftover true", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const fresh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial());
+  assert.equal(fresh.matrixWorldNeedsUpdate, false, "constructor matrixWorldNeedsUpdate defaults to false");
+  assert.equal(fresh.matrixWorldAutoUpdate, true, "constructor matrixWorldAutoUpdate stays the r170 default");
+  fresh.updateMatrix();
+  assert.equal(fresh.matrixWorldNeedsUpdate, true, "updateMatrix sets matrixWorldNeedsUpdate true");
+  fresh.matrixAutoUpdate = false;
+  fresh.updateMatrixWorld(false);
+  assert.equal(fresh.matrixWorldNeedsUpdate, false, "updateMatrixWorld clears the flag after the rebuild");
+  const held = new THREE.Mesh();
+  held.matrixAutoUpdate = false;
+  held.matrixWorldNeedsUpdate = true;
+  held.updateWorldMatrix(false, false);
+  assert.equal(held.matrixWorldNeedsUpdate, true, "updateWorldMatrix does not clear the flag");
+  const src = new THREE.Mesh();
+  src.matrixWorldNeedsUpdate = true;
+  const dst = new THREE.Mesh();
+  dst.copy(src);
+  assert.equal(dst.matrixWorldNeedsUpdate, true, "Object3D.copy copies matrixWorldNeedsUpdate");
+  const live = new THREE.Mesh();
+  live.matrixWorldNeedsUpdate = false;
+  live.applyMatrix4(new THREE.Matrix4().makeTranslation(1, 0, 0));
+  assert.equal(live.matrixWorldNeedsUpdate, true, "applyMatrix4 with matrixAutoUpdate calls updateMatrix and leaves the flag true");
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const object3d = readFileSync(require.resolve("three/src/core/Object3D.js"), "utf8");
+  assert.match(object3d, /this\.matrixWorldNeedsUpdate = false;/);
+  assert.match(object3d, /updateMatrix\(\) \{\s*this\.matrix\.compose\( this\.position, this\.quaternion, this\.scale \);\s*this\.matrixWorldNeedsUpdate = true;/);
+  assert.match(object3d, /if \( this\.matrixWorldNeedsUpdate \|\| force \) \{/);
+  assert.match(object3d, /this\.matrixWorldNeedsUpdate = false;\s*force = true;/);
+  const worldStart = object3d.indexOf("updateWorldMatrix( updateParents, updateChildren )");
+  const worldEnd = object3d.indexOf("toJSON( meta )");
+  const worldFn = object3d.slice(worldStart, worldEnd);
+  assert.equal(worldFn.includes("matrixWorldNeedsUpdate"), false, "updateWorldMatrix does not read matrixWorldNeedsUpdate");
+  assert.match(object3d, /this\.matrixWorldNeedsUpdate = source\.matrixWorldNeedsUpdate;/);
+  const meshSrc = readFileSync(require.resolve("three/src/objects/Mesh.js"), "utf8");
+  assert.equal(meshSrc.includes("matrixWorldNeedsUpdate"), false, "Mesh does not override matrixWorldNeedsUpdate");
+  const renderer = readFileSync(require.resolve("three/src/renderers/WebGLRenderer.js"), "utf8");
+  assert.match(renderer, /if \( scene\.matrixWorldAutoUpdate === true \) scene\.updateMatrixWorld\(\);/);
+});
+
+test("v1.6.0 pins leftover matrixWorldNeedsUpdate on packed color-only visuals; envelope stays v1.5.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.6\.0 pins leftover Object3D/);
+  assert.match(crate.userData.l2.note, /matrixWorldNeedsUpdate-false 13/);
+  assert.match(crate.userData.l2.note, /v1\.5\.0 pins leftover Material version/);
+  assert.match(crate.userData.l2.note, /material-version-zero 3/);
+  assert.match(crate.userData.l2.note, /13 mesh-userData-empty/);
+  assert.match(crate.userData.l2.note, /10 mesh-name-empty/);
+
+  const rootBag = crate.userData;
+  assert.equal(crate.userData.kind, "entity", "root kind stays");
+  assert.equal(crate.userData.studio.objectId, "crate-toolbox", "root studio metadata stays");
+  assert.ok(crate.userData.parts.tool, "root parts stay");
+  assert.ok(crate.userData.lod.stats, "root lod stats stay");
+  assert.equal(crate.userData.fastener.needed, 4, "root fastener metadata stays");
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.ok(toolBag.restLocal?.isVector3, "tool Group restLocal stays");
+  assert.equal(toolBag.feedbackEntity, crate, "tool Group feedbackEntity stays");
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(wood.version, 0, "wood material.version stays 0");
+  assert.equal(brass.version, 0, "brass material.version stays 0");
+  assert.equal(steel.version, 0, "steel material.version stays 0");
+  assert.equal(wood.name, "", "wood material.name stays empty");
+  assert.equal(materialUserDataEmpty(wood), true, "wood material.userData stays empty");
+
+  const flags = countVisualMatrixWorldNeedsUpdate(crate);
+  assert.equal(flags.cleared, 13, "matrixWorldNeedsUpdate-false count is 13");
+  assert.equal(flags.leftover, 0);
+  assert.equal(flags.total, 13);
+  const versions = countVisualMaterialVersion(crate);
+  assert.equal(versions.zero, 3, "material-version-zero count stays 3");
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(mesh.matrixWorldNeedsUpdate, false, "packed visual matrixWorldNeedsUpdate stays false");
+    assert.equal(mesh.matrixWorldAutoUpdate, true, "v0.69 matrixWorldAutoUpdate stays true");
+    assert.equal(mesh.material.version, 0, "packed visual material.version stays 0");
+    assert.equal(meshUserDataEmpty(mesh), true, "packed visual mesh.userData stays an empty plain object");
+    assert.equal(mesh.material.name, "", "packed visual material.name stays empty");
+    assert.equal(materialUserDataEmpty(mesh.material), true, "packed visual material.userData stays empty");
+    assert.equal(geometryUserDataEmpty(mesh.geometry), true, "packed visual geometry.userData stays empty");
+    assert.equal(mesh.geometry.name, "", "packed visual geometry.name stays empty");
+    assert.equal(mesh.frustumCulled, true, "v0.50 frustumCulled stays true");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+  }
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty count stays 13");
+  const meshNames = countVisualMeshName(crate);
+  assert.equal(meshNames.empty, 10, "mesh-name-empty count stays 10");
+  assert.equal(meshNames.reserved, 3, "three reserved visual names stay");
+  assert.equal(countVisualMaterialName(crate).empty, 3, "material-name-empty count stays 3");
+  assert.equal(countVisualMaterialUserData(crate).empty, 3, "material-userData-empty count stays 3");
+  assert.equal(countVisualGeometryUserData(crate).empty, 13, "geometry-userData-empty count stays 13");
+  assert.equal(countVisualGeometryName(crate).empty, 13, "geometry-name-empty count stays 13");
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.equal(lidMesh.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latchMesh.name, "latchMesh", "latchMesh name stays");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(fastener.matrixWorldNeedsUpdate, false, "fastener matrixWorldNeedsUpdate is false");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+  assert.equal(fastener.material, brass, "fastener still shares the brass MeshBasic");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.ok(
+    crate.userData.colliders.every(
+      (c) => c.name.startsWith("collider_") && c.userData.collider === true && c.userData.size
+    ),
+    "collider names and userData stay",
+  );
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assert.equal(bodyHero.matrixWorldNeedsUpdate, false, "frozen body leaf matrixWorldNeedsUpdate stays false");
+  assert.equal(bodyHero.matrixWorldAutoUpdate, true, "frozen body leaf matrixWorldAutoUpdate stays true");
+  assert.equal(bodyHero.material, wood, "body LOD leaf still shares the wood MeshBasic");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(fastener.name, "fastenerMesh", "L5 drive does not rename fastenerMesh");
+  assert.equal(fastener.material.version, 0, "L5 drive does not bump material.version");
+  assert.equal(wood.version, 0, "wood material.version stays 0 after L4/L5");
+  assert.equal(bodyHero.matrixAutoUpdate, false, "L4/L5 does not unfreeze the body LOD leaf");
+  assert.equal(bodyHero.matrixWorldAutoUpdate, true, "L4/L5 does not change matrixWorldAutoUpdate");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(countVisualMaterialName(crate).empty, 3, "material-name-empty stays 3 after L4/L5");
+  assert.equal(countVisualMaterialUserData(crate).empty, 3, "material-userData-empty stays 3 after L4/L5");
+});
+
+test("pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate pins leftover matrixWorldNeedsUpdate in place and leaves name, userData, material, and geometry", () => {
+  const freshMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const fresh = new THREE.Mesh(groupsTestGeometry(), freshMat);
+  const freshBag = fresh.userData;
+  const freshMatBag = fresh.material.userData;
+  const freshGeoBag = fresh.geometry.userData;
+  const freshPosition = fresh.geometry.getAttribute("position");
+  fresh.name = "lidMesh";
+  fresh.matrixAutoUpdate = false;
+  fresh.matrixWorldAutoUpdate = true;
+  assert.equal(fresh.matrixWorldNeedsUpdate, false, "fresh mesh flag is already false");
+  let writes = 0;
+  const stored = { v: false };
+  Object.defineProperty(fresh, "matrixWorldNeedsUpdate", {
+    configurable: true,
+    get() {
+      return stored.v;
+    },
+    set(value) {
+      writes += 1;
+      stored.v = value;
+    },
+  });
+  let matrixCalls = 0;
+  let worldCalls = 0;
+  fresh.updateMatrix = () => {
+    matrixCalls += 1;
+  };
+  fresh.updateMatrixWorld = () => {
+    worldCalls += 1;
+  };
+  fresh.updateWorldMatrix = () => {
+    worldCalls += 1;
+  };
+  const returnedFresh = pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate(fresh);
+  assert.equal(returnedFresh, fresh, "already-false pin returns the same mesh");
+  assert.equal(writes, 0, "already-false pin does not assign matrixWorldNeedsUpdate");
+  assert.equal(matrixCalls, 0, "already-false pin does not call updateMatrix");
+  assert.equal(worldCalls, 0, "already-false pin does not call updateMatrixWorld or updateWorldMatrix");
+  assert.equal(fresh.matrixWorldNeedsUpdate, false, "already-false flag stays false");
+  assert.equal(fresh.material, freshMat, "already-false pin does not replace the material");
+  assert.equal(fresh.userData, freshBag, "already-false pin does not replace mesh.userData");
+  assert.equal(fresh.name, "lidMesh", "already-false pin does not touch mesh.name");
+  assert.equal(fresh.material.userData, freshMatBag, "already-false pin does not replace material.userData");
+  assert.equal(fresh.geometry.userData, freshGeoBag, "already-false pin does not replace geometry.userData");
+  assert.equal(fresh.geometry.getAttribute("position"), freshPosition, "already-false pin does not replace position");
+  assert.equal(fresh.matrixAutoUpdate, false, "already-false pin does not change matrixAutoUpdate");
+  assert.equal(fresh.matrixWorldAutoUpdate, true, "already-false pin does not change matrixWorldAutoUpdate");
+
+  const wrongMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  wrongMat.name = "woodStandIn";
+  wrongMat.version = 7;
+  const wrong = new THREE.Mesh(groupsTestGeometry(), wrongMat);
+  wrong.name = "lidMesh";
+  wrong.matrixWorldNeedsUpdate = true;
+  wrong.frustumCulled = true;
+  wrong.matrixAutoUpdate = false;
+  wrong.matrixWorldAutoUpdate = true;
+  wrong.visible = true;
+  const meshExtras = { targetNames: ["lid"] };
+  wrong.userData = meshExtras;
+  const matExtras = { material: "lid" };
+  wrong.material.userData = matExtras;
+  const geoExtras = { primitive: "lid" };
+  wrong.geometry.userData = geoExtras;
+  wrong.geometry.name = "Mesh.001";
+  const position = wrong.geometry.getAttribute("position");
+  const index = wrong.geometry.index;
+  const positionArray = position.array;
+  position.version = 2;
+  const geometryBefore = wrong.geometry;
+  let wrongMatrix = 0;
+  let wrongWorld = 0;
+  wrong.updateMatrix = () => {
+    wrongMatrix += 1;
+  };
+  wrong.updateMatrixWorld = () => {
+    wrongWorld += 1;
+  };
+  wrong.updateWorldMatrix = () => {
+    wrongWorld += 1;
+  };
+  const returned = pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate(wrong);
+  assert.equal(returned, wrong, "matrixWorldNeedsUpdate pin does not replace the mesh");
+  assert.equal(wrong.material, wrongMat, "pin does not replace the material");
+  assert.equal(wrong.matrixWorldNeedsUpdate, false, "leftover matrixWorldNeedsUpdate is pinned to false");
+  assert.equal(wrongMatrix, 0, "pin does not call updateMatrix");
+  assert.equal(wrongWorld, 0, "pin does not call updateMatrixWorld or updateWorldMatrix");
+  assert.equal(wrong.name, "lidMesh", "pin does not touch the reserved mesh name");
+  assert.equal(wrong.userData, meshExtras, "pin does not replace mesh.userData");
+  assert.equal(wrong.material.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(wrong.material.version, 7, "pin does not touch material.version");
+  assert.equal(wrong.material.userData, matExtras, "pin does not replace material.userData");
+  assert.equal(wrong.geometry, geometryBefore, "pin does not replace the geometry");
+  assert.equal(wrong.geometry.userData, geoExtras, "pin does not touch geometry.userData");
+  assert.equal(wrong.geometry.name, "Mesh.001", "pin does not touch geometry.name");
+  assert.equal(wrong.geometry.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(wrong.geometry.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not replace the position array");
+  assert.equal(position.version, 2, "pin does not touch BufferAttribute version");
+  assert.equal(wrong.frustumCulled, true, "pin does not change frustumCulled");
+  assert.equal(wrong.matrixAutoUpdate, false, "pin does not change matrixAutoUpdate");
+  assert.equal(wrong.matrixWorldAutoUpdate, true, "pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrong.visible, true, "pin does not change visible");
+
+  const shared = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  shared.version = 4;
+  const first = new THREE.Mesh(groupsTestGeometry(), shared);
+  const second = new THREE.Mesh(groupsTestGeometry(), shared);
+  first.matrixWorldNeedsUpdate = true;
+  second.matrixWorldNeedsUpdate = true;
+  first.name = "latchMesh";
+  second.name = "fastenerMesh";
+  const sharedRoot = new THREE.Group();
+  sharedRoot.userData.parts = { lid: true };
+  const rootBag = sharedRoot.userData;
+  sharedRoot.add(first, second);
+  pinColorOnlyVisualMatrixWorldNeedsUpdate(sharedRoot);
+  assert.equal(first.material, shared, "first mesh keeps the shared material");
+  assert.equal(second.material, shared, "second mesh keeps the shared material");
+  assert.equal(first.matrixWorldNeedsUpdate, false, "first shared-material mesh flag is pinned");
+  assert.equal(second.matrixWorldNeedsUpdate, false, "second shared-material mesh flag is pinned");
+  assert.equal(shared.version, 4, "entity helper does not touch material.version");
+  assert.equal(first.name, "latchMesh", "reserved latchMesh name stays");
+  assert.equal(second.name, "fastenerMesh", "reserved fastenerMesh name stays");
+  assert.equal(sharedRoot.userData, rootBag, "entity helper does not replace entity userData");
+  let secondWrites = 0;
+  const heldFlag = { v: second.matrixWorldNeedsUpdate };
+  Object.defineProperty(second, "matrixWorldNeedsUpdate", {
+    configurable: true,
+    get() {
+      return heldFlag.v;
+    },
+    set(value) {
+      secondWrites += 1;
+      heldFlag.v = value;
+    },
+  });
+  pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate(second);
+  assert.equal(secondWrites, 0, "a second sight of an already-false mesh does not assign");
+});
+
+test("pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate / pinColorOnlyVisualMatrixWorldNeedsUpdate skip mapped, lit, interleaved, colliders, shared blocked", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  colorMat.name = "lidMat";
+  colorMat.version = 4;
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  colorOnly.name = "lidMesh";
+  colorOnly.matrixWorldNeedsUpdate = true;
+  colorOnly.matrixAutoUpdate = true;
+  colorOnly.matrixWorldAutoUpdate = true;
+  const colorExtras = { part: "lid" };
+  colorOnly.userData = colorExtras;
+  const colorMatExtras = { material: "lid" };
+  colorOnly.material.userData = colorMatExtras;
+  pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate(colorOnly);
+  assert.equal(colorOnly.matrixWorldNeedsUpdate, false, "color-only leftover matrixWorldNeedsUpdate is pinned");
+  assert.equal(colorOnly.material, colorMat, "per-mesh pin does not replace the material");
+  assert.equal(colorOnly.material.version, 4, "per-mesh pin does not touch material.version");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin does not clear the reserved mesh name");
+  assert.equal(colorOnly.userData, colorExtras, "per-mesh pin does not replace mesh.userData");
+  assert.equal(colorOnly.material.name, "lidMat", "per-mesh pin does not clear material.name");
+  assert.equal(colorOnly.material.userData, colorMatExtras, "per-mesh pin does not replace material.userData");
+  assert.equal(colorOnly.matrixAutoUpdate, true, "per-mesh pin does not freeze matrixAutoUpdate");
+  assert.equal(colorOnly.matrixWorldAutoUpdate, true, "per-mesh pin does not change matrixWorldAutoUpdate");
+
+  const mappedMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  mappedMat.name = "mappedMat";
+  const mapped = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  mapped.name = "mappedHero";
+  mapped.matrixWorldNeedsUpdate = true;
+  mapped.matrixWorldAutoUpdate = false;
+  const std = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshStandardMaterial());
+  std.matrixWorldNeedsUpdate = true;
+  std.name = "litMesh";
+  pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate(mapped);
+  pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate(std);
+  assert.equal(mapped.matrixWorldNeedsUpdate, true, "mapped MeshBasic keeps authored matrixWorldNeedsUpdate");
+  assert.equal(mapped.matrixWorldAutoUpdate, false, "mapped matrixWorldAutoUpdate stays authored");
+  assert.equal(mapped.name, "mappedHero", "mapped mesh.name stays");
+  assert.equal(std.matrixWorldNeedsUpdate, true, "MeshStandard keeps authored matrixWorldNeedsUpdate");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  interleavedGeo.setIndex([0, 1, 2]);
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  interleaved.matrixWorldNeedsUpdate = true;
+  pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate(interleaved);
+  assert.equal(interleaved.matrixWorldNeedsUpdate, true, "interleaved matrixWorldNeedsUpdate stays authored");
+
+  const collider = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.matrixWorldNeedsUpdate = true;
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate(collider);
+  assert.equal(collider.matrixWorldNeedsUpdate, true, "collider matrixWorldNeedsUpdate stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  root.userData.parts = { latch: true };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.restLocal = new THREE.Vector3(0, 0.045, 0);
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 }),
+  );
+  colorMesh.name = "dccLatch";
+  colorMesh.material.name = "latchMat";
+  colorMesh.material.version = 9;
+  colorMesh.matrixWorldNeedsUpdate = true;
+  colorMesh.matrixAutoUpdate = true;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.version = 11;
+  const sharedVisual = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedVisual.matrixWorldNeedsUpdate = true;
+  const sharedCollider = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  sharedCollider.matrixWorldNeedsUpdate = true;
+  const mappedMesh = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  mappedMesh.matrixWorldNeedsUpdate = true;
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.matrixWorldNeedsUpdate = true;
+  sharedGeoVisual.userData.fastener = true;
+  root.add(tool, colorMesh, mapped, mappedMesh, std, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualMatrixWorldNeedsUpdate(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(root.userData.studio.objectId, "crate-toolbox", "studio metadata stays");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(tool.userData.feedbackEntity, root, "tool Group feedbackEntity stays");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper pins color-only matrixWorldNeedsUpdate");
+  assert.equal(colorMesh.matrixAutoUpdate, true, "entity helper does not change matrixAutoUpdate");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.material.name, "latchMat", "entity helper does not clear material.name");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.matrixWorldNeedsUpdate, true, "mapped matrixWorldNeedsUpdate stays via entity helper");
+  assert.equal(std.matrixWorldNeedsUpdate, true, "MeshStandard matrixWorldNeedsUpdate stays via entity helper");
+  assert.equal(interleaved.matrixWorldNeedsUpdate, true, "interleaved matrixWorldNeedsUpdate stays via entity helper");
+  assert.equal(collider.matrixWorldNeedsUpdate, true, "collider matrixWorldNeedsUpdate stays via entity helper");
+  assert.equal(sharedVisual.matrixWorldNeedsUpdate, true, "shared collider material keeps authored matrixWorldNeedsUpdate");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedCollider.matrixWorldNeedsUpdate, true, "shared collider mesh flag stays");
+  assert.equal(sharedGeoVisual.matrixWorldNeedsUpdate, true, "geometry shared with a mapped mesh keeps matrixWorldNeedsUpdate");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
 });
