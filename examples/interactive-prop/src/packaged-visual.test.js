@@ -571,7 +571,7 @@ test("packaged ingest merges same-material MeshBasic children inside each lod* g
   const afterBody = visualMeshes(bodyLod0);
   assert.equal(afterBody.length, 1, "mock packaged lod0 3 → 1 (unit evidence, not headset)");
   assert.equal(afterBody[0].material, shared, "survivor keeps the shared material reference");
-  assert.ok(afterBody[0].name, "merged mesh keeps a non-empty name from an input");
+  assert.equal(afterBody[0].name, "", "v1.3.0 mesh-name pin clears the merged survivor name");
   assert.equal(boxTris(afterBody[0]), beforeTris, "tris stay concatenated (weld does not drop faces)");
   assert.equal(afterBody[0].geometry.getAttribute("position").count, 8, "unit/mock: 3 coincident boxes weld 72 → 8 unique verts");
   assert.equal(afterBody[0].geometry.getAttribute("normal"), undefined, "color-only MeshBasic drops unused normal after weld");
@@ -4026,7 +4026,8 @@ test("packaged ingest clears leftover Object3D animations; mapped/lit stay autho
   assert.equal(mappedMesh.animations.length, 1, "mapped MeshBasic keeps leftover clips");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
-  assert.equal(wrongMesh, root.getObjectByName("dccAnimations"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccAnimations mesh.name");
 
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.animations, colliderClips, "collider Mesh stays authored animations");
@@ -4158,7 +4159,8 @@ test("packaged ingest clears leftover Mesh morph targets; mapped/lit stay author
   assert.equal(mappedMesh.morphTargetDictionary, mappedDict, "mapped MeshBasic stays authored dictionary");
   assert.equal(mappedMesh.material, mapped, "ingest does not invent or replace mapped materials");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
-  assert.equal(wrongMesh, root.getObjectByName("dccMorph"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccMorph mesh.name");
 
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.morphTargetInfluences, colliderInfluences, "collider Mesh stays authored influences");
@@ -4289,7 +4291,8 @@ test("packaged ingest clears leftover BufferGeometry morphAttributes; mapped/lit
   assert.equal(mappedMesh.geometry.morphAttributes.position[0], mappedAttr, "mapped MeshBasic stays authored morph attributes");
   assert.equal(mappedMesh.geometry.morphTargetsRelative, true, "mapped MeshBasic stays authored morphTargetsRelative");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
-  assert.equal(wrongMesh, root.getObjectByName("dccMorphAttributes"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccMorphAttributes mesh.name");
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.geometry.morphAttributes.position[0], colliderAttr, "collider Mesh stays authored morph attributes");
   assert.equal(colliderGrab.geometry.morphTargetsRelative, true, "collider morphTargetsRelative stays authored");
@@ -4412,7 +4415,8 @@ test("packaged ingest clears leftover BufferGeometry groups; mapped/lit stay aut
   assert.equal(mappedMesh.geometry.groups.at(-1).materialIndex, 1, "mapped group materialIndex stays authored");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
   assert.equal(Array.isArray(wrongMesh.material), false, "ingest does not assign a material array");
-  assert.equal(wrongMesh, root.getObjectByName("dccGroups"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccGroups mesh.name");
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.geometry.groups.length, colliderGroupsBefore + 1, "collider Mesh stays authored groups");
 });
@@ -4543,7 +4547,8 @@ test("packaged ingest pins leftover BufferGeometry drawRange after groups; mappe
   assert.equal(mappedMesh.geometry.drawRange.count, 6, "mapped MeshBasic stays authored drawRange.count");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
   assert.equal(Array.isArray(wrongMesh.material), false, "ingest does not assign a material array");
-  assert.equal(wrongMesh, root.getObjectByName("dccDrawRange"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccDrawRange mesh.name");
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.geometry.drawRange.start, 4, "collider Mesh stays authored drawRange.start");
   assert.equal(colliderGrab.geometry.drawRange.count, 8, "collider Mesh stays authored drawRange.count");
@@ -4756,7 +4761,8 @@ test("packaged ingest pins leftover BufferAttribute updateRange after skin strip
   assert.equal(mappedMesh.geometry.index.updateRange, mappedIndexRange, "mapped index updateRange object stays");
   assert.equal(mappedIndexRange.offset, 3, "mapped index offset stays authored");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
-  assert.equal(wrongMesh, root.getObjectByName("dccUpdateRange"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccUpdateRange mesh.name");
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.geometry.getAttribute("position").updateRange, colliderRange, "collider Mesh keeps its updateRange object");
   assert.equal(colliderRange.offset, 4, "collider updateRange.offset stays authored");
@@ -5081,7 +5087,8 @@ test("packaged ingest pins leftover BufferGeometry bounds to null after updateRa
   assert.equal(mappedRanges.length, 1, "mapped MeshBasic keeps authored updateRanges");
   assert.equal(mappedRanges[0].start, 3, "mapped updateRanges.start stays authored");
   assert.equal(wrongMesh.material, wrong, "ingest does not invent or replace color-only materials");
-  assert.equal(wrongMesh, root.getObjectByName("dccBounds"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccBounds mesh.name");
   const colliderGrab = root.getObjectByName("collider_grab");
   assert.equal(colliderGrab.geometry.boundingBox, colliderSpoiled.box, "collider Mesh keeps its boundingBox");
   assert.equal(colliderGrab.geometry.boundingSphere, colliderSpoiled.sphere, "collider Mesh keeps its boundingSphere");
@@ -5211,7 +5218,8 @@ test("packaged ingest deletes leftover object boundingSphere after geometry boun
   assert.equal(wrongMesh.geometry, geometryBefore, "ingest does not replace the geometry");
   assert.equal(wrongMesh.geometry.getAttribute("position"), position, "morph-blocked position stays");
   assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
-  assert.equal(wrongMesh, root.getObjectByName("dccBounds"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccBounds mesh.name");
   assert.equal(computeCalls, 0, "object-sphere pin does not call compute*");
   assertQuestSafeUnlitMeshBoundingSphere(wrongMesh, "packaged color-only MeshBasic");
   assertQuestSafeUnlitBounds(wrongMesh, "packaged color-only geometry bounds still null");
@@ -5402,7 +5410,8 @@ test("packaged ingest pins leftover BufferAttribute usage to StaticDrawUsage aft
   assert.equal(wrongMesh.geometry, geometryBefore, "ingest does not replace the geometry");
   assert.equal(wrongMesh.geometry.getAttribute("position"), position, "morph-blocked position stays");
   assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
-  assert.equal(wrongMesh, root.getObjectByName("dccUsage"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccUsage mesh.name");
   assertQuestSafeUnlitUsage(wrongMesh, "packaged color-only MeshBasic");
   assertQuestSafeUnlitMeshBoundingSphere(wrongMesh, "packaged color-only object sphere still absent");
   assertQuestSafeUnlitBounds(wrongMesh, "packaged color-only geometry bounds still null");
@@ -5603,7 +5612,8 @@ test("packaged ingest pins leftover BufferAttribute normalized to false after th
   assert.equal(wrongMesh.geometry.getAttribute("position"), position, "morph-blocked position stays");
   assert.equal(position.array, positionArray, "ingest does not replace the position typed array");
   assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
-  assert.equal(wrongMesh, root.getObjectByName("dccNormalized"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccNormalized mesh.name");
   assertQuestSafeUnlitNormalized(wrongMesh, "packaged color-only MeshBasic");
   assertQuestSafeUnlitUsage(wrongMesh, "packaged color-only usage still StaticDrawUsage");
   assertQuestSafeUnlitMeshBoundingSphere(wrongMesh, "packaged color-only object sphere still absent");
@@ -5837,7 +5847,8 @@ test("packaged ingest pins leftover BufferAttribute gpuType to FloatType after t
   assert.equal(wrongMesh.geometry.getAttribute("position"), position, "morph-blocked position stays");
   assert.equal(position.array, positionArray, "ingest does not replace the position typed array");
   assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
-  assert.equal(wrongMesh, root.getObjectByName("dccGpuType"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccGpuType mesh.name");
   assertQuestSafeUnlitGpuType(wrongMesh, "packaged color-only MeshBasic");
   assertQuestSafeUnlitNormalized(wrongMesh, "packaged color-only normalized still false");
   assertQuestSafeUnlitUsage(wrongMesh, "packaged color-only usage still StaticDrawUsage");
@@ -6096,8 +6107,9 @@ test("packaged ingest pins leftover BufferAttribute name to empty string after t
   assert.equal(wrongMesh.geometry.getAttribute("position"), position, "morph-blocked position stays");
   assert.equal(position.array, positionArray, "ingest does not replace the position typed array");
   assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
-  assert.equal(wrongMesh, root.getObjectByName("dccName"), "ingest does not replace the color-only mesh");
-  assert.equal(wrongMesh.name, "dccName", "ingest does not rename the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccName mesh.name");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccName mesh.name");
   assertQuestSafeUnlitName(wrongMesh, "packaged color-only MeshBasic");
   assertQuestSafeUnlitGpuType(wrongMesh, "packaged color-only gpuType still FloatType");
   assertQuestSafeUnlitNormalized(wrongMesh, "packaged color-only normalized still false");
@@ -6252,7 +6264,7 @@ test("packaged ingest without lod groups still pins leftover BufferAttribute nam
   assertQuestSafeUnlitMeshBoundingSphere(latchMesh, "fail-soft latch");
   assertQuestSafeUnlitBounds(latchMesh, "fail-soft latch geometry bounds");
   assertQuestSafeUnlitName(toolMesh, "fail-soft tool");
-  assert.equal(toolMesh.name, "toolMesh", "fail-soft tool mesh name stays");
+  assert.equal(toolMesh.name, "", "v1.3.0 mesh-name pin clears fail-soft toolMesh name");
   assertQuestSafeUnlitMeshBoundingSphere(toolMesh, "fail-soft tool");
   assertQuestSafeUnlitBounds(toolMesh, "fail-soft tool geometry bounds");
   assert.equal(toolSphere.center.y, 5, "fail-soft tool pin does not mutate the detached Sphere");
@@ -6383,8 +6395,9 @@ test("packaged ingest pins leftover BufferAttribute version to 0 after the name 
   assert.equal(wrongMesh.geometry.getAttribute("position"), position, "morph-blocked position stays");
   assert.equal(position.array, positionArray, "ingest does not replace the position typed array");
   assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
-  assert.equal(wrongMesh, root.getObjectByName("dccVersion"), "ingest does not replace the color-only mesh");
-  assert.equal(wrongMesh.name, "dccVersion", "ingest does not rename the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccVersion mesh.name");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccVersion mesh.name");
   assert.equal(position.version, 0, "leftover position version is pinned to 0");
   assert.equal(index.version, 0, "leftover index version is pinned to 0");
   assert.equal(position.onUploadCallback, upload, "version pin does not replace onUploadCallback");
@@ -6566,7 +6579,7 @@ test("packaged ingest without lod groups still pins leftover BufferAttribute ver
   assertQuestSafeUnlitMeshBoundingSphere(latchMesh, "fail-soft latch");
   assertQuestSafeUnlitBounds(latchMesh, "fail-soft latch geometry bounds");
   assertQuestSafeUnlitVersion(toolMesh, "fail-soft tool");
-  assert.equal(toolMesh.name, "toolMesh", "fail-soft tool mesh name stays");
+  assert.equal(toolMesh.name, "", "v1.3.0 mesh-name pin clears fail-soft toolMesh name");
   assertQuestSafeUnlitMeshBoundingSphere(toolMesh, "fail-soft tool");
   assertQuestSafeUnlitBounds(toolMesh, "fail-soft tool geometry bounds");
   assert.equal(toolSphere.center.y, 5, "fail-soft tool pin does not mutate the detached Sphere");
@@ -6663,8 +6676,9 @@ test("packaged ingest pins leftover BufferGeometry name to empty after the versi
   assert.equal(wrongMesh.geometry.getAttribute("position"), position, "position attribute stays");
   assert.equal(position.array, positionArray, "ingest does not replace the position typed array");
   assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
-  assert.equal(wrongMesh, root.getObjectByName("dccGeometryName"), "ingest does not replace the color-only mesh");
-  assert.equal(wrongMesh.name, "dccGeometryName", "ingest does not rename the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccGeometryName mesh.name");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccGeometryName mesh.name");
   assert.equal(wrongMesh.geometry.name, "", "leftover geometry.name is pinned to empty");
   assert.equal(position.version, 0, "version pin still holds on position");
   assert.equal(index.version, 0, "version pin still holds on the index");
@@ -6753,7 +6767,7 @@ test("packaged ingest without lod groups still pins leftover BufferGeometry name
   assert.equal(latchMesh.geometry.name, "", "fail-soft deleted geometry.name is restored to empty");
   assert.equal(latchMesh.geometry.getAttribute("position").version, 0, "fail-soft latch version pin still holds");
   assert.equal(toolMesh.geometry.name, "", "fail-soft tool geometry.name is pinned");
-  assert.equal(toolMesh.name, "toolMesh", "fail-soft tool mesh name stays");
+  assert.equal(toolMesh.name, "", "v1.3.0 mesh-name pin clears fail-soft toolMesh name");
   assert.equal(fastener.geometry.name, "", "fail-soft fastener geometry.name is pinned");
   assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
   assert.equal(fastenerPosition.version, 0, "fail-soft fastener version pin still holds");
@@ -6853,8 +6867,9 @@ test("packaged ingest pins leftover BufferGeometry userData to an empty plain ob
   assert.equal(wrongMesh.geometry.getAttribute("position"), position, "position attribute stays");
   assert.equal(position.array, positionArray, "ingest does not replace the position typed array");
   assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
-  assert.equal(wrongMesh, root.getObjectByName("dccGeometryUserData"), "ingest does not replace the color-only mesh");
-  assert.equal(wrongMesh.name, "dccGeometryUserData", "ingest does not rename the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccGeometryUserData mesh.name");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccGeometryUserData mesh.name");
   assert.equal(wrongMesh.userData, meshBag, "ingest does not replace mesh userData");
   assert.equal(wrongMesh.userData.part, "body", "ingest does not clear mesh userData");
   assert.notEqual(wrongMesh.geometry.userData, extras, "leftover geometry.userData is replaced");
@@ -6975,7 +6990,7 @@ test("packaged ingest without lod groups still pins leftover BufferGeometry user
   assert.equal(latchMesh.geometry.getAttribute("position").version, 0, "fail-soft latch version pin still holds");
   assert.equal(geometryUserDataEmpty(toolMesh.geometry), true, "fail-soft tool geometry.userData is pinned");
   assert.equal(toolMesh.geometry.name, "", "fail-soft tool geometry.name is pinned");
-  assert.equal(toolMesh.name, "toolMesh", "fail-soft tool mesh name stays");
+  assert.equal(toolMesh.name, "", "v1.3.0 mesh-name pin clears fail-soft toolMesh name");
   assert.equal(geometryUserDataEmpty(fastener.geometry), true, "fail-soft fastener geometry.userData is pinned");
   assert.equal(fastener.userData.kept, "fastener", "fail-soft fastener mesh userData stays");
   assert.equal(fastener.geometry.name, "", "fail-soft fastener geometry.name is pinned");
@@ -7055,8 +7070,9 @@ test("packaged ingest pins leftover Material userData to an empty plain object a
   assert.equal(wrongMesh.geometry.getAttribute("position"), position, "position attribute stays");
   assert.equal(position.array, positionArray, "ingest does not replace the position typed array");
   assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
-  assert.equal(wrongMesh, root.getObjectByName("dccMaterialUserData"), "ingest does not replace the color-only mesh");
-  assert.equal(wrongMesh.name, "dccMaterialUserData", "ingest does not rename the color-only mesh");
+  assert.equal(wrongMesh.parent != null, true, "ingest does not detach the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccMaterialUserData mesh.name");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccMaterialUserData mesh.name");
   assert.equal(wrongMesh.userData, meshBag, "ingest does not replace mesh userData");
   assert.equal(wrongMesh.userData.part, "body", "ingest does not clear mesh userData");
   assert.notEqual(wrong.userData, wrongExtras, "leftover material.userData is replaced");
@@ -7135,7 +7151,7 @@ test("packaged ingest without lod groups still pins leftover Material userData t
   assert.equal(latchMesh.material.name, "", "fail-soft latch material.name is pinned");
   assert.equal(materialUserDataEmpty(toolMesh.material), true, "fail-soft tool material.userData is pinned");
   assert.equal(toolMesh.material.name, "", "fail-soft tool material.name is pinned");
-  assert.equal(toolMesh.name, "toolMesh", "fail-soft tool mesh name stays");
+  assert.equal(toolMesh.name, "", "v1.3.0 mesh-name pin clears fail-soft toolMesh name");
   assert.equal(materialUserDataEmpty(fastener.material), true, "fail-soft fastener material.userData is pinned");
   assert.equal(fastener.material.name, "", "fail-soft fastener material.name is pinned");
   assert.equal(fastener.userData.kept, "fastener", "fail-soft fastener mesh userData stays");
@@ -7197,7 +7213,7 @@ test("packaged ingest pins leftover Material name to the empty string after the 
   assert.equal(wrong.glslVersion, undefined, "glslVersion pin still holds");
   assert.equal(wrong.flatShading, false, "flatShading pin still holds");
   assert.equal(wrong.fog, false, "fog pin still holds");
-  assert.equal(wrongMesh.name, "dccMaterialName", "ingest does not rename the color-only mesh");
+  assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccMaterialName mesh.name");
   assert.equal(wrongMesh.userData, meshBag, "ingest does not replace mesh userData");
   assert.equal(wrongMesh.userData.part, "body", "ingest does not clear mesh userData");
   assert.equal(geometryUserDataEmpty(wrongMesh.geometry), true, "geometry-userData pin still clears leftover geometry.userData");
@@ -7250,10 +7266,65 @@ test("packaged ingest without lod groups still pins leftover Material name to th
   assert.equal(materialUserDataEmpty(latchMesh.material), true, "fail-soft latch material.userData is pinned");
   assert.notEqual(latchMesh.material.userData, latchBag, "fail-soft latch material.userData is replaced");
   assert.equal(toolMesh.material.name, "", "fail-soft tool material.name is pinned");
-  assert.equal(toolMesh.name, "toolMesh", "fail-soft tool mesh name stays");
+  assert.equal(toolMesh.name, "", "v1.3.0 mesh-name pin clears fail-soft toolMesh name");
   assert.equal(fastener.material.name, "", "fail-soft fastener material.name is pinned");
   assert.equal(fastener.material.userData, fastenerBag, "fail-soft already-empty fastener material.userData stays");
   assert.equal(fastener.userData.kept, "fastener", "fail-soft fastener mesh userData stays");
   assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
   assert.equal(colliderGrab.material.name, "colliderMat", "fail-soft collider material.name stays authored");
+});
+
+test("packaged ingest pins leftover Mesh name to the empty string and keeps reserved names", () => {
+  const { root, groups, fastener } = makePackagedFixture();
+  const shared = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  shared.name = "dccWood";
+  const wrongMesh = boxMesh("dccWall", shared);
+  wrongMesh.userData.part = "body";
+  const meshBag = wrongMesh.userData;
+  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  mapped.name = "mappedMat";
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  groups[0][0].add(wrongMesh, mappedMesh);
+  const colliderGrab = root.getObjectByName("collider_grab");
+  colliderGrab.name = "collider_grab";
+  fastener.material.name = "brassStandIn";
+  fastener.userData.kept = "fastener-mesh";
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(wrongMesh.name, "", "ingest clears a non-reserved color-only mesh.name");
+  assert.equal(wrongMesh.material, shared, "ingest does not replace the color-only material");
+  assert.equal(shared.name, "", "v1.2.0 material-name pin still clears leftover material.name");
+  assert.equal(wrongMesh.userData, meshBag, "ingest does not replace mesh userData");
+  assert.equal(wrongMesh.userData.part, "body", "ingest does not clear mesh userData");
+  assert.equal(mappedMesh.name, "mappedHero", "mapped mesh.name stays authored");
+  assert.equal(mapped.name, "mappedMat", "mapped material.name stays authored");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh stays named");
+  assert.equal(fastener.material.name, "", "fastener material.name is still pinned");
+  assert.equal(fastener.userData.kept, "fastener-mesh", "fastener mesh userData stays");
+  assert.equal(colliderGrab.name, "collider_grab", "collider mesh name stays");
+  assert.equal(groups[0][0].name, "lod0", "lod group name stays");
+});
+
+test("packaged ingest without lod groups clears non-reserved mesh names and keeps lidMesh, latchMesh, and fastenerMesh", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  const bodyMesh = visualMeshes(body)[0];
+  const lidMesh = visualMeshes(lid)[0];
+  const latchMesh = visualMeshes(latch)[0];
+  const toolMesh = visualMeshes(tool)[0];
+  bodyMesh.material.name = "bodyMat";
+  bodyMesh.userData.kept = "body";
+  toolMesh.material.name = "toolMat";
+  const colliderGrab = root.getObjectByName("collider_grab");
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(bodyMesh.name, "", "fail-soft bodyMesh name is pinned");
+  assert.equal(bodyMesh.material.name, "", "fail-soft body material.name is still pinned");
+  assert.equal(bodyMesh.userData.kept, "body", "fail-soft body mesh userData stays");
+  assert.equal(toolMesh.name, "", "fail-soft toolMesh name is pinned");
+  assert.equal(toolMesh.material.name, "", "fail-soft tool material.name is still pinned");
+  assert.equal(lidMesh.name, "lidMesh", "fail-soft lidMesh stays named");
+  assert.equal(latchMesh.name, "latchMesh", "fail-soft latchMesh stays named");
+  assert.equal(fastener.name, "fastenerMesh", "fail-soft fastenerMesh stays named");
+  assert.equal(colliderGrab.name, "collider_grab", "fail-soft collider name stays");
+  assert.equal(root.userData.lod, undefined, "fail-soft still does not invent lod groups");
 });
