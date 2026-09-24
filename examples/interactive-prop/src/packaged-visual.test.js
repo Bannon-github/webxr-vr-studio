@@ -7500,7 +7500,8 @@ test("packaged ingest pins leftover Material version to 0 on color-only visuals 
   interleaved.name = "interleavedMesh";
   const lit = boxMesh("litMesh", new THREE.MeshStandardMaterial());
   lit.material.version = 5;
-  groups[0][0].add(first, second, mappedMesh, sharedGeoVisual, interleaved, lit);
+  groups[0][0].add(first, mappedMesh, sharedGeoVisual, interleaved, lit);
+  groups[1][0].add(second);
   fastener.material = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
   fastener.material.version = 11;
   fastener.material.name = "brassStandIn";

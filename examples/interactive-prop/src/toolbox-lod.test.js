@@ -17970,7 +17970,7 @@ test("v1.5.0 pins leftover Material version on packed color-only MeshBasics; env
   assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
   assert.equal(crate.userData.l2.uniqueMaterials, 3);
   assert.match(crate.userData.l2.note, /v1\.5\.0 pins leftover Material version/);
-  assert.match(crate.userData.l2.note, /3 material-version-zero/);
+  assert.match(crate.userData.l2.note, /material-version-zero 3/);
   assert.match(crate.userData.l2.note, /v1\.4\.0 pins leftover Mesh/);
   assert.match(crate.userData.l2.note, /13 mesh-userData-empty/);
   assert.match(crate.userData.l2.note, /10 mesh-name-empty/);
@@ -18260,7 +18260,7 @@ test("pinColorOnlyUnlitBasicMaterialVersion / pinColorOnlyVisualMaterialVersion 
   sharedGeoMat.version = 12;
   const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
   sharedGeoVisual.name = "fastenerMesh";
-  root.add(tool, colorMesh, mapped, std, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  root.add(tool, colorMesh, mapped, mappedMesh, std, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
   pinColorOnlyVisualMaterialVersion(root);
   assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
   assert.equal(root.userData.studio.objectId, "crate-toolbox", "studio metadata stays");
