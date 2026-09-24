@@ -1964,6 +1964,46 @@
  * stay untouched. Does not hex-dedupe or
  * invent meshes. Fail-soft (no lod groups)
  * still runs this pin, including the fastener.
+ *
+ * v1.4.0: after that mesh-name pin,
+ * `pinColorOnlyVisualMeshUserData` pins leftover Mesh / Object3D
+ * `userData` to the r170 constructor default empty plain object
+ * (`mesh.userData` is a fresh `{}` with `Object.prototype` and no
+ * own keys) on packed color-only unlit MeshBasic visual meshes
+ * (body LOD leaves + lid/latch/tool + fastener; the same 13
+ * visuals; same `isColorOnlyUnlitBasic` gate and the same collider
+ * / interleaved / mapped / lit / shared-material / shared-geometry
+ * skip rules).
+ * **Checked installed three@0.170.0:** the Object3D constructor
+ * assigns `this.userData = {}`. `Mesh` does not override
+ * `userData`. `Object3D.toJSON` writes `object.userData` only when
+ * `Object.keys(this.userData).length > 0`. `Object3D.copy` assigns
+ * `this.userData = JSON.parse(JSON.stringify(source.userData))`
+ * (a clone). `ObjectLoader.parseObject` assigns
+ * `object.userData = data.userData` when `data.userData !==
+ * undefined`. Stock GLTFLoader `loadMesh` calls
+ * `assignExtrasToUserData(mesh, meshDef)` and `_loadNodeShallow`
+ * calls `assignExtrasToUserData(node, nodeDef)`. A single-primitive
+ * node is the mesh, so node extras land on `mesh.userData`.
+ * `WebGLRenderer` does not read `mesh.userData`. DCC / glTF extras
+ * can still sit on `mesh.userData` after the v1.3.0 name pin.
+ * Clearing them to a fresh `{}` is load-time packaging only: no
+ * draw / tri / attrBytes change. Assign `mesh.userData = {}` only
+ * when it is not already an empty plain object (each replacement
+ * is a fresh object; do not share one `{}` across meshes). Do
+ * **not** replace the mesh, the material, the geometry, the
+ * attributes, or the typed arrays. Do **not** touch Mesh /
+ * Object3D `name` (v1.3.0 mesh-name-empty stays; reserved names
+ * `lidMesh` / `latchMesh` / `fastenerMesh` and any `collider_*`
+ * stay). Do **not** touch Material `name` or Material `userData`.
+ * Do **not** touch BufferGeometry `userData` / `name`. Do **not**
+ * touch entity/root `userData`, tool Group `userData`, or collider
+ * mesh `userData`. Do **not** touch BufferAttribute fields, bounds,
+ * morphs, animations, shadows, `frustumCulled`, `matrixAutoUpdate`,
+ * or `mesh.visible`. Mapped / lit / interleaved keep authored
+ * `mesh.userData`. Collider meshes stay untouched. Does not
+ * hex-dedupe or invent meshes. Fail-soft (no lod groups) still
+ * runs this pin, including the fastener.
  */
 
 import {
@@ -2004,6 +2044,7 @@ import {
   pinColorOnlyVisualMaterialUserData,
   pinColorOnlyVisualMaterialName,
   pinColorOnlyVisualMeshName,
+  pinColorOnlyVisualMeshUserData,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2195,6 +2236,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialUserData(root);
   pinColorOnlyVisualMaterialName(root);
   pinColorOnlyVisualMeshName(root);
+  pinColorOnlyVisualMeshUserData(root);
   return root;
 }
 
