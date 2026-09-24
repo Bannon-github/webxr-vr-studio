@@ -2004,6 +2004,51 @@
  * `mesh.userData`. Collider meshes stay untouched. Does not
  * hex-dedupe or invent meshes. Fail-soft (no lod groups) still
  * runs this pin, including the fastener.
+ *
+ * v1.5.0: after that mesh-userData pin,
+ * `pinColorOnlyVisualMaterialVersion` pins leftover Material
+ * `version` to the r170 constructor default `0`
+ * (`material.version === 0`) on the 3 shared color-only MeshBasic
+ * materials (wood / brass / steel; unique MeshBasic stays 3;
+ * measured material-version-zero 3; same `isColorOnlyUnlitBasic`
+ * gate and the same collider / interleaved / mapped / lit /
+ * shared-material / shared-geometry skip rules).
+ * **Checked installed three@0.170.0:** the Material constructor
+ * assigns `this.version = 0`. The `needsUpdate` setter increments
+ * `version` when `value === true`. The `alphaTest` setter also
+ * increments `version` when the test crosses zero. `Material.copy`
+ * does not copy `version`. `Material.toJSON` does not write
+ * `material.version` (`metadata.version` 4.6 is the JSON format
+ * version). `WebGLRenderer.setProgram` sets `needsProgramChange`
+ * and stores `materialProperties.__version = material.version`
+ * when `material.version !== materialProperties.__version`, then
+ * calls `getProgram`, which builds parameters via
+ * `WebGLPrograms.getParameters`. `getProgramCacheKey` does not
+ * include `material.version`, so a leftover number does not fork
+ * a second program. A leftover non-zero `material.version` on a
+ * static packed color-only MeshBasic is a dirty counter. The
+ * mismatch still allocates program parameters on the JS thread
+ * before the fast path (`version === __version`) can skip
+ * `getProgram`. On Quest 3 TBDR that load-time parameter rebuild
+ * is packaging waste: no draw / tri / attrBytes change. Assign
+ * `material.version = 0` in place only when it is not already `0`.
+ * Do **not** call `material.needsUpdate = true` (that increments
+ * `version`). Direct assignment does not go through `needsUpdate`.
+ * Pin once per shared material instance. Do **not** replace the
+ * material, the mesh, the geometry, the attributes, or the typed
+ * arrays. Do **not** invent materials. Do **not** touch Material
+ * `name` (v1.2.0 material-name-empty stays) or Material `userData`
+ * (v1.1.0 material-userData-empty stays). Do **not** touch Mesh /
+ * Object3D `userData` (v1.4.0 mesh-userData-empty stays) or Mesh /
+ * Object3D `name` (v1.3.0; reserved names `lidMesh` / `latchMesh` /
+ * `fastenerMesh` and any `collider_*` stay). Do **not** touch
+ * BufferGeometry `userData` / `name`. Do **not** touch
+ * BufferAttribute fields, prior material program-cache / flag
+ * pins, bounds, morphs, animations, shadows, `frustumCulled`,
+ * `matrixAutoUpdate`, or `mesh.visible`. Mapped / lit /
+ * interleaved keep authored `material.version`. Collider meshes
+ * stay untouched. Fail-soft (no lod groups) still runs this pin,
+ * including the fastener.
  */
 
 import {
@@ -2045,6 +2090,7 @@ import {
   pinColorOnlyVisualMaterialName,
   pinColorOnlyVisualMeshName,
   pinColorOnlyVisualMeshUserData,
+  pinColorOnlyVisualMaterialVersion,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2237,6 +2283,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialName(root);
   pinColorOnlyVisualMeshName(root);
   pinColorOnlyVisualMeshUserData(root);
+  pinColorOnlyVisualMaterialVersion(root);
   return root;
 }
 
