@@ -1722,6 +1722,73 @@
  * untouched. Does not hex-dedupe or invent
  * meshes. Fail-soft (no lod groups) still
  * runs this pin, including the fastener.
+ *
+ * v1.0.0: after that geometry-name pin,
+ * `pinColorOnlyVisualGeometryUserData` pins
+ * leftover BufferGeometry `userData` to a
+ * fresh empty plain object
+ * (`geometry.userData = {}`) on those same
+ * packed color-only unlit MeshBasic visual
+ * geometries (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate and the
+ * same collider / interleaved / mapped /
+ * lit / shared-material /
+ * shared-geometry skip rules).
+ * **Checked installed three@0.170.0:**
+ * the BufferGeometry constructor assigns
+ * `this.userData = {}`. `BufferGeometry.toJSON`
+ * writes `data.userData` only when
+ * `Object.keys(this.userData).length > 0`.
+ * `BufferGeometry.copy` assigns
+ * `this.userData = source.userData` (shared
+ * reference). `BufferGeometryLoader` assigns
+ * `geometry.userData = json.userData` when
+ * `json.userData` is truthy.
+ * `ObjectLoader.parseGeometries` assigns
+ * `geometry.userData = data.userData` when
+ * `data.userData !== undefined`. Stock
+ * GLTFLoader `addPrimitiveAttributes` calls
+ * `assignExtrasToUserData(geometry, primitiveDef)`,
+ * which `Object.assign`s primitive extras
+ * onto `geometry.userData`. `WebGLRenderer`
+ * does not read `geometry.userData`. DCC /
+ * glTF primitive extras still sit on
+ * `geometry.userData` after the v0.99 name
+ * pin. Clearing them to a fresh `{}` is
+ * load-time packaging only: no draw / tri /
+ * attrBytes change. Assign
+ * `geometry.userData = {}` only when it is
+ * not already an empty plain object (each
+ * replacement is a fresh object). Do **not**
+ * replace the geometry, the attributes, or
+ * the typed arrays. Do **not** touch
+ * BufferGeometry `name` (v0.99
+ * geometry-name-empty stays). Do **not**
+ * touch Mesh / Object3D `userData`. Do
+ * **not** touch BufferAttribute `version`
+ * (v0.98 version-zero stays). Do **not**
+ * touch BufferAttribute `name` (v0.97
+ * name-empty stays). Do **not** touch
+ * `gpuType` (v0.96 gpuType-float stays).
+ * Do **not** call `setUsage` (v0.94 usage
+ * stays). Do **not** reassign `normalized`
+ * (v0.95 stays). Do **not** touch
+ * `onUpload` / `onUploadCallback` (v0.43
+ * CPU-release hook stays). Do **not**
+ * touch `updateRange` (v0.90) or
+ * `updateRanges` (v0.91). Do **not** touch
+ * geometry `boundingBox` / `boundingSphere`
+ * (v0.92). Do **not** touch Mesh
+ * `boundingSphere` (v0.93). Do **not**
+ * change `frustumCulled`. Do **not**
+ * rename the Mesh (`lidMesh` / `latchMesh`
+ * / `fastenerMesh` stay). Mapped / lit /
+ * interleaved keep authored
+ * `geometry.userData`. Collider meshes stay
+ * untouched. Does not hex-dedupe or invent
+ * meshes. Fail-soft (no lod groups) still
+ * runs this pin, including the fastener.
  */
 
 import {
@@ -1758,6 +1825,7 @@ import {
   pinColorOnlyVisualName,
   pinColorOnlyVisualVersion,
   pinColorOnlyVisualGeometryName,
+  pinColorOnlyVisualGeometryUserData,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1945,6 +2013,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualName(root);
   pinColorOnlyVisualVersion(root);
   pinColorOnlyVisualGeometryName(root);
+  pinColorOnlyVisualGeometryUserData(root);
   return root;
 }
 

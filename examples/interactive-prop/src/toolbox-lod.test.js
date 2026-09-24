@@ -99,6 +99,8 @@ const {
   pinColorOnlyVisualName,
   pinColorOnlyVisualVersion,
   pinColorOnlyVisualGeometryName,
+  pinColorOnlyUnlitBasicGeometryUserData,
+  pinColorOnlyVisualGeometryUserData,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
@@ -15393,5 +15395,660 @@ test("pinColorOnlyUnlitBasicGeometryName / pinColorOnlyVisualGeometryName skip m
   assert.equal(sharedGeoVisual.geometry.name, "mappedShared", "geometry shared with a mapped mesh keeps authored geometry.name");
   assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
   assert.equal(sharedGeoVisual.boundingSphere, sharedGeoSphere, "geometry shared with a mapped mesh keeps the visual object sphere");
+  assert.equal(std.geometry.name, "litGeo", "MeshStandard geometry.name stays authored via entity helper");
+});
+
+function geometryUserDataEmpty(geometry) {
+  const value = geometry?.userData;
+  if (value === null || typeof value !== "object") return false;
+  if (Object.getPrototypeOf(value) !== Object.prototype) return false;
+  if (Object.getOwnPropertyNames(value).length !== 0) return false;
+  if (Object.getOwnPropertySymbols(value).length !== 0) return false;
+  return true;
+}
+
+function countVisualGeometryUserData(crate) {
+  let empty = 0;
+  let leftover = 0;
+  const bags = [];
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (geometryUserDataEmpty(mesh.geometry)) empty += 1;
+    else leftover += 1;
+    bags.push(mesh.geometry.userData);
+  }
+  return { empty, leftover, total: empty + leftover, uniqueBags: new Set(bags).size };
+}
+
+test("r170 BufferGeometry constructor defaults userData to an empty plain object", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const fresh = new THREE.BufferGeometry();
+  assert.equal(geometryUserDataEmpty(fresh), true, "constructor userData is an empty plain object");
+  assert.equal(Object.getPrototypeOf(fresh.userData), Object.prototype);
+  const firstBag = fresh.userData;
+  const second = new THREE.BufferGeometry();
+  assert.notEqual(second.userData, firstBag, "constructor does not share one {} across geometries");
+  fresh.userData = { targetNames: ["lid"] };
+  const json = fresh.toJSON();
+  assert.deepEqual(json.userData, { targetNames: ["lid"] }, "toJSON writes non-empty geometry userData");
+  fresh.userData = {};
+  assert.equal(fresh.toJSON().userData, undefined, "toJSON omits an empty geometry userData");
+  const source = new THREE.BufferGeometry();
+  const extras = { primitive: "extras" };
+  source.userData = extras;
+  const copied = new THREE.BufferGeometry().copy(source);
+  assert.equal(copied.userData, extras, "r170 copy shares geometry.userData by reference");
+  const loader = new THREE.BufferGeometryLoader();
+  const parsed = loader.parse({
+    metadata: { version: 4.6, type: "BufferGeometry", generator: "test" },
+    uuid: "geo-userdata",
+    type: "BufferGeometry",
+    data: { attributes: {} },
+    userData: { extras: "dcc" },
+  });
+  assert.deepEqual(parsed.userData, { extras: "dcc" }, "BufferGeometryLoader assigns json.userData");
+  const missing = loader.parse({
+    metadata: { version: 4.6, type: "BufferGeometry", generator: "test" },
+    uuid: "geo-empty-userdata",
+    type: "BufferGeometry",
+    data: { attributes: {} },
+  });
+  assert.equal(geometryUserDataEmpty(missing), true, "BufferGeometryLoader leaves a missing json.userData empty");
+  const objectLoader = new THREE.ObjectLoader();
+  const loaded = objectLoader.parse({
+    metadata: { version: 4.5, type: "Object", generator: "test" },
+    geometries: [
+      {
+        uuid: "geo-userdata-object",
+        type: "BufferGeometry",
+        data: { attributes: {} },
+        userData: { primitive: "extras" },
+      },
+    ],
+    materials: [{ uuid: "mat-userdata", type: "MeshBasicMaterial", color: 0x633318 }],
+    object: {
+      uuid: "mesh-userdata",
+      type: "Mesh",
+      geometry: "geo-userdata-object",
+      material: "mat-userdata",
+    },
+  });
+  assert.deepEqual(loaded.geometry.userData, { primitive: "extras" }, "ObjectLoader assigns geometry userData");
+  assert.equal(loaded.userData.primitive, undefined, "ObjectLoader geometry userData is not copied onto the Mesh");
+});
+
+test("v1.0.0 pins leftover BufferGeometry userData on packed color-only MeshBasic visuals; envelope stays v0.99", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.0\.0 pins leftover BufferGeometry userData/);
+  assert.match(crate.userData.l2.note, /13 geometry-userData-empty/);
+  assert.match(crate.userData.l2.note, /v0\.99 pins leftover BufferGeometry name/);
+  assert.match(crate.userData.l2.note, /13 geometry-name-empty/);
+  assert.match(crate.userData.l2.note, /13 version-zero/);
+  assert.match(crate.userData.l2.note, /13 name-empty/);
+  assert.match(crate.userData.l2.note, /13 gpuType-float/);
+  assert.match(crate.userData.l2.note, /13 normalized-default/);
+  assert.match(crate.userData.l2.note, /13 usage-static/);
+  assert.match(crate.userData.l2.note, /13 mesh-boundingSphere-absent/);
+  assert.match(crate.userData.l2.note, /13 bounds-null/);
+  assert.match(crate.userData.l2.note, /13 updateRanges-empty/);
+  assert.match(crate.userData.l2.note, /13 updateRange-default/);
+  assert.match(crate.userData.l2.note, /13 skinAttributes-absent/);
+  assert.match(crate.userData.l2.note, /13 drawRange-default/);
+  assert.match(crate.userData.l2.note, /13 groups-empty/);
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    const position = mesh.geometry.getAttribute("position");
+    assert.equal(position.isFloat16BufferAttribute, true, "packed visual position stays Float16");
+    assert.equal(geometryUserDataEmpty(mesh.geometry), true, "packed visual geometry.userData stays an empty plain object");
+    assert.notEqual(mesh.userData, mesh.geometry.userData, "mesh userData stays distinct from geometry userData");
+    assert.equal(mesh.geometry.name, "", "packed visual geometry.name stays empty");
+    assert.equal(position.version, 0, "Float16 position version stays 0");
+    assert.equal(position.name, "", "Float16 position name stays empty");
+    assert.equal(position.gpuType, THREE.FloatType, "Float16 position gpuType stays FloatType");
+    assert.equal(position.normalized, false, "Float16 position normalized stays false");
+    assertQuestSafeUnlitVersion(mesh);
+    assertQuestSafeUnlitName(mesh);
+    assertQuestSafeUnlitGpuType(mesh);
+    assertQuestSafeUnlitNormalized(mesh);
+    assertQuestSafeUnlitUsage(mesh);
+    assertQuestSafeUnlitMeshBoundingSphere(mesh);
+    assertQuestSafeUnlitBounds(mesh);
+    assertQuestSafeUnlitUpdateRanges(mesh);
+    assertQuestSafeUnlitUpdateRange(mesh);
+    assertQuestSafeUnlitSkinAttributes(mesh);
+    assertQuestSafeUnlitDrawRange(mesh);
+    assertQuestSafeUnlitGroups(mesh);
+    assert.equal(mesh.frustumCulled, true, "v0.50 frustumCulled stays true");
+  }
+  const userDataCounts = countVisualGeometryUserData(crate);
+  assert.equal(userDataCounts.empty, 13, "geometry-userData-empty count is 13");
+  assert.equal(userDataCounts.leftover, 0);
+  assert.equal(userDataCounts.uniqueBags, 13, "each visual geometry keeps its own empty userData");
+  const geometryNameCounts = countVisualGeometryName(crate);
+  assert.equal(geometryNameCounts.empty, 13, "geometry-name-empty count stays 13");
+  const versionCounts = countVisualVersion(crate);
+  assert.equal(versionCounts.zeros, 13, "version-zero count stays 13");
+  const nameCounts = countVisualName(crate);
+  assert.equal(nameCounts.empty, 13, "name-empty count stays 13");
+  const gpuCounts = countVisualGpuType(crate);
+  assert.equal(gpuCounts.floats, 13, "gpuType-float count stays 13");
+  const normalizedCounts = countVisualNormalized(crate);
+  assert.equal(normalizedCounts.defaults, 13, "normalized-default count stays 13");
+  const usageCounts = countVisualUsage(crate);
+  assert.equal(usageCounts.staticCount, 13, "usage-static count stays 13");
+  const sphereCounts = countVisualMeshBoundingSphere(crate);
+  assert.equal(sphereCounts.absent, 13, "mesh-boundingSphere-absent count stays 13");
+  const boundCounts = countVisualBounds(crate);
+  assert.equal(boundCounts.uniqueGeometries, 13, "one geometry per visual; geometries are not shared");
+  assert.equal(boundCounts.nulled, 13, "bounds-null count stays 13");
+  const rangeCounts = countVisualUpdateRanges(crate);
+  assert.equal(rangeCounts.empty, 13, "updateRanges-empty count stays 13");
+  const updateRangeCounts = countVisualUpdateRange(crate);
+  assert.equal(updateRangeCounts.defaults, 13, "updateRange-default count stays 13");
+  const skinCounts = countVisualSkinAttributes(crate);
+  assert.equal(skinCounts.absent, 13, "skinAttributes-absent count stays 13");
+  const drawCounts = countVisualDrawRange(crate);
+  assert.equal(drawCounts.defaults, 13, "drawRange-default count stays 13");
+  const groupCounts = countVisualGroups(crate);
+  assert.equal(groupCounts.empty, 13, "groups-empty count stays 13");
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.ok(lidMesh, "named lidMesh kept");
+  assert.ok(latchMesh, "named latchMesh kept");
+  assert.ok(fastener, "named fastenerMesh kept");
+  assert.equal(fastener.name, "fastenerMesh", "mesh name is not cleared");
+  assert.equal(lidMesh.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latchMesh.name, "latchMesh", "latchMesh name stays");
+  assert.equal(geometryUserDataEmpty(fastener.geometry), true, "fastener geometry.userData stays empty");
+  assert.equal(fastener.geometry.name, "", "fastener geometry.name stays empty");
+  assert.equal(fastener.parent.name, "toolbox", "fastener stays outside the LOD merge skip set");
+  assert.equal(fastener.geometry.getAttribute("position").isFloat16BufferAttribute, true, "fastener position stays Float16");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.equal(crate.userData.fastener.mesh, fastener, "root fastener metadata stays");
+  assert.equal(crate.userData.parts.lidPivot.name === "lidPivot" || crate.userData.parts.lidPivot.isObject3D, true);
+  assert.ok(crate.userData.colliders.every((c) => c.userData.collider === true), "collider mesh userData stays");
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assert.equal(geometryUserDataEmpty(bodyHero.geometry), true, "body LOD leaf geometry.userData stays empty");
+  assert.equal(bodyHero.geometry.name, "", "body LOD leaf geometry.name stays empty");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(geometryUserDataEmpty(fastener.geometry), true, "geometry userData stays empty after L5 drive");
+  assert.equal(fastener.geometry.name, "", "geometry name stays empty after L5 drive");
+  assert.equal(fastener.visible, true, "fastener mesh.visible is not pinned");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+  assert.equal(fastener.frustumCulled, true, "fastener frustumCulled stays true");
+  assert.equal(fastener.name, "fastenerMesh", "L5 drive does not rename fastenerMesh");
+  assert.equal(crate.userData.fastener.turns > 0, true, "L5 fastener metadata stays on the entity");
+});
+
+test("pinColorOnlyUnlitBasicGeometryUserData pins leftover geometry.userData in place and leaves name, version, attribute name, gpuType, normalized, usage, bounds, ranges, and the object sphere", () => {
+  const fresh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const freshPosition = fresh.geometry.getAttribute("position");
+  const freshIndex = fresh.geometry.index;
+  const freshArray = freshPosition.array;
+  const freshBag = fresh.geometry.userData;
+  const freshMeshBag = fresh.userData;
+  const freshUpload = () => {};
+  freshPosition.onUpload(freshUpload);
+  assert.equal(geometryUserDataEmpty(fresh.geometry), true, "fresh geometry userData is already empty");
+  const freshUsageCalls = setUsageCallCounter(freshPosition);
+  pinColorOnlyUnlitBasicGeometryUserData(fresh);
+  assert.equal(freshUsageCalls(), 0, "already-empty pin does not call setUsage");
+  assert.equal(fresh.geometry.getAttribute("position"), freshPosition, "already-empty pin does not replace position");
+  assert.equal(fresh.geometry.index, freshIndex, "already-empty pin does not replace the index");
+  assert.equal(freshPosition.array, freshArray, "already-empty pin does not replace the typed array");
+  assert.equal(fresh.geometry.userData, freshBag, "already-empty geometry.userData stays the same object");
+  assert.equal(fresh.userData, freshMeshBag, "already-empty pin does not replace mesh userData");
+  assert.equal(fresh.geometry.name, "", "already-empty pin does not touch geometry.name");
+  assert.equal(freshPosition.version, 0, "already-empty pin does not touch version");
+  assert.equal(freshPosition.name, "", "already-empty pin does not touch attribute name");
+  assert.equal(freshPosition.onUploadCallback, freshUpload, "already-empty pin does not replace onUploadCallback");
+  assert.equal(fresh.boundingSphere, undefined, "already-empty pin leaves object boundingSphere absent");
+  assert.equal(fresh.geometry.boundingBox, null, "already-empty pin leaves geometry boundingBox null");
+  assert.equal(fresh.geometry.boundingSphere, null, "already-empty pin leaves geometry boundingSphere null");
+
+  const wrong = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  wrong.name = "lidMesh";
+  wrong.userData.part = "lid";
+  const meshBag = wrong.userData;
+  const extras = { targetNames: ["lid"], exporter: "dcc" };
+  wrong.geometry.userData = extras;
+  wrong.geometry.name = "Mesh.001";
+  const position = wrong.geometry.getAttribute("position");
+  const index = wrong.geometry.index;
+  const positionArray = position.array;
+  const indexArray = index.array;
+  const upload = () => {};
+  position.onUpload(upload);
+  const indexUpload = () => {};
+  index.onUpload(indexUpload);
+  const geometryBounds = spoilGeometryBounds(wrong.geometry);
+  const objectSphere = spoilMeshBoundingSphere(wrong);
+  position.addUpdateRange(1, 2);
+  index.addUpdateRange(4, 1);
+  const positionRanges = position.updateRanges;
+  const indexRanges = index.updateRanges;
+  position.updateRange = { offset: 8, count: 3 };
+  index.updateRange = { offset: 8, count: 3 };
+  const positionRange = position.updateRange;
+  const indexRange = index.updateRange;
+  position.setUsage(THREE.DynamicDrawUsage);
+  index.setUsage(THREE.StreamDrawUsage);
+  position.normalized = true;
+  index.normalized = true;
+  position.gpuType = THREE.IntType;
+  index.gpuType = THREE.HalfFloatType;
+  position.name = "POSITION";
+  index.name = "indices";
+  position.version = 2;
+  index.version = 7;
+  const positionUsageCalls = setUsageCallCounter(position);
+  const indexUsageCalls = setUsageCallCounter(index);
+  const skin = attachLeftoverSkinAttributes(wrong.geometry);
+  const drawRange = wrong.geometry.drawRange;
+  wrong.geometry.drawRange.start = 3;
+  wrong.geometry.drawRange.count = 12;
+  const groups = wrong.geometry.groups;
+  wrong.geometry.addGroup(0, 3, 0);
+  const bag = wrong.geometry.morphAttributes;
+  bag.position = [new THREE.BufferAttribute(new Float32Array(3), 3)];
+  bag.position[0].version = 9;
+  bag.position[0].name = "MORPH_POSITION";
+  wrong.geometry.morphTargetsRelative = true;
+  const influences = [0.4];
+  const dictionary = { smile: 0 };
+  wrong.morphTargetInfluences = influences;
+  wrong.morphTargetDictionary = dictionary;
+  const clips = [new THREE.AnimationClip("dcc-leftover", 1, [])];
+  wrong.animations = clips;
+  const geometryBefore = wrong.geometry;
+  let computeCalls = 0;
+  wrong.geometry.computeBoundingBox = () => {
+    computeCalls += 1;
+  };
+  wrong.geometry.computeBoundingSphere = () => {
+    computeCalls += 1;
+  };
+  const returned = pinColorOnlyUnlitBasicGeometryUserData(wrong);
+  assert.equal(returned, wrong, "geometry-userData pin does not replace the mesh");
+  assert.equal(wrong.name, "lidMesh", "geometry-userData pin does not rename the mesh");
+  assert.equal(wrong.userData, meshBag, "pin does not replace mesh userData");
+  assert.equal(wrong.userData.part, "lid", "pin does not clear mesh userData");
+  assert.equal(wrong.geometry, geometryBefore, "pin does not replace the geometry");
+  assert.notEqual(wrong.geometry.userData, extras, "leftover geometry.userData is replaced");
+  assert.deepEqual(extras, { targetNames: ["lid"], exporter: "dcc" }, "pin does not mutate the leftover extras object");
+  assert.equal(geometryUserDataEmpty(wrong.geometry), true, "leftover geometry.userData is pinned to an empty plain object");
+  assert.equal(wrong.geometry.name, "Mesh.001", "pin does not touch geometry.name");
+  assert.equal(wrong.geometry.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(wrong.geometry.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not replace the position array");
+  assert.equal(index.array, indexArray, "pin does not replace the index array");
+  assert.equal(positionUsageCalls(), 0, "pin does not call setUsage on position");
+  assert.equal(indexUsageCalls(), 0, "pin does not call setUsage on the index");
+  assert.equal(computeCalls, 0, "pin does not call computeBoundingBox or computeBoundingSphere");
+  assert.equal(position.version, 2, "pin does not touch version");
+  assert.equal(index.version, 7, "pin does not touch index version");
+  assert.equal(position.name, "POSITION", "pin does not touch attribute name");
+  assert.equal(index.name, "indices", "pin does not touch index attribute name");
+  assert.equal(position.onUploadCallback, upload, "pin does not replace position onUploadCallback");
+  assert.equal(index.onUploadCallback, indexUpload, "pin does not replace index onUploadCallback");
+  assert.equal(position.gpuType, THREE.IntType, "pin does not touch gpuType");
+  assert.equal(index.gpuType, THREE.HalfFloatType, "pin does not touch index gpuType");
+  assert.equal(position.normalized, true, "pin does not reassign normalized");
+  assert.equal(index.normalized, true, "pin does not reassign index normalized");
+  assert.equal(position.usage, THREE.DynamicDrawUsage, "pin leaves the v0.94 usage field alone");
+  assert.equal(index.usage, THREE.StreamDrawUsage, "pin leaves index usage alone");
+  assert.equal(bag.position[0].version, 9, "pin does not clear morph attribute version");
+  assert.equal(bag.position[0].name, "MORPH_POSITION", "pin does not clear morph attribute names");
+  assert.equal(wrong.boundingSphere, objectSphere, "pin does not delete the object sphere");
+  assert.equal(objectSphere.radius, 0.01, "pin does not mutate the object Sphere");
+  assert.equal(wrong.geometry.boundingBox, geometryBounds.box, "pin does not replace geometry boundingBox");
+  assert.equal(wrong.geometry.boundingSphere, geometryBounds.sphere, "pin does not replace geometry boundingSphere");
+  assert.equal(geometryBounds.box.min.x, 9, "pin does not mutate the geometry Box3");
+  assert.equal(geometryBounds.sphere.radius, 0.01, "pin does not mutate the geometry Sphere");
+  assert.equal(position.updateRanges, positionRanges, "pin does not replace updateRanges");
+  assert.equal(positionRanges.length, 1, "pin does not clear authored updateRanges");
+  assert.equal(index.updateRanges, indexRanges, "pin does not replace index updateRanges");
+  assert.equal(indexRanges.length, 1, "pin does not clear index updateRanges");
+  assert.equal(position.updateRange, positionRange, "pin does not replace updateRange");
+  assert.equal(positionRange.offset, 8, "pin does not touch updateRange.offset");
+  assert.equal(positionRange.count, 3, "pin does not touch updateRange.count");
+  assert.equal(indexRange.offset, 8, "pin does not touch index updateRange.offset");
+  assert.equal(indexRange.count, 3, "pin does not touch index updateRange.count");
+  assert.equal(wrong.geometry.getAttribute("skinIndex"), skin.skinIndex, "pin does not delete or replace skinIndex");
+  assert.equal(wrong.geometry.getAttribute("skinWeight"), skin.skinWeight, "pin does not delete or replace skinWeight");
+  assert.equal(wrong.geometry.drawRange, drawRange, "pin does not replace drawRange");
+  assert.equal(drawRange.start, 3, "pin does not change drawRange.start");
+  assert.equal(drawRange.count, 12, "pin does not change drawRange.count");
+  assert.equal(wrong.geometry.groups, groups, "pin does not replace groups");
+  assert.equal(groups.length, 1, "pin does not clear groups");
+  assert.equal(wrong.geometry.morphAttributes, bag, "pin does not replace morphAttributes");
+  assert.equal(bag.position.length, 1, "pin does not clear morphAttributes");
+  assert.equal(wrong.geometry.morphTargetsRelative, true, "pin does not pin morphTargetsRelative");
+  assert.equal(wrong.morphTargetInfluences, influences, "pin does not touch Mesh morphTargetInfluences");
+  assert.equal(wrong.morphTargetDictionary, dictionary, "pin does not touch Mesh morphTargetDictionary");
+  assert.equal(wrong.animations, clips, "pin does not touch Object3D animations");
+  assert.equal(wrong.frustumCulled, true, "pin does not change frustumCulled");
+
+  const missing = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const missingPosition = missing.geometry.getAttribute("position");
+  delete missing.geometry.userData;
+  missing.geometry.name = "kept-name";
+  missingPosition.version = 4;
+  missingPosition.name = "POSITION";
+  pinColorOnlyUnlitBasicGeometryUserData(missing);
+  assert.equal(missing.geometry.getAttribute("position"), missingPosition, "deleted-userData pin keeps the position attribute");
+  assert.equal(geometryUserDataEmpty(missing.geometry), true, "deleted geometry.userData is restored to an empty plain object");
+  assert.equal(missing.geometry.name, "kept-name", "deleted-userData pin does not touch geometry.name");
+  assert.equal(missingPosition.version, 4, "deleted-userData pin does not touch version");
+  assert.equal(missingPosition.name, "POSITION", "deleted-userData pin does not touch attribute name");
+
+  const nulled = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  nulled.geometry.userData = null;
+  pinColorOnlyUnlitBasicGeometryUserData(nulled);
+  assert.equal(geometryUserDataEmpty(nulled.geometry), true, "null geometry.userData is replaced");
+
+  const text = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  text.geometry.userData = "primitive-extras";
+  pinColorOnlyUnlitBasicGeometryUserData(text);
+  assert.equal(geometryUserDataEmpty(text.geometry), true, "non-object geometry.userData is replaced");
+
+  const listed = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  listed.geometry.userData = [];
+  pinColorOnlyUnlitBasicGeometryUserData(listed);
+  assert.equal(geometryUserDataEmpty(listed.geometry), true, "array geometry.userData is replaced");
+
+  const proto = { dcc: true };
+  const junk = Object.create(proto);
+  const protoMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  protoMesh.geometry.userData = junk;
+  pinColorOnlyUnlitBasicGeometryUserData(protoMesh);
+  assert.notEqual(protoMesh.geometry.userData, junk, "non-null prototype junk is replaced");
+  assert.equal(junk.dcc, true, "pin does not mutate the prototype-junk object");
+  assert.equal(geometryUserDataEmpty(protoMesh.geometry), true, "prototype junk becomes an empty plain object");
+
+  const nil = Object.create(null);
+  const nilMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  nilMesh.geometry.userData = nil;
+  pinColorOnlyUnlitBasicGeometryUserData(nilMesh);
+  assert.notEqual(nilMesh.geometry.userData, nil, "null-prototype userData is replaced");
+  assert.equal(Object.getPrototypeOf(nilMesh.geometry.userData), Object.prototype);
+
+  const hidden = {};
+  Object.defineProperty(hidden, "exporter", { value: "dcc", enumerable: false });
+  const hiddenMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  hiddenMesh.geometry.userData = hidden;
+  pinColorOnlyUnlitBasicGeometryUserData(hiddenMesh);
+  assert.notEqual(hiddenMesh.geometry.userData, hidden, "non-enumerable own keys are replaced");
+  assert.equal(hidden.exporter, "dcc", "pin does not delete hidden own keys on the old object");
+  assert.equal(geometryUserDataEmpty(hiddenMesh.geometry), true);
+
+  const sym = Symbol("extras");
+  const symbolBag = { [sym]: 1 };
+  const symbolMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  symbolMesh.geometry.userData = symbolBag;
+  pinColorOnlyUnlitBasicGeometryUserData(symbolMesh);
+  assert.notEqual(symbolMesh.geometry.userData, symbolBag, "symbol own keys are replaced");
+  assert.equal(symbolBag[sym], 1, "pin does not mutate the symbol-key object");
+  assert.equal(geometryUserDataEmpty(symbolMesh.geometry), true);
+
+  const first = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const second = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  first.geometry.userData = { a: 1 };
+  second.geometry.userData = { b: 1 };
+  pinColorOnlyUnlitBasicGeometryUserData(first);
+  pinColorOnlyUnlitBasicGeometryUserData(second);
+  assert.notEqual(first.geometry.userData, second.geometry.userData, "replacements are not a shared {}");
+  assert.equal(geometryUserDataEmpty(first.geometry), true);
+  assert.equal(geometryUserDataEmpty(second.geometry), true);
+
+  const shared = {};
+  const sharedA = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const sharedB = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  sharedA.geometry.userData = shared;
+  sharedB.geometry.userData = shared;
+  const root = new THREE.Group();
+  root.userData.parts = { lid: true };
+  root.userData.fastener = { turns: 0, seated: false };
+  const rootBag = root.userData;
+  root.add(sharedA, sharedB);
+  pinColorOnlyVisualGeometryUserData(root);
+  assert.equal(sharedA.geometry.userData, shared, "already-empty shared userData is left as-is");
+  assert.equal(sharedB.geometry.userData, shared, "already-empty shared userData stays shared when both are empty");
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(root.userData.parts.lid, true, "entity parts metadata stays");
+  assert.equal(root.userData.fastener.turns, 0, "entity fastener metadata stays");
+
+  const arrayMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    [new THREE.MeshBasicMaterial({ color: 0x633318 }), new THREE.MeshBasicMaterial({ color: 0xbe7e31 })]
+  );
+  const arrayExtras = { materialArray: true };
+  arrayMesh.geometry.userData = arrayExtras;
+  arrayMesh.geometry.name = "material-array";
+  arrayMesh.geometry.getAttribute("position").version = 6;
+  pinColorOnlyUnlitBasicGeometryUserData(arrayMesh);
+  assert.equal(arrayMesh.geometry.userData, arrayExtras, "material array keeps authored geometry.userData");
+  assert.equal(arrayMesh.geometry.name, "material-array", "material array keeps authored geometry.name");
+  assert.equal(arrayMesh.geometry.getAttribute("position").version, 6, "material array keeps authored version");
+});
+
+test("pinColorOnlyUnlitBasicGeometryUserData / pinColorOnlyVisualGeometryUserData skip mapped, lit, interleaved, colliders, shared blocked", () => {
+  const colorOnly = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0x633318 })
+  );
+  colorOnly.name = "lidMesh";
+  colorOnly.userData.part = "lid";
+  const colorMeshBag = colorOnly.userData;
+  const colorBounds = spoilGeometryBounds(colorOnly.geometry);
+  const colorSphere = spoilMeshBoundingSphere(colorOnly);
+  const colorExtras = { primitive: "lid" };
+  colorOnly.geometry.userData = colorExtras;
+  colorOnly.geometry.name = "primitive_0";
+  colorOnly.geometry.getAttribute("position").version = 4;
+  colorOnly.geometry.index.version = 2;
+  colorOnly.geometry.getAttribute("position").name = "POSITION";
+  colorOnly.geometry.getAttribute("position").gpuType = THREE.IntType;
+  colorOnly.geometry.getAttribute("position").normalized = true;
+  colorOnly.geometry.getAttribute("position").setUsage(THREE.DynamicDrawUsage);
+  colorOnly.geometry.getAttribute("position").addUpdateRange(4, 2);
+  const colorRanges = colorOnly.geometry.getAttribute("position").updateRanges;
+  colorOnly.geometry.getAttribute("position").updateRange = { offset: 2, count: 2 };
+  const colorUpdateRange = colorOnly.geometry.getAttribute("position").updateRange;
+  pinColorOnlyUnlitBasicGeometryUserData(colorOnly);
+  assert.notEqual(colorOnly.geometry.userData, colorExtras, "color-only leftover geometry.userData is replaced");
+  assert.deepEqual(colorExtras, { primitive: "lid" }, "per-mesh pin does not mutate leftover extras");
+  assert.equal(geometryUserDataEmpty(colorOnly.geometry), true, "color-only leftover geometry.userData is pinned");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin does not rename the mesh");
+  assert.equal(colorOnly.userData, colorMeshBag, "per-mesh pin does not replace mesh userData");
+  assert.equal(colorOnly.userData.part, "lid", "per-mesh pin does not clear mesh userData");
+  assert.equal(colorOnly.geometry.name, "primitive_0", "per-mesh pin does not touch geometry.name");
+  assert.equal(colorOnly.geometry.getAttribute("position").version, 4, "per-mesh pin does not touch version");
+  assert.equal(colorOnly.geometry.index.version, 2, "per-mesh pin does not touch index version");
+  assert.equal(colorOnly.geometry.getAttribute("position").name, "POSITION", "per-mesh pin does not touch attribute name");
+  assert.equal(colorOnly.geometry.getAttribute("position").gpuType, THREE.IntType, "per-mesh pin does not touch gpuType");
+  assert.equal(colorOnly.geometry.getAttribute("position").normalized, true, "per-mesh pin does not reassign normalized");
+  assert.equal(colorOnly.geometry.getAttribute("position").usage, THREE.DynamicDrawUsage, "per-mesh pin does not call setUsage");
+  assert.equal(colorOnly.boundingSphere, colorSphere, "per-mesh pin leaves the object sphere");
+  assert.equal(colorOnly.geometry.boundingBox, colorBounds.box, "per-mesh pin leaves geometry boundingBox");
+  assert.equal(colorOnly.geometry.boundingSphere, colorBounds.sphere, "per-mesh pin leaves geometry boundingSphere");
+  assert.equal(colorRanges.length, 1, "per-mesh pin does not clear updateRanges");
+  assert.equal(colorUpdateRange.offset, 2, "per-mesh pin does not rewrite updateRange.offset");
+
+  const mappedMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const mapped = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  const mappedExtras = { mapped: true };
+  mapped.geometry.userData = mappedExtras;
+  mapped.geometry.name = "mappedGeo";
+  mapped.geometry.getAttribute("position").version = 8;
+  const std = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshStandardMaterial());
+  const litExtras = { lit: true };
+  std.geometry.userData = litExtras;
+  std.geometry.name = "litGeo";
+  std.geometry.getAttribute("position").version = 8;
+  pinColorOnlyUnlitBasicGeometryUserData(mapped);
+  pinColorOnlyUnlitBasicGeometryUserData(std);
+  assert.equal(mapped.geometry.userData, mappedExtras, "mapped MeshBasic keeps authored geometry.userData");
+  assert.equal(mapped.geometry.name, "mappedGeo", "mapped MeshBasic keeps authored geometry.name");
+  assert.equal(mapped.geometry.getAttribute("position").version, 8, "mapped MeshBasic keeps authored version");
+  assert.equal(std.geometry.userData, litExtras, "MeshStandard keeps authored geometry.userData");
+  assert.equal(std.geometry.name, "litGeo", "MeshStandard keeps authored geometry.name");
+  assert.equal(std.geometry.getAttribute("position").version, 8, "MeshStandard keeps authored version");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  interleavedGeo.userData = { interleaved: true };
+  interleavedGeo.name = "interleavedGeo";
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  const interleavedPosition = new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0);
+  interleavedGeo.setAttribute("position", interleavedPosition);
+  interleavedGeo.setIndex([0, 1, 2]);
+  interleavedGeo.index.version = 4;
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  pinColorOnlyUnlitBasicGeometryUserData(interleaved);
+  assert.equal(interleaved.geometry, interleavedGeo, "interleaved geometry stays");
+  assert.equal(interleavedGeo.userData.interleaved, true, "interleaved geometry.userData stays authored");
+  assert.equal(interleavedGeo.name, "interleavedGeo", "interleaved geometry.name stays authored");
+  assert.equal(interleavedGeo.index.version, 4, "interleaved index version stays authored");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  root.userData.parts = { latch: true };
+  root.userData.fastener = { turns: 1, seated: false };
+  const rootBag = root.userData;
+  const body = new THREE.Group();
+  body.name = "body";
+  const mappedMesh = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  const mappedShared = { mappedShared: true };
+  mappedMesh.geometry.userData = mappedShared;
+  mappedMesh.geometry.name = "mappedShared";
+  mappedMesh.geometry.getAttribute("position").version = 11;
+  const mappedBounds = spoilGeometryBounds(mappedMesh.geometry);
+  const mappedSphere = spoilMeshBoundingSphere(mappedMesh, 0.05);
+  const colorMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 })
+  );
+  colorMesh.name = "latchMesh";
+  colorMesh.userData.part = "latch";
+  const colorEntityBag = colorMesh.userData;
+  const colorMeshBounds = spoilGeometryBounds(colorMesh.geometry);
+  const colorMeshSphere = spoilMeshBoundingSphere(colorMesh);
+  const latchExtras = { latch: true };
+  colorMesh.geometry.userData = latchExtras;
+  colorMesh.geometry.name = "latchPrimitive";
+  colorMesh.geometry.getAttribute("position").version = 5;
+  colorMesh.geometry.getAttribute("position").name = "POSITION";
+  colorMesh.geometry.getAttribute("position").gpuType = THREE.IntType;
+  colorMesh.geometry.getAttribute("position").normalized = true;
+  colorMesh.geometry.getAttribute("position").setUsage(THREE.DynamicDrawUsage);
+  colorMesh.geometry.getAttribute("position").updateRange = { offset: 2, count: 2 };
+  const authoredUpdateRange = colorMesh.geometry.getAttribute("position").updateRange;
+  colorMesh.geometry.getAttribute("position").addUpdateRange(1, 1);
+  const colorUpdateRanges = colorMesh.geometry.getAttribute("position").updateRanges;
+  const collider = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xff00ff })
+  );
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.userData.size = { x: 1, y: 1, z: 1 };
+  const colliderBag = collider.userData;
+  const colliderExtras = { collider: true };
+  collider.geometry.userData = colliderExtras;
+  collider.geometry.name = "colliderGeo";
+  collider.geometry.getAttribute("position").version = 9;
+  const colliderSphere = spoilMeshBoundingSphere(collider, 0.06);
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  const sharedMaterialExtras = { sharedMaterial: true };
+  sharedVisual.geometry.userData = sharedMaterialExtras;
+  sharedVisual.geometry.name = "sharedMaterialGeo";
+  sharedVisual.geometry.getAttribute("position").version = 12;
+  const sharedVisualSphere = spoilMeshBoundingSphere(sharedVisual, 0.07);
+  const sharedCollider = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedGeo = mappedMesh.geometry;
+  const sharedGeoVisual = new THREE.Mesh(sharedGeo, new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.userData.fastener = true;
+  const sharedGeoSphere = spoilMeshBoundingSphere(sharedGeoVisual, 0.09);
+  body.add(mappedMesh, colorMesh, sharedVisual, sharedGeoVisual, interleaved);
+  root.add(body, collider, sharedCollider, std);
+  pinColorOnlyVisualGeometryUserData(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(root.userData.studio.objectId, "crate-toolbox", "studio metadata stays");
+  assert.equal(root.userData.parts.latch, true, "parts metadata stays");
+  assert.equal(root.userData.fastener.turns, 1, "fastener metadata stays");
+  assert.notEqual(colorMesh.geometry.userData, latchExtras, "entity helper replaces color-only geometry.userData");
+  assert.equal(geometryUserDataEmpty(colorMesh.geometry), true, "entity helper pins color-only geometry.userData");
+  assert.equal(colorMesh.name, "latchMesh", "entity helper does not rename latchMesh");
+  assert.equal(colorMesh.userData, colorEntityBag, "entity helper does not replace mesh userData");
+  assert.equal(colorMesh.userData.part, "latch", "entity helper does not clear mesh userData");
+  assert.equal(colorMesh.geometry.name, "latchPrimitive", "entity helper does not touch geometry.name");
+  assert.equal(colorMesh.geometry.getAttribute("position").version, 5, "entity helper does not touch version");
+  assert.equal(colorMesh.geometry.getAttribute("position").name, "POSITION", "entity helper does not touch attribute name");
+  assert.equal(colorMesh.geometry.getAttribute("position").gpuType, THREE.IntType, "entity helper does not touch gpuType");
+  assert.equal(colorMesh.geometry.getAttribute("position").normalized, true, "entity helper does not reassign normalized");
+  assert.equal(colorMesh.geometry.getAttribute("position").usage, THREE.DynamicDrawUsage, "entity helper does not call setUsage");
+  assert.equal(colorMesh.boundingSphere, colorMeshSphere, "entity helper does not delete the object sphere");
+  assert.equal(colorMesh.geometry.boundingBox, colorMeshBounds.box, "entity helper does not replace geometry boundingBox");
+  assert.equal(colorMesh.geometry.boundingSphere, colorMeshBounds.sphere, "entity helper does not replace geometry boundingSphere");
+  assert.equal(colorMesh.geometry.getAttribute("position").updateRange, authoredUpdateRange, "entity helper does not replace updateRange");
+  assert.equal(authoredUpdateRange.offset, 2, "entity helper does not change updateRange.offset");
+  assert.equal(colorUpdateRanges.length, 1, "entity helper does not clear updateRanges");
+  assert.equal(mappedMesh.geometry.userData, mappedShared, "mapped MeshBasic keeps authored geometry.userData via entity helper");
+  assert.equal(mappedMesh.geometry.name, "mappedShared", "mapped MeshBasic keeps authored geometry.name via entity helper");
+  assert.equal(mappedMesh.geometry.getAttribute("position").version, 11, "mapped MeshBasic keeps authored version via entity helper");
+  assert.equal(mappedMesh.boundingSphere, mappedSphere, "mapped object sphere stays authored via entity helper");
+  assert.equal(mappedMesh.geometry.boundingBox, mappedBounds.box, "mapped geometry box stays authored via entity helper");
+  assert.equal(interleaved.geometry.userData.interleaved, true, "interleaved geometry.userData stays authored via entity helper");
+  assert.equal(interleaved.geometry.name, "interleavedGeo", "interleaved geometry.name stays authored via entity helper");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.userData.collider, true, "collider flag stays");
+  assert.equal(collider.userData.size.x, 1, "collider size stays");
+  assert.equal(collider.geometry.userData, colliderExtras, "collider geometry.userData stays authored");
+  assert.equal(collider.geometry.name, "colliderGeo", "collider geometry.name stays authored");
+  assert.equal(collider.geometry.getAttribute("position").version, 9, "collider position version stays authored");
+  assert.equal(collider.name, "collider_grab", "collider mesh name stays");
+  assert.equal(collider.boundingSphere, colliderSphere, "collider object sphere stays authored");
+  assert.equal(sharedVisual.geometry.userData, sharedMaterialExtras, "shared collider material visual keeps authored geometry.userData");
+  assert.equal(sharedVisual.geometry.name, "sharedMaterialGeo", "shared collider material visual keeps authored geometry.name");
+  assert.equal(sharedVisual.geometry.getAttribute("position").version, 12, "shared collider material visual keeps authored version");
+  assert.equal(sharedVisual.boundingSphere, sharedVisualSphere, "shared collider material visual keeps its object sphere");
+  assert.equal(sharedGeoVisual.geometry, sharedGeo, "shared mapped geometry is not replaced");
+  assert.equal(sharedGeoVisual.geometry.userData, mappedShared, "geometry shared with a mapped mesh keeps authored geometry.userData");
+  assert.equal(sharedGeoVisual.geometry.name, "mappedShared", "geometry shared with a mapped mesh keeps authored geometry.name");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+  assert.equal(sharedGeoVisual.boundingSphere, sharedGeoSphere, "geometry shared with a mapped mesh keeps the visual object sphere");
+  assert.equal(std.geometry.userData, litExtras, "MeshStandard geometry.userData stays authored via entity helper");
   assert.equal(std.geometry.name, "litGeo", "MeshStandard geometry.name stays authored via entity helper");
 });
