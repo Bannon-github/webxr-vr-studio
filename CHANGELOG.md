@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.103.0] — 2026-09-24
+
+### Changed
+
+- `crate-toolbox` **v1.1.0** L3 packaging/perf UPGRADE: after the v1.0.0 BufferGeometry `userData` pin (`geometry.userData = {}` on the 13 packed color-only unlit MeshBasic visual geometries), also pin leftover Material `userData` to the r170 constructor default empty plain object (`material.userData = {}`) on the shared color-only MeshBasic materials those visuals use (wood / brass / steel; unique MeshBasic stays 3; first-class measured material-userData-empty). `pinColorOnlyUnlitBasicMaterialUserData` / `pinColorOnlyVisualMaterialUserData` run after `pinColorOnlyVisualGeometryUserData` on procedural create and packaged ingest, including fail-soft (no lod groups) and the fastener. Same `isColorOnlyUnlitBasic` gate and the same collider / interleaved / mapped / lit / shared-material / shared-geometry skip rules. Assign a fresh `material.userData = {}` in place only when it is not already an empty plain object (missing, non-object, any own string or symbol keys, or a prototype other than `Object.prototype`). Do not share one `{}` across materials. An already-empty plain object is left as-is. Do not replace the material, the geometry, the attributes, or the typed arrays. Do not touch Material `name`. Do not touch prior material program-cache / flag pins. Do not touch BufferGeometry `userData` (v1.0.0 geometry-userData-empty stays) or BufferGeometry `name`. Do not touch Mesh / Object3D `userData`. Checked installed three@0.170.0: the Material constructor assigns `this.userData = {}`. `Material.toJSON` writes `userData` only when `Object.keys(this.userData).length > 0`. `Material.copy` clones via `JSON.parse(JSON.stringify(source.userData))` (not the shared reference `BufferGeometry.copy` uses). `MaterialLoader` / `ObjectLoader.parseMaterials` assign `json.userData` when present. Stock GLTFLoader `loadMaterial` calls `assignExtrasToUserData(material, materialDef)`. `WebGLRenderer` does not read `material.userData`. Clearing leftover extras to a fresh `{}` is load-time packaging only: no draw / tri / attrBytes change. Clean procedural pre-upload draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, geometry-userData-empty 13, geometry-name-empty 13, version-zero 13 stay vs v1.0.0. material-userData-empty 3 is the new count. Quest 3 90 Hz / 72 fallback requested, not measured. Headset ms / FFR still unmeasured. Do not require 207/240 Hz.
+
 ## [0.102.0] — 2026-09-24
 
 ### Changed
