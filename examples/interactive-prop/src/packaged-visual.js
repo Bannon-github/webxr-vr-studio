@@ -1789,6 +1789,66 @@
  * untouched. Does not hex-dedupe or invent
  * meshes. Fail-soft (no lod groups) still
  * runs this pin, including the fastener.
+ *
+ * v1.1.0: after that geometry-userData pin,
+ * `pinColorOnlyVisualMaterialUserData` pins
+ * leftover Material `userData` to a fresh empty
+ * plain object (`material.userData = {}`) on the
+ * packed color-only unlit MeshBasic materials
+ * used by those same visuals (shared wood /
+ * brass / steel stand-ins; unique MeshBasic
+ * stays 3; body LOD leaves + lid/latch/tool +
+ * fastener; same `isColorOnlyUnlitBasic` gate
+ * and the same collider / interleaved / mapped /
+ * lit / shared-material / shared-geometry skip
+ * rules).
+ * **Checked installed three@0.170.0:** the
+ * Material constructor assigns
+ * `this.userData = {}`. `Material.toJSON` writes
+ * `data.userData` only when
+ * `Object.keys(this.userData).length > 0`.
+ * `Material.copy` assigns
+ * `this.userData = JSON.parse(JSON.stringify(source.userData))`
+ * (a clone, not the shared reference
+ * `BufferGeometry.copy` uses). `MaterialLoader`
+ * assigns `material.userData = json.userData`
+ * when `json.userData !== undefined`.
+ * `ObjectLoader.parseMaterials` uses that
+ * loader. Stock GLTFLoader `loadMaterial` calls
+ * `assignExtrasToUserData(material, materialDef)`,
+ * which `Object.assign`s material extras onto
+ * `material.userData`. `WebGLRenderer` does not
+ * read `material.userData`. DCC / glTF material
+ * extras can still sit on `material.userData`
+ * after the v1.0.0 geometry pin. Clearing them
+ * to a fresh `{}` is load-time packaging only:
+ * no draw / tri / attrBytes change. Assign
+ * `material.userData = {}` only when it is not
+ * already an empty plain object (each
+ * replacement is a fresh object; do not share
+ * one `{}` across materials). Do **not**
+ * replace the material, the geometry, the
+ * attributes, or the typed arrays. Do **not**
+ * touch Material `name`. Do **not** touch prior
+ * material program-cache / flag pins. Do **not**
+ * touch BufferGeometry `userData` (v1.0.0
+ * geometry-userData-empty stays) or
+ * BufferGeometry `name` (v0.99
+ * geometry-name-empty stays). Do **not** touch
+ * Mesh / Object3D `userData`. Do **not** touch
+ * BufferAttribute `version` / `name` /
+ * `gpuType` / `normalized` / `usage` /
+ * `updateRange` / `updateRanges` / `onUpload` /
+ * `onUploadCallback`. Do **not** touch geometry
+ * bounds or Mesh `boundingSphere`. Do **not**
+ * change `frustumCulled`. Do **not** rename the
+ * Mesh (`lidMesh` / `latchMesh` /
+ * `fastenerMesh` stay). Mapped / lit /
+ * interleaved keep authored
+ * `material.userData`. Collider meshes stay
+ * untouched. Does not hex-dedupe or invent
+ * materials. Fail-soft (no lod groups) still
+ * runs this pin, including the fastener.
  */
 
 import {
@@ -1826,6 +1886,7 @@ import {
   pinColorOnlyVisualVersion,
   pinColorOnlyVisualGeometryName,
   pinColorOnlyVisualGeometryUserData,
+  pinColorOnlyVisualMaterialUserData,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2014,6 +2075,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualVersion(root);
   pinColorOnlyVisualGeometryName(root);
   pinColorOnlyVisualGeometryUserData(root);
+  pinColorOnlyVisualMaterialUserData(root);
   return root;
 }
 

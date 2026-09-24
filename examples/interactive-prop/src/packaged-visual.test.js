@@ -6990,3 +6990,159 @@ test("packaged ingest without lod groups still pins leftover BufferGeometry user
   assert.equal(colliderGrab.geometry.getAttribute("position").version, 10, "fail-soft collider keeps authored version");
   assert.equal(colliderGrab.geometry.getAttribute("position").name, "POSITION", "fail-soft collider keeps authored attribute name");
 });
+
+function materialUserDataEmpty(material) {
+  const value = material?.userData;
+  if (value === null || typeof value !== "object") return false;
+  if (Object.getPrototypeOf(value) !== Object.prototype) return false;
+  if (Object.getOwnPropertyNames(value).length !== 0) return false;
+  if (Object.getOwnPropertySymbols(value).length !== 0) return false;
+  return true;
+}
+
+test("packaged ingest pins leftover Material userData to an empty plain object after the geometry-userData pin; mapped/lit/collider keep authored material.userData", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const { root, fastener, groups } = makePackagedFixture();
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  mapped.name = "mappedMat";
+  const mappedExtras = { mapped: true };
+  mapped.userData = mappedExtras;
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const wrong = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  wrong.name = "dccWood";
+  const wrongExtras = { targetNames: ["body"] };
+  wrong.userData = wrongExtras;
+  const wrongMesh = boxMesh("dccMaterialUserData", wrong);
+  const geometryBefore = wrongMesh.geometry;
+  const position = wrongMesh.geometry.getAttribute("position");
+  const index = wrongMesh.geometry.index;
+  const positionArray = position.array;
+  const geoExtras = { primitive: "body" };
+  wrongMesh.geometry.userData = geoExtras;
+  wrongMesh.geometry.name = "Mesh.001";
+  wrongMesh.userData.part = "body";
+  const meshBag = wrongMesh.userData;
+  // Keep the original position through packColorOnlyGeometry so the
+  // version pin is observable. Quantize skips morph geometries; the
+  // morph pin then clears the leftover before the version pin.
+  wrongMesh.geometry.morphAttributes.position = [];
+  position.version = 2;
+  position.name = "POSITION";
+  groups[0][0].add(mappedMesh, wrongMesh);
+  const colliderGrabBefore = root.getObjectByName("collider_grab");
+  const colliderExtras = { collider: true };
+  colliderGrabBefore.material.userData = colliderExtras;
+  colliderGrabBefore.material.name = "colliderMat";
+  colliderGrabBefore.userData.layer = "grab";
+  const fastenerExtras = { fastener: "material" };
+  fastener.material.userData = fastenerExtras;
+  fastener.material.name = "brassStandIn";
+  fastener.userData.kept = "fastener-mesh";
+  const fastenerGeo = { fastener: "primitive" };
+  fastener.geometry.userData = fastenerGeo;
+  fastener.geometry.morphAttributes.position = [];
+  const fastenerPosition = fastener.geometry.getAttribute("position");
+  const fastenerArray = fastenerPosition.array;
+  fastenerPosition.version = 5;
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(wrongMesh.material, wrong, "ingest does not replace the color-only material");
+  assert.equal(wrongMesh.geometry, geometryBefore, "ingest does not replace the geometry");
+  assert.equal(wrongMesh.geometry.getAttribute("position"), position, "position attribute stays");
+  assert.equal(position.array, positionArray, "ingest does not replace the position typed array");
+  assert.equal(wrongMesh.geometry.index, index, "ingest does not replace the index");
+  assert.equal(wrongMesh, root.getObjectByName("dccMaterialUserData"), "ingest does not replace the color-only mesh");
+  assert.equal(wrongMesh.name, "dccMaterialUserData", "ingest does not rename the color-only mesh");
+  assert.equal(wrongMesh.userData, meshBag, "ingest does not replace mesh userData");
+  assert.equal(wrongMesh.userData.part, "body", "ingest does not clear mesh userData");
+  assert.notEqual(wrong.userData, wrongExtras, "leftover material.userData is replaced");
+  assert.deepEqual(wrongExtras, { targetNames: ["body"] }, "ingest does not mutate leftover material extras");
+  assert.equal(materialUserDataEmpty(wrong), true, "leftover material.userData is pinned to an empty plain object");
+  assert.equal(wrong.name, "dccWood", "ingest does not touch material.name");
+  assert.equal(geometryUserDataEmpty(wrongMesh.geometry), true, "geometry-userData pin still clears leftover geometry.userData");
+  assert.equal(wrongMesh.geometry.name, "", "geometry-name pin still clears leftover geometry.name");
+  assert.equal(position.version, 0, "version pin still holds on position");
+  assert.equal(position.name, "", "attribute name pin still holds");
+  assert.notEqual(wrong.userData, wrongMesh.geometry.userData, "material userData stays distinct from geometry userData");
+  assert.notEqual(wrong.userData, wrongMesh.userData, "material userData stays distinct from mesh userData");
+  assert.notEqual(fastener.material.userData, fastenerExtras, "fastener material.userData is replaced");
+  assert.equal(materialUserDataEmpty(fastener.material), true, "fastener material.userData is pinned");
+  assert.equal(fastener.material.name, "brassStandIn", "fastener material.name stays");
+  assert.equal(fastener.userData.kept, "fastener-mesh", "fastener mesh userData stays");
+  assert.equal(geometryUserDataEmpty(fastener.geometry), true, "fastener geometry.userData is pinned");
+  assert.equal(fastenerPosition.array, fastenerArray, "fastener typed array stays");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(fastenerPosition.version, 0, "fastener version pin still holds");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener stays matrix-live");
+  assert.equal(root.userData.fastener.mesh, fastener, "entity fastener metadata stays");
+  assert.equal(mapped.userData, mappedExtras, "mapped MeshBasic keeps authored material.userData");
+  assert.equal(mapped.name, "mappedMat", "mapped MeshBasic keeps authored material.name");
+  const colliderGrab = root.getObjectByName("collider_grab");
+  assert.equal(colliderGrab.material.userData, colliderExtras, "collider material.userData stays authored");
+  assert.equal(colliderGrab.material.name, "colliderMat", "collider material.name stays");
+  assert.equal(colliderGrab.userData.collider, true, "collider mesh userData flag stays");
+  assert.equal(colliderGrab.userData.layer, "grab", "collider mesh userData layer stays");
+  assert.equal(colliderGrab.name, "collider_grab", "collider mesh name stays");
+});
+
+test("packaged ingest without lod groups still pins leftover Material userData to an empty plain object", () => {
+  const { root, body, lid, latch, tool, fastener } = makePackagedFixture({ withLod: false });
+  const bodyMesh = visualMeshes(body)[0];
+  const bodyMat = bodyMesh.material;
+  const bodyExtras = { body: true };
+  bodyMat.userData = bodyExtras;
+  bodyMat.name = "bodyMat";
+  bodyMesh.geometry.userData = { bodyGeo: true };
+  bodyMesh.userData.kept = "body";
+  bodyMesh.geometry.getAttribute("position").version = 5;
+  const lidMesh = visualMeshes(lid)[0];
+  const lidBag = lidMesh.material.userData;
+  assert.equal(materialUserDataEmpty(lidMesh.material), true, "fixture lid starts with empty material.userData");
+  lidMesh.material.name = "lidMat";
+  const latchMesh = visualMeshes(latch)[0];
+  delete latchMesh.material.userData;
+  latchMesh.material.name = "latchMat";
+  const toolMesh = visualMeshes(tool)[0];
+  toolMesh.name = "toolMesh";
+  toolMesh.material.userData = { tool: true };
+  toolMesh.material.name = "toolMat";
+  fastener.material.userData = { fastener: true };
+  fastener.material.name = "fastenerMat";
+  fastener.userData.kept = "fastener";
+  fastener.geometry.userData = { fastenerGeo: true };
+  const colliderGrab = root.getObjectByName("collider_grab");
+  const colliderExtras = { collider: true };
+  colliderGrab.material.userData = colliderExtras;
+  colliderGrab.userData.size = { x: 1, y: 2, z: 3 };
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(bodyMesh.material, bodyMat, "fail-soft does not replace the body material");
+  assert.notEqual(bodyMat.userData, bodyExtras, "fail-soft body material.userData is replaced");
+  assert.equal(materialUserDataEmpty(bodyMat), true, "fail-soft body material.userData is pinned");
+  assert.equal(bodyMat.name, "bodyMat", "fail-soft body material.name stays");
+  assertQuestSafeUnlitFlags(bodyMat, "fail-soft body flags still hold");
+  assert.equal(bodyMat.glslVersion, undefined, "fail-soft glslVersion pin still holds");
+  assert.equal(bodyMat.flatShading, false, "fail-soft flatShading pin still holds");
+  assert.equal(bodyMesh.userData.kept, "body", "fail-soft body mesh userData stays");
+  assert.equal(geometryUserDataEmpty(bodyMesh.geometry), true, "fail-soft body geometry.userData is pinned");
+  assert.equal(lidMesh.material.userData, lidBag, "fail-soft already-empty lid material.userData stays the same object");
+  assert.equal(materialUserDataEmpty(lidMesh.material), true, "fail-soft lid material.userData stays empty");
+  assert.equal(lidMesh.material.name, "lidMat", "fail-soft lid material.name stays");
+  assert.equal(materialUserDataEmpty(latchMesh.material), true, "fail-soft deleted material.userData is restored");
+  assert.equal(latchMesh.material.name, "latchMat", "fail-soft latch material.name stays");
+  assert.equal(materialUserDataEmpty(toolMesh.material), true, "fail-soft tool material.userData is pinned");
+  assert.equal(toolMesh.material.name, "toolMat", "fail-soft tool material.name stays");
+  assert.equal(toolMesh.name, "toolMesh", "fail-soft tool mesh name stays");
+  assert.equal(materialUserDataEmpty(fastener.material), true, "fail-soft fastener material.userData is pinned");
+  assert.equal(fastener.material.name, "fastenerMat", "fail-soft fastener material.name stays");
+  assert.equal(fastener.userData.kept, "fastener", "fail-soft fastener mesh userData stays");
+  assert.equal(geometryUserDataEmpty(fastener.geometry), true, "fail-soft fastener geometry.userData is pinned");
+  assert.equal(fastener.name, "fastenerMesh", "named fastenerMesh kept");
+  assert.equal(root.userData.parts.fastener, fastener, "fail-soft entity fastener metadata stays");
+  assert.equal(colliderGrab.material.userData, colliderExtras, "fail-soft collider material.userData stays authored");
+  assert.equal(colliderGrab.userData.collider, true, "fail-soft collider mesh userData flag stays");
+  assert.equal(colliderGrab.userData.size.y, 2, "fail-soft collider size stays");
+});
