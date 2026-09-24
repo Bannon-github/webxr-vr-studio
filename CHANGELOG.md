@@ -2,6 +2,12 @@
 
 All notable changes to this knowledge base are documented here.
 
+## [0.104.0] — 2026-09-24
+
+### Changed
+
+- `crate-toolbox` **v1.2.0** L3 packaging/perf UPGRADE: after the v1.1.0 Material `userData` pin (`material.userData = {}` on the 3 shared color-only unlit MeshBasic materials), also pin leftover Material `name` to the r170 constructor default empty string (`material.name === ''`) on those same materials (wood / brass / steel; unique MeshBasic stays 3; first-class measured material-name-empty). `pinColorOnlyUnlitBasicMaterialName` / `pinColorOnlyVisualMaterialName` run after `pinColorOnlyVisualMaterialUserData` on procedural create and packaged ingest, including fail-soft (no lod groups) and the fastener. Same `isColorOnlyUnlitBasic` gate and the same collider / interleaved / mapped / lit / shared-material / shared-geometry skip rules. Assign `material.name = ''` in place only when it is not already `''`. Do not replace the material, the geometry, the attributes, or the typed arrays. Do not touch Material `userData` (v1.1.0 material-userData-empty stays). Do not touch prior material program-cache / flag pins. Do not touch BufferGeometry `userData` / `name`. Do not touch Mesh / Object3D `userData`. Checked installed three@0.170.0: the Material constructor assigns `this.name = ''`. `Material.toJSON` writes `name` only when `this.name !== ''`. `Material.copy` copies `source.name`. `MaterialLoader` / `ObjectLoader.parseMaterials` assign `json.name` when present. Stock GLTFLoader `loadMaterial` assigns `material.name = materialDef.name` when `materialDef.name` is set. `WebGLRenderer` does not read `material.name`. `WebGLPrograms.getParameters` copies `shaderName: material.name` and `WebGLProgram` emits `#define SHADER_NAME` from that parameter, but `getProgramCacheKey` does not include `shaderName`, so a leftover name does not fork the program cache or change the draw. Clearing leftover names to `''` is load-time packaging only: no draw / tri / attrBytes change. Clean procedural pre-upload draws 6 / 4 / 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3, material-userData-empty 3, geometry-userData-empty 13, geometry-name-empty 13, version-zero 13 stay vs v1.1.0. material-name-empty 3 is the new count. Quest 3 90 Hz / 72 fallback requested, not measured. Headset ms / FFR still unmeasured. Do not require 207/240 Hz.
+
 ## [0.103.0] — 2026-09-24
 
 ### Changed
