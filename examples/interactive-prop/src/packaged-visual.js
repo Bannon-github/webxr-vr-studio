@@ -1659,6 +1659,69 @@
  * or invent meshes. Fail-soft (no lod
  * groups) still runs this pin,
  * including the fastener.
+ *
+ * v0.99: after that version pin,
+ * `pinColorOnlyVisualGeometryName` pins
+ * leftover BufferGeometry `name` to the
+ * r170 constructor default empty string
+ * (`geometry.name === ''`) on those same
+ * packed color-only unlit MeshBasic visual
+ * geometries (body LOD leaves +
+ * lid/latch/tool + fastener; same
+ * `isColorOnlyUnlitBasic` gate and the
+ * same collider / interleaved / mapped /
+ * lit / shared-material /
+ * shared-geometry skip rules).
+ * **Checked installed three@0.170.0:**
+ * the BufferGeometry constructor assigns
+ * `this.name = ''`. `BufferGeometry.toJSON`
+ * writes `data.name` only when
+ * `this.name !== ''`. `BufferGeometry.copy`
+ * copies `source.name`.
+ * `BufferGeometryLoader` assigns
+ * `geometry.name = json.name` when
+ * `json.name` is present.
+ * `ObjectLoader.parseGeometries` assigns
+ * `geometry.name = data.name` when
+ * `data.name !== undefined`. Stock
+ * GLTFLoader names the Mesh and copies
+ * primitive extras onto
+ * `geometry.userData`; it does not assign
+ * `geometry.name`. `WebGLRenderer` does
+ * not read `geometry.name`. DCC exporters
+ * and JSON round-trips still leave mesh
+ * or primitive names on the geometry.
+ * Clearing them to `''` is load-time
+ * packaging only: no draw / tri /
+ * attrBytes change; it drops leftover
+ * string retention on Quest 3 TBDR static
+ * props. Assign `geometry.name = ''` in
+ * place only when it is not already `''`.
+ * Do **not** replace the geometry, the
+ * attributes, or the typed arrays. Do
+ * **not** touch BufferAttribute `version`
+ * (v0.98 version-zero stays). Do **not**
+ * touch BufferAttribute `name` (v0.97
+ * name-empty stays). Do **not** touch
+ * `gpuType` (v0.96 gpuType-float stays).
+ * Do **not** call `setUsage` (v0.94 usage
+ * stays). Do **not** reassign `normalized`
+ * (v0.95 stays). Do **not** touch
+ * `onUpload` / `onUploadCallback` (v0.43
+ * CPU-release hook stays). Do **not**
+ * touch `updateRange` (v0.90) or
+ * `updateRanges` (v0.91). Do **not** touch
+ * geometry `boundingBox` / `boundingSphere`
+ * (v0.92). Do **not** touch Mesh
+ * `boundingSphere` (v0.93). Do **not**
+ * change `frustumCulled`. Do **not**
+ * rename the Mesh (`lidMesh` / `latchMesh`
+ * / `fastenerMesh` stay). Mapped / lit /
+ * interleaved keep authored
+ * `geometry.name`. Collider meshes stay
+ * untouched. Does not hex-dedupe or invent
+ * meshes. Fail-soft (no lod groups) still
+ * runs this pin, including the fastener.
  */
 
 import {
@@ -1694,6 +1757,7 @@ import {
   pinColorOnlyVisualGpuType,
   pinColorOnlyVisualName,
   pinColorOnlyVisualVersion,
+  pinColorOnlyVisualGeometryName,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -1880,6 +1944,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualGpuType(root);
   pinColorOnlyVisualName(root);
   pinColorOnlyVisualVersion(root);
+  pinColorOnlyVisualGeometryName(root);
   return root;
 }
 
