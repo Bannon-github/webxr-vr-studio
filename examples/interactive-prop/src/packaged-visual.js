@@ -2151,6 +2151,45 @@
  * groups) still runs this pin, including the fastener. 90 Hz ship
  * (~11.1 ms) / 72 Hz fallback are **requested**, not measured. No
  * invented headset ms.
+ *
+ * v1.8.0: after that color strip,
+ * `pinColorOnlyVisualOnUpload` pins leftover BufferAttribute
+ * `onUpload` / `onUploadCallback` so the v0.43 `releaseCpuArray`
+ * hook is the sole upload callback on the remaining attributes (at
+ * least `position`, and `index` when present) of the 13 packed
+ * color-only unlit MeshBasic visual geometries (body LOD leaves +
+ * lid/latch/tool + fastener; measured onUpload-release 13; same
+ * `isColorOnlyUnlitBasic` gate and the same collider / interleaved /
+ * mapped / lit / shared-material / shared-geometry skip rules).
+ * **Checked installed three@0.170.0:** `BufferAttribute` declares
+ * `onUploadCallback() {}` on the prototype. `onUpload(callback)`
+ * assigns `this.onUploadCallback = callback` and does not null
+ * `.array` and does not bump `version`. `BufferAttribute.copy` does
+ * not copy `onUploadCallback`, so a copied attribute falls back to
+ * the empty prototype method. `WebGLAttributes.createBuffer` copies
+ * `attribute.array` into a local, calls `gl.bufferData`, then calls
+ * `attribute.onUploadCallback()`. The callback runs after the GPU
+ * upload. A leftover non-release callback (or the empty prototype
+ * method) skips the Quest 3 CPU-array release, so static packed
+ * color-only props keep Float16 / Uint16 CPU arrays after upload on
+ * a TBDR headset. The pin installs the hook and does **not** invoke
+ * it. Do **not** null `.array` inside the pin. Do **not** recompute
+ * bounds inside the pin. Do **not** call `setUsage`. Do **not**
+ * replace the mesh, the material, the geometry, the attributes, or
+ * the typed arrays. Do **not** invent attributes. An already-correct
+ * `releaseCpuArray` hook stamped to that geometry is left in place.
+ * Do **not** delete `color` (v1.7.0 colorAttribute-absent stays). Do
+ * **not** touch `matrixWorldNeedsUpdate` (v1.6.0 stays). Do **not**
+ * change `matrixAutoUpdate` or `matrixWorldAutoUpdate`. Do **not**
+ * touch Material `version` / `name` / `userData`, Mesh `name` /
+ * `userData`, BufferGeometry `name` / `userData`, BufferAttribute
+ * `version` / `name` / `gpuType` / `normalized` / `usage` /
+ * `updateRange` / `updateRanges`, bounds, morphs, animations,
+ * shadows, `frustumCulled`, or `mesh.visible`. Mapped / lit /
+ * interleaved keep authored `onUploadCallback`. Collider meshes stay
+ * untouched. Fail-soft (no lod groups) still runs this pin, including
+ * the fastener. 90 Hz ship (~11.1 ms) / 72 Hz fallback are
+ * **requested**, not measured. No invented headset ms.
  */
 
 import {
@@ -2195,6 +2234,7 @@ import {
   pinColorOnlyVisualMaterialVersion,
   pinColorOnlyVisualMatrixWorldNeedsUpdate,
   pinColorOnlyVisualColorAttribute,
+  pinColorOnlyVisualOnUpload,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2390,6 +2430,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialVersion(root);
   pinColorOnlyVisualMatrixWorldNeedsUpdate(root);
   pinColorOnlyVisualColorAttribute(root);
+  pinColorOnlyVisualOnUpload(root);
   return root;
 }
 
