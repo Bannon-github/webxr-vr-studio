@@ -7690,3 +7690,192 @@ test("packaged ingest without lod groups still pins leftover matrixWorldNeedsUpd
   assert.equal(colliderGrab.matrixWorldNeedsUpdate, true, "fail-soft collider matrixWorldNeedsUpdate stays");
   assert.equal(colliderGrab.material.version, 7, "fail-soft collider material.version stays");
 });
+
+function colorAttributeAbsent(geometry) {
+  return geometry?.getAttribute?.("color") == null && geometry?.hasAttribute?.("color") === false;
+}
+
+function cpuAttrBytes(geo) {
+  let bytes = 0;
+  for (const name of Object.keys(geo.attributes)) {
+    const arr = geo.getAttribute(name)?.array;
+    if (arr) bytes += arr.byteLength;
+  }
+  if (geo.index?.array) bytes += geo.index.array.byteLength;
+  return bytes;
+}
+
+/** Float32 color. itemSize 3: count * 12 bytes. itemSize 4: count * 16 bytes. */
+function attachLeftoverColorAttribute(geometry, itemSize = 3) {
+  const count = geometry.getAttribute("position").count;
+  const color = new THREE.Float32BufferAttribute(count * itemSize, itemSize);
+  for (let i = 0; i < count; i++) {
+    if (itemSize === 4) color.setXYZW(i, 0.2, 0.4, 0.6, 1);
+    else color.setXYZ(i, 0.2, 0.4, 0.6);
+  }
+  geometry.setAttribute("color", color);
+  return { color, colorBytes: color.array.byteLength, count, itemSize };
+}
+
+test("packaged ingest strips leftover color on color-only visuals and the fastener", () => {
+  const { root, groups, fastener } = makePackagedFixture();
+  const shared = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  shared.name = "dccWood";
+  shared.version = 9;
+  const matExtras = { material: "wood" };
+  shared.userData = matExtras;
+  const first = boxMesh("dccWall", shared);
+  const firstColor = attachLeftoverColorAttribute(first.geometry, 3);
+  assert.equal(firstColor.count, 24, "BoxGeometry color fixture has 24 vertices");
+  assert.equal(firstColor.colorBytes, 288, "24 verts × Float32 color itemSize 3 × 4 B = 288");
+  const second = boxMesh("dccWallB", shared);
+  attachLeftoverColorAttribute(second.geometry, 3);
+  first.matrixWorldNeedsUpdate = false;
+  first.userData = { exporter: "dcc" };
+  const firstPosition = first.geometry.getAttribute("position");
+  const firstIndex = first.geometry.index;
+  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  mapped.version = 3;
+  mapped.name = "mappedMat";
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const mappedColor = attachLeftoverColorAttribute(mappedMesh.geometry, 3);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 6;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  // Outside the lod group so merge/pack does not strip the shared
+  // geometry. The pin's shared-geometry skip is what keeps `color`.
+  sharedGeoVisual.name = "sharedGeoBody";
+  sharedGeoVisual.matrixWorldNeedsUpdate = false;
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  interleavedGeo.setIndex([0, 1, 2]);
+  const interleavedColor = new THREE.Float32BufferAttribute(6, 3);
+  interleavedGeo.setAttribute("color", interleavedColor);
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  interleavedMat.version = 4;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  interleaved.name = "interleavedMesh";
+  const lit = boxMesh("litMesh", new THREE.MeshStandardMaterial());
+  const litColor = attachLeftoverColorAttribute(lit.geometry, 4);
+  assert.equal(litColor.colorBytes, 384, "24 verts × Float32 color itemSize 4 × 4 B = 384");
+  lit.material.version = 5;
+  groups[0][0].add(first, mappedMesh, interleaved, lit);
+  groups[1][0].add(second);
+  root.add(sharedGeoVisual);
+  const fastenerColor = attachLeftoverColorAttribute(fastener.geometry, 3);
+  fastener.material = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  fastener.material.version = 11;
+  fastener.material.name = "brassStandIn";
+  fastener.matrixWorldNeedsUpdate = false;
+  const fastenerMat = fastener.material;
+  const colliderGrab = root.getObjectByName("collider_grab");
+  const colliderColor = attachLeftoverColorAttribute(colliderGrab.geometry, 3);
+  colliderGrab.material.version = 8;
+  const colliderBag = colliderGrab.userData;
+  const already = boxMesh("alreadyAbsent", new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  assert.equal(colorAttributeAbsent(already.geometry), true);
+  groups[0][0].add(already);
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(colorAttributeAbsent(first.geometry), true, "leftover color-only color is deleted");
+  assert.equal(colorAttributeAbsent(second.geometry), true, "second shared-material geometry color is deleted");
+  assert.equal(first.material, shared, "ingest does not replace the shared color-only material");
+  assert.equal(second.material, shared, "shared material stays one instance");
+  assert.equal(shared.vertexColors, false, "v0.57 vertexColors stays false");
+  assert.equal(shared.version, 0, "v1.5.0 material.version pin still clears leftover version");
+  assert.equal(shared.name, "", "v1.2.0 material-name pin still clears leftover material.name");
+  assert.equal(materialUserDataEmpty(shared), true, "v1.1.0 material-userData pin still clears leftover material.userData");
+  assert.notEqual(shared.userData, matExtras, "material.userData pin replaces leftover material extras");
+  assert.equal(meshUserDataEmpty(first), true, "v1.4.0 mesh-userData pin still clears leftover mesh userData");
+  assert.equal(first.name, "", "v1.3.0 mesh-name pin still clears a non-reserved name");
+  assert.equal(first.matrixWorldNeedsUpdate, false, "v1.6.0 matrixWorldNeedsUpdate stays false");
+  assert.ok(first.geometry.getAttribute("position"), "color strip does not delete position");
+  assert.ok(first.geometry.index, "color strip does not delete the index");
+  assert.equal(first.geometry.index === firstIndex || first.geometry.index.array instanceof Uint16Array, true, "index stays or is the pack Uint16 compact");
+  assert.equal(colorAttributeAbsent(fastener.geometry), true, "fastener color is deleted");
+  assert.equal(fastenerColor.colorBytes, 288, "fastener fixture carried 288 leftover color bytes");
+  assert.equal(fastener.material, fastenerMat, "ingest does not replace the fastener material");
+  assert.equal(fastener.material.vertexColors, false, "fastener vertexColors stays false");
+  assert.equal(fastener.matrixWorldNeedsUpdate, false, "fastener matrixWorldNeedsUpdate stays false");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh stays named");
+  assert.equal(mappedMesh.geometry.getAttribute("color"), mappedColor.color, "mapped color stays authored");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("color"), mappedColor.color, "geometry shared with a mapped mesh keeps color");
+  assert.equal(sharedGeoVisual.name, "sharedGeoBody", "shared-geometry mesh name stays");
+  assert.equal(sharedGeoVisual.matrixWorldNeedsUpdate, false, "shared-geometry matrixWorldNeedsUpdate stays");
+  assert.equal(sharedGeoMat.version, 6, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(interleaved.geometry.getAttribute("color"), interleavedColor, "interleaved color stays authored");
+  assert.equal(lit.geometry.getAttribute("color"), litColor.color, "MeshStandard color stays authored");
+  assert.equal(colliderGrab.geometry.getAttribute("color"), colliderColor.color, "collider color stays authored");
+  assert.equal(colliderGrab.userData, colliderBag, "collider userData stays");
+  assert.equal(colliderGrab.name, "collider_grab", "collider mesh name stays");
+  assert.equal(colorAttributeAbsent(already.geometry), true, "already-absent color stays absent");
+  assert.equal(firstPosition.count, 24, "position count stays 24");
+});
+
+test("packaged ingest without lod groups still strips leftover color and drops the color attrBytes", () => {
+  const { root, body, fastener } = makePackagedFixture({ withLod: false });
+  const bodyMesh = visualMeshes(body)[0];
+  const bodyColor = attachLeftoverColorAttribute(bodyMesh.geometry, 3);
+  const bodyBefore = cpuAttrBytes(bodyMesh.geometry);
+  const bodyPosition = bodyMesh.geometry.getAttribute("position");
+  const bodyIndex = bodyMesh.geometry.index;
+  const bodyMat = bodyMesh.material;
+  bodyMesh.material.version = 5;
+  bodyMesh.material.name = "bodyMat";
+  bodyMesh.matrixWorldNeedsUpdate = false;
+  bodyMesh.name = "lidMesh";
+  const bodyBag = bodyMesh.userData;
+  const alphaMesh = boxMesh("alphaBody", new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const alphaColor = attachLeftoverColorAttribute(alphaMesh.geometry, 4);
+  const alphaBefore = cpuAttrBytes(alphaMesh.geometry);
+  const alphaPosition = alphaMesh.geometry.getAttribute("position");
+  body.add(alphaMesh);
+  const fastenerColor = attachLeftoverColorAttribute(fastener.geometry, 3);
+  fastener.material.version = 6;
+  fastener.matrixWorldNeedsUpdate = false;
+  const fastenerMat = fastener.material;
+  const mapped = boxMesh("mappedHero", new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } }));
+  const mappedColor = attachLeftoverColorAttribute(mapped.geometry, 3);
+  mapped.material.version = 2;
+  body.add(mapped);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 6;
+  const sharedGeoVisual = new THREE.Mesh(mapped.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "sharedGeoBody";
+  sharedGeoVisual.matrixWorldNeedsUpdate = false;
+  body.add(sharedGeoVisual);
+  const colliderGrab = root.getObjectByName("collider_grab");
+  const colliderColor = attachLeftoverColorAttribute(colliderGrab.geometry, 3);
+  colliderGrab.material.version = 7;
+  ingestPackagedRoot(root, sidecar);
+  assert.equal(root.userData.lod, undefined, "fail-soft still does not invent lod groups");
+  assert.equal(bodyMesh.material, bodyMat, "fail-soft does not replace the body material");
+  assert.equal(colorAttributeAbsent(bodyMesh.geometry), true, "fail-soft body color is deleted");
+  assert.equal(bodyColor.colorBytes, 288, "fail-soft body fixture is 24 × 3 × 4 = 288 color bytes");
+  assert.equal(cpuAttrBytes(bodyMesh.geometry), bodyBefore - bodyColor.colorBytes, "fail-soft body pre-upload attrBytes drop by the leftover color bytes");
+  assert.equal(bodyMesh.geometry.getAttribute("position"), bodyPosition, "fail-soft body position stays");
+  assert.equal(bodyMesh.geometry.index, bodyIndex, "fail-soft body index stays");
+  assert.equal(bodyMesh.material.vertexColors, false, "fail-soft body vertexColors stays false");
+  assert.equal(bodyMesh.material.version, 0, "fail-soft body material.version is still pinned");
+  assert.equal(bodyMesh.name, "lidMesh", "fail-soft reserved lidMesh name stays");
+  assert.equal(bodyMesh.matrixWorldNeedsUpdate, false, "fail-soft matrixWorldNeedsUpdate stays false");
+  assert.equal(bodyMesh.userData, bodyBag, "fail-soft does not replace an already-empty mesh userData object when it was replaced before ingest");
+  assert.equal(colorAttributeAbsent(alphaMesh.geometry), true, "fail-soft itemSize-4 color is deleted");
+  assert.equal(alphaColor.colorBytes, 384, "fail-soft itemSize-4 fixture is 24 × 4 × 4 = 384 color bytes");
+  assert.equal(cpuAttrBytes(alphaMesh.geometry), alphaBefore - alphaColor.colorBytes, "fail-soft itemSize-4 attrBytes drop by 384");
+  assert.equal(alphaMesh.geometry.getAttribute("position"), alphaPosition, "fail-soft itemSize-4 position stays");
+  assert.equal(colorAttributeAbsent(fastener.geometry), true, "fail-soft fastener color is deleted");
+  assert.equal(fastenerColor.colorBytes, 288, "fail-soft fastener fixture carried 288 color bytes");
+  assert.equal(fastener.material, fastenerMat, "fail-soft does not replace the fastener material");
+  assert.equal(fastener.name, "fastenerMesh", "fail-soft fastenerMesh stays named");
+  assert.equal(fastener.matrixWorldNeedsUpdate, false, "fail-soft fastener matrixWorldNeedsUpdate stays false");
+  assert.equal(mapped.geometry.getAttribute("color"), mappedColor.color, "fail-soft mapped color stays authored");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("color"), mappedColor.color, "fail-soft geometry shared with a mapped mesh keeps color");
+  assert.equal(sharedGeoVisual.name, "sharedGeoBody", "fail-soft shared-geometry mesh name stays");
+  assert.equal(sharedGeoMat.version, 6, "fail-soft shared-geometry material.version stays authored");
+  assert.equal(mapped.material.version, 2, "fail-soft mapped material.version stays authored");
+  assert.equal(colliderGrab.geometry.getAttribute("color"), colliderColor.color, "fail-soft collider color stays");
+  assert.equal(colliderGrab.material.version, 7, "fail-soft collider material.version stays");
+});

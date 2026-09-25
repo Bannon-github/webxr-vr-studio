@@ -113,6 +113,11 @@ const {
   pinColorOnlyVisualMaterialVersion,
   pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate,
   pinColorOnlyVisualMatrixWorldNeedsUpdate,
+  pinColorOnlyUnlitBasicColorAttribute,
+  pinColorOnlyVisualColorAttribute,
+  COLOR_ONLY_UNUSED_ATTRS,
+  COLOR_ONLY_UNUSED_COLOR_ATTRS,
+  stripUnusedColorOnlyColorAttributes,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
@@ -18713,4 +18718,544 @@ test("pinColorOnlyUnlitBasicMatrixWorldNeedsUpdate / pinColorOnlyVisualMatrixWor
   assert.equal(sharedGeoVisual.matrixWorldNeedsUpdate, true, "geometry shared with a mapped mesh keeps matrixWorldNeedsUpdate");
   assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
   assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+});
+
+function colorAttributeAbsent(geometry) {
+  return geometry?.getAttribute?.("color") == null && geometry?.hasAttribute?.("color") === false;
+}
+
+function countVisualColorAttribute(crate) {
+  let absent = 0;
+  let leftover = 0;
+  const geos = new Set();
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.geometry) geos.add(mesh.geometry);
+    if (colorAttributeAbsent(mesh.geometry)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover, uniqueGeometries: geos.size };
+}
+
+/**
+ * Leftover Float32 `color`. Byte length is count * itemSize * 4.
+ * itemSize 3: 3-vert fixture = 36, 24-vert BoxGeometry = 288.
+ * itemSize 4: 3-vert fixture = 48, 24-vert BoxGeometry = 384.
+ */
+function attachLeftoverColorAttribute(geometry, itemSize = 3) {
+  const count = geometry.getAttribute("position").count;
+  const color = new THREE.Float32BufferAttribute(count * itemSize, itemSize);
+  for (let i = 0; i < count; i++) {
+    if (itemSize === 4) color.setXYZW(i, 1, 0, 0, 1);
+    else color.setXYZ(i, 1, 0, 0);
+  }
+  geometry.setAttribute("color", color);
+  return { color, colorBytes: color.array.byteLength, itemSize, count };
+}
+
+test("r170 BufferGeometry has no color attribute and WebGLPrograms reads vertexColors only", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const fresh = new THREE.BufferGeometry();
+  assert.equal(fresh.hasAttribute("color"), false, "fresh BufferGeometry has no color attribute");
+  assert.equal(fresh.getAttribute("color"), undefined, "fresh getAttribute('color') is missing");
+  assert.equal("color" in fresh.attributes, false, "fresh attributes object has no color key");
+  const mat = new THREE.MeshBasicMaterial();
+  assert.equal(mat.vertexColors, false, "fresh MeshBasicMaterial vertexColors is false");
+  assert.deepEqual([...COLOR_ONLY_UNUSED_COLOR_ATTRS], ["color"]);
+  assert.ok(COLOR_ONLY_UNUSED_ATTRS.includes("color"), "COLOR_ONLY_UNUSED_ATTRS lists color");
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const bufferGeometry = readFileSync(require.resolve("three/src/core/BufferGeometry.js"), "utf8");
+  assert.match(bufferGeometry, /this\.attributes = \{\};/);
+  assert.match(bufferGeometry, /deleteAttribute\( name \) \{\s*delete this\.attributes\[ name \];/);
+  assert.match(bufferGeometry, /hasAttribute\( name \) \{\s*return this\.attributes\[ name \] !== undefined;/);
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.match(programs, /vertexColors: material\.vertexColors,/);
+  assert.match(programs, /if \( parameters\.vertexColors \)/);
+  const program = readFileSync(require.resolve("three/src/renderers/webgl/WebGLProgram.js"), "utf8");
+  assert.match(program, /parameters\.vertexColors \? '#define USE_COLOR' : '',/);
+  assert.match(program, /'#elif defined\( USE_COLOR \)'/);
+  assert.match(program, /'\tattribute vec3 color;'/);
+  const geometries = readFileSync(require.resolve("three/src/renderers/webgl/WebGLGeometries.js"), "utf8");
+  assert.match(geometries, /for \( const name in geometryAttributes \) \{\s*attributes\.update\( geometryAttributes\[ name \], gl\.ARRAY_BUFFER \);/);
+  const gltf = readFileSync(require.resolve("three/examples/jsm/loaders/GLTFLoader.js"), "utf8");
+  assert.match(gltf, /COLOR_0: 'color',/);
+});
+
+test("stripUnusedColorOnlyAttributes drops leftover color only when vertexColors is false and the geometry is not interleaved", () => {
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(colorOnly.vertexColors, false, "fixture material vertexColors stays the r170 default");
+  const mapped = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  const std = new THREE.MeshStandardMaterial();
+  const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  stripUnusedColorOnlyAttributes(geo, colorOnly);
+  const position = geo.getAttribute("position");
+  const index = geo.index;
+  const attached = attachLeftoverColorAttribute(geo, 3);
+  assert.equal(attached.count, 24, "BoxGeometry has 24 vertices");
+  assert.equal(attached.colorBytes, 288, "24 verts × Float32 color itemSize 3 × 4 B = 288");
+  const before = cpuAttrBytes(geo);
+  const drawRange = geo.drawRange;
+  stripUnusedColorOnlyColorAttributes(geo, colorOnly);
+  assert.equal(colorAttributeAbsent(geo), true, "narrow color strip drops color");
+  assert.equal(geo.getAttribute("position"), position, "color strip does not replace position");
+  assert.equal(geo.index, index, "color strip does not replace the index");
+  assert.equal(cpuAttrBytes(geo), before - attached.colorBytes, "measured attrBytes drop is the leftover color bytes");
+  assert.equal(geo.drawRange, drawRange, "color strip does not replace drawRange");
+  assert.equal(colorOnly.vertexColors, false, "color strip does not rewrite vertexColors");
+
+  const packed = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const packedColor = attachLeftoverColorAttribute(packed, 4);
+  assert.equal(packedColor.colorBytes, 384, "24 verts × Float32 color itemSize 4 × 4 B = 384");
+  const packedBefore = cpuAttrBytes(packed);
+  const packedPosition = packed.getAttribute("position");
+  stripUnusedColorOnlyAttributes(packed, colorOnly);
+  assert.equal(colorAttributeAbsent(packed), true, "pack strip drops color");
+  assert.equal(packed.getAttribute("normal"), undefined, "existing unused-attr strip still drops normal");
+  assert.equal(packed.getAttribute("uv"), undefined, "existing unused-attr strip still drops uv");
+  assert.equal(packed.getAttribute("position"), packedPosition, "pack strip does not replace position");
+  assert.ok(packed.getAttribute("position"));
+  assert.equal(packedBefore - cpuAttrBytes(packed) >= packedColor.colorBytes, true, "pack strip drops at least the color bytes");
+
+  const keptVertexColors = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const keptColor = attachLeftoverColorAttribute(keptVertexColors, 3);
+  const vertexMat = new THREE.MeshBasicMaterial({ color: 0x633318, vertexColors: true });
+  stripUnusedColorOnlyAttributes(keptVertexColors, vertexMat);
+  stripUnusedColorOnlyColorAttributes(keptVertexColors, vertexMat);
+  assert.equal(keptVertexColors.getAttribute("color"), keptColor.color, "vertexColors true keeps authored color");
+  assert.equal(vertexMat.vertexColors, true, "strip does not rewrite vertexColors true");
+
+  const keptMapped = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const mappedColor = attachLeftoverColorAttribute(keptMapped, 3);
+  stripUnusedColorOnlyAttributes(keptMapped, mapped);
+  stripUnusedColorOnlyColorAttributes(keptMapped, mapped);
+  assert.equal(keptMapped.getAttribute("color"), mappedColor.color, "mapped MeshBasic keeps color");
+  assert.ok(keptMapped.getAttribute("uv"), "mapped MeshBasic keeps uv");
+  const keptStd = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const stdColor = attachLeftoverColorAttribute(keptStd, 3);
+  stripUnusedColorOnlyAttributes(keptStd, std);
+  assert.equal(keptStd.getAttribute("color"), stdColor.color, "MeshStandard keeps color");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedColor = new THREE.Float32BufferAttribute(6, 3);
+  interleavedGeo.setAttribute("color", interleavedColor);
+  stripUnusedColorOnlyColorAttributes(interleavedGeo, colorOnly);
+  stripUnusedColorOnlyAttributes(interleavedGeo, colorOnly);
+  assert.equal(interleavedGeo.getAttribute("color"), interleavedColor, "interleaved geometry keeps authored color");
+
+  const already = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  stripUnusedColorOnlyAttributes(already, colorOnly);
+  assert.equal(colorAttributeAbsent(already), true);
+  let deletes = 0;
+  const original = already.deleteAttribute.bind(already);
+  already.deleteAttribute = (name) => {
+    deletes += 1;
+    return original(name);
+  };
+  stripUnusedColorOnlyColorAttributes(already, colorOnly);
+  assert.equal(deletes, 0, "already-absent color is not deleteAttribute'd");
+  assert.equal(colorAttributeAbsent(already), true, "already-absent color stays absent");
+});
+
+test("v1.7.0 strips leftover color on packed color-only visuals; envelope stays v1.6.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.7\.0 strips leftover BufferGeometry color/);
+  assert.match(crate.userData.l2.note, /colorAttribute-absent 13/);
+  assert.match(crate.userData.l2.note, /v1\.6\.0 pins leftover Object3D/);
+  assert.match(crate.userData.l2.note, /matrixWorldNeedsUpdate-false 13/);
+  assert.match(crate.userData.l2.note, /material-version-zero 3/);
+  assert.match(crate.userData.l2.note, /13 mesh-userData-empty/);
+  assert.match(crate.userData.l2.note, /10 mesh-name-empty/);
+
+  const rootBag = crate.userData;
+  assert.equal(crate.userData.kind, "entity", "root kind stays");
+  assert.equal(crate.userData.studio.objectId, "crate-toolbox", "root studio metadata stays");
+  assert.ok(crate.userData.parts.tool, "root parts stay");
+  assert.ok(crate.userData.lod.stats, "root lod stats stay");
+  assert.equal(crate.userData.fastener.needed, 4, "root fastener metadata stays");
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.ok(toolBag.restLocal?.isVector3, "tool Group restLocal stays");
+  assert.equal(toolBag.feedbackEntity, crate, "tool Group feedbackEntity stays");
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(wood.version, 0, "wood material.version stays 0");
+  assert.equal(brass.version, 0, "brass material.version stays 0");
+  assert.equal(steel.version, 0, "steel material.version stays 0");
+  assert.equal(wood.vertexColors, false, "v0.57 vertexColors stays false");
+  assert.equal(wood.name, "", "wood material.name stays empty");
+  assert.equal(materialUserDataEmpty(wood), true, "wood material.userData stays empty");
+
+  const colors = countVisualColorAttribute(crate);
+  assert.equal(colors.absent, 13, "colorAttribute-absent count is 13");
+  assert.equal(colors.leftover, 0);
+  assert.equal(colors.total, 13);
+  assert.equal(colors.uniqueGeometries, 13, "one geometry per visual");
+  const flags = countVisualMatrixWorldNeedsUpdate(crate);
+  assert.equal(flags.cleared, 13, "matrixWorldNeedsUpdate-false count stays 13");
+  const versions = countVisualMaterialVersion(crate);
+  assert.equal(versions.zero, 3, "material-version-zero count stays 3");
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(colorAttributeAbsent(mesh.geometry), true, "packed visual color attribute stays absent");
+    assert.equal(mesh.matrixWorldNeedsUpdate, false, "packed visual matrixWorldNeedsUpdate stays false");
+    assert.equal(mesh.matrixWorldAutoUpdate, true, "v0.69 matrixWorldAutoUpdate stays true");
+    assert.equal(mesh.material.version, 0, "packed visual material.version stays 0");
+    assert.equal(mesh.material.vertexColors, false, "packed visual vertexColors stays false");
+    assert.equal(meshUserDataEmpty(mesh), true, "packed visual mesh.userData stays an empty plain object");
+    assert.equal(mesh.material.name, "", "packed visual material.name stays empty");
+    assert.equal(materialUserDataEmpty(mesh.material), true, "packed visual material.userData stays empty");
+    assert.equal(geometryUserDataEmpty(mesh.geometry), true, "packed visual geometry.userData stays empty");
+    assert.equal(mesh.geometry.name, "", "packed visual geometry.name stays empty");
+    assert.equal(mesh.frustumCulled, true, "v0.50 frustumCulled stays true");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+    assert.ok(mesh.geometry.getAttribute("position"), "position stays");
+    assert.ok(mesh.geometry.index, "index stays");
+  }
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty count stays 13");
+  const meshNames = countVisualMeshName(crate);
+  assert.equal(meshNames.empty, 10, "mesh-name-empty count stays 10");
+  assert.equal(meshNames.reserved, 3, "three reserved visual names stay");
+  assert.equal(countVisualMaterialName(crate).empty, 3, "material-name-empty count stays 3");
+  assert.equal(countVisualMaterialUserData(crate).empty, 3, "material-userData-empty count stays 3");
+  assert.equal(countVisualGeometryUserData(crate).empty, 13, "geometry-userData-empty count stays 13");
+  assert.equal(countVisualGeometryName(crate).empty, 13, "geometry-name-empty count stays 13");
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lidMesh = crate.getObjectByName("lidMesh");
+  const latchMesh = crate.getObjectByName("latchMesh");
+  assert.equal(lidMesh.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latchMesh.name, "latchMesh", "latchMesh name stays");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(colorAttributeAbsent(fastener.geometry), true, "fastener color attribute is absent");
+  assert.equal(fastener.matrixWorldNeedsUpdate, false, "fastener matrixWorldNeedsUpdate stays false");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+  assert.equal(fastener.material, brass, "fastener still shares the brass MeshBasic");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.ok(
+    crate.userData.colliders.every(
+      (c) => c.name.startsWith("collider_") && c.userData.collider === true && c.userData.size
+    ),
+    "collider names and userData stay",
+  );
+
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assert.equal(bodyHero.matrixWorldNeedsUpdate, false, "frozen body leaf matrixWorldNeedsUpdate stays false");
+  assert.equal(colorAttributeAbsent(bodyHero.geometry), true, "frozen body leaf color attribute stays absent");
+  assert.equal(bodyHero.material, wood, "body LOD leaf still shares the wood MeshBasic");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(fastener.name, "fastenerMesh", "L5 drive does not rename fastenerMesh");
+  assert.equal(fastener.material.version, 0, "L5 drive does not bump material.version");
+  assert.equal(fastener.material.vertexColors, false, "L5 drive does not rewrite vertexColors");
+  assert.equal(colorAttributeAbsent(fastener.geometry), true, "L5 drive does not invent a color attribute");
+  assert.equal(wood.version, 0, "wood material.version stays 0 after L4/L5");
+  assert.equal(bodyHero.matrixAutoUpdate, false, "L4/L5 does not unfreeze the body LOD leaf");
+  assert.equal(bodyHero.matrixWorldAutoUpdate, true, "L4/L5 does not change matrixWorldAutoUpdate");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13 after L4/L5");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(countVisualMaterialName(crate).empty, 3, "material-name-empty stays 3 after L4/L5");
+  assert.equal(countVisualMaterialUserData(crate).empty, 3, "material-userData-empty stays 3 after L4/L5");
+});
+
+test("pinColorOnlyUnlitBasicColorAttribute deletes leftover color in place and leaves name, userData, material, and geometry", () => {
+  const freshMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const fresh = new THREE.Mesh(groupsTestGeometry(), freshMat);
+  const freshBag = fresh.userData;
+  const freshMatBag = fresh.material.userData;
+  const freshGeoBag = fresh.geometry.userData;
+  const freshPosition = fresh.geometry.getAttribute("position");
+  const freshIndex = fresh.geometry.index;
+  fresh.name = "lidMesh";
+  fresh.matrixWorldNeedsUpdate = false;
+  fresh.matrixAutoUpdate = false;
+  assert.equal(colorAttributeAbsent(fresh.geometry), true, "fresh geometry color is already absent");
+  let deletes = 0;
+  const originalDelete = fresh.geometry.deleteAttribute.bind(fresh.geometry);
+  fresh.geometry.deleteAttribute = (name) => {
+    deletes += 1;
+    return originalDelete(name);
+  };
+  const returnedFresh = pinColorOnlyUnlitBasicColorAttribute(fresh);
+  assert.equal(returnedFresh, fresh, "already-absent pin returns the same mesh");
+  assert.equal(deletes, 0, "already-absent pin does not call deleteAttribute");
+  assert.equal(colorAttributeAbsent(fresh.geometry), true, "already-absent color stays absent");
+  assert.equal(fresh.material, freshMat, "already-absent pin does not replace the material");
+  assert.equal(fresh.material.vertexColors, false, "already-absent pin does not rewrite vertexColors");
+  assert.equal(fresh.userData, freshBag, "already-absent pin does not replace mesh.userData");
+  assert.equal(fresh.name, "lidMesh", "already-absent pin does not touch mesh.name");
+  assert.equal(fresh.material.userData, freshMatBag, "already-absent pin does not replace material.userData");
+  assert.equal(fresh.geometry.userData, freshGeoBag, "already-absent pin does not replace geometry.userData");
+  assert.equal(fresh.geometry.getAttribute("position"), freshPosition, "already-absent pin does not replace position");
+  assert.equal(fresh.geometry.index, freshIndex, "already-absent pin does not replace the index");
+  assert.equal(fresh.matrixWorldNeedsUpdate, false, "already-absent pin does not touch matrixWorldNeedsUpdate");
+  assert.equal(fresh.matrixAutoUpdate, false, "already-absent pin does not change matrixAutoUpdate");
+
+  const wrongMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  wrongMat.name = "woodStandIn";
+  wrongMat.version = 7;
+  const wrong = new THREE.Mesh(groupsTestGeometry(), wrongMat);
+  wrong.name = "lidMesh";
+  wrong.matrixWorldNeedsUpdate = false;
+  wrong.frustumCulled = true;
+  wrong.matrixAutoUpdate = false;
+  wrong.matrixWorldAutoUpdate = true;
+  wrong.visible = true;
+  const meshExtras = { targetNames: ["lid"] };
+  wrong.userData = meshExtras;
+  const matExtras = { material: "lid" };
+  wrong.material.userData = matExtras;
+  const geoExtras = { primitive: "lid" };
+  wrong.geometry.userData = geoExtras;
+  wrong.geometry.name = "Mesh.001";
+  const position = wrong.geometry.getAttribute("position");
+  const index = wrong.geometry.index;
+  const positionArray = position.array;
+  position.version = 2;
+  position.name = "position";
+  const geometryBefore = wrong.geometry;
+  const attached = attachLeftoverColorAttribute(wrong.geometry, 3);
+  assert.equal(attached.colorBytes, 36, "3 verts × Float32 color itemSize 3 × 4 B = 36");
+  const beforeBytes = cpuAttrBytes(wrong.geometry);
+  const returned = pinColorOnlyUnlitBasicColorAttribute(wrong);
+  assert.equal(returned, wrong, "color pin does not replace the mesh");
+  assert.equal(wrong.material, wrongMat, "pin does not replace the material");
+  assert.equal(colorAttributeAbsent(wrong.geometry), true, "leftover color is deleted");
+  assert.equal(cpuAttrBytes(wrong.geometry), beforeBytes - attached.colorBytes, "pin drops the leftover color attrBytes");
+  assert.equal(wrong.material.vertexColors, false, "pin does not rewrite vertexColors");
+  assert.equal(wrong.name, "lidMesh", "pin does not touch the reserved mesh name");
+  assert.equal(wrong.userData, meshExtras, "pin does not replace mesh.userData");
+  assert.equal(wrong.material.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(wrong.material.version, 7, "pin does not touch material.version");
+  assert.equal(wrong.material.userData, matExtras, "pin does not replace material.userData");
+  assert.equal(wrong.geometry, geometryBefore, "pin does not replace the geometry");
+  assert.equal(wrong.geometry.userData, geoExtras, "pin does not touch geometry.userData");
+  assert.equal(wrong.geometry.name, "Mesh.001", "pin does not touch geometry.name");
+  assert.equal(wrong.geometry.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(wrong.geometry.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not replace the position array");
+  assert.equal(position.version, 2, "pin does not touch BufferAttribute version");
+  assert.equal(position.name, "position", "pin does not touch BufferAttribute name");
+  assert.equal(wrong.matrixWorldNeedsUpdate, false, "pin does not touch matrixWorldNeedsUpdate");
+  assert.equal(wrong.frustumCulled, true, "pin does not change frustumCulled");
+  assert.equal(wrong.matrixAutoUpdate, false, "pin does not change matrixAutoUpdate");
+  assert.equal(wrong.matrixWorldAutoUpdate, true, "pin does not change matrixWorldAutoUpdate");
+  assert.equal(wrong.visible, true, "pin does not change visible");
+  assert.equal(wrong.geometry.attributes.color, undefined, "pin does not assign null to color");
+
+  const alpha = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const alphaAttached = attachLeftoverColorAttribute(alpha.geometry, 4);
+  assert.equal(alphaAttached.colorBytes, 48, "3 verts × Float32 color itemSize 4 × 4 B = 48");
+  const alphaBefore = cpuAttrBytes(alpha.geometry);
+  const alphaPosition = alpha.geometry.getAttribute("position");
+  const alphaIndex = alpha.geometry.index;
+  pinColorOnlyUnlitBasicColorAttribute(alpha);
+  assert.equal(colorAttributeAbsent(alpha.geometry), true, "itemSize-4 leftover color is deleted");
+  assert.equal(cpuAttrBytes(alpha.geometry), alphaBefore - alphaAttached.colorBytes, "itemSize-4 pin drops 48 color bytes");
+  assert.equal(alpha.geometry.getAttribute("position"), alphaPosition, "itemSize-4 pin does not replace position");
+  assert.equal(alpha.geometry.index, alphaIndex, "itemSize-4 pin does not replace the index");
+
+  const vertexMat = new THREE.MeshBasicMaterial({ color: 0x633318, vertexColors: true });
+  const vertexMesh = new THREE.Mesh(groupsTestGeometry(), vertexMat);
+  const vertexColor = attachLeftoverColorAttribute(vertexMesh.geometry, 3);
+  pinColorOnlyUnlitBasicColorAttribute(vertexMesh);
+  assert.equal(vertexMesh.geometry.getAttribute("color"), vertexColor.color, "vertexColors true keeps authored color");
+  assert.equal(vertexMat.vertexColors, true, "pin does not rewrite vertexColors true");
+
+  const shared = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  shared.version = 4;
+  const first = new THREE.Mesh(groupsTestGeometry(), shared);
+  const second = new THREE.Mesh(groupsTestGeometry(), shared);
+  const firstColor = attachLeftoverColorAttribute(first.geometry, 3);
+  attachLeftoverColorAttribute(second.geometry, 3);
+  first.name = "latchMesh";
+  second.name = "fastenerMesh";
+  first.matrixWorldNeedsUpdate = false;
+  second.matrixWorldNeedsUpdate = false;
+  const sharedRoot = new THREE.Group();
+  sharedRoot.userData.parts = { lid: true };
+  const rootBag = sharedRoot.userData;
+  sharedRoot.add(first, second);
+  pinColorOnlyVisualColorAttribute(sharedRoot);
+  assert.equal(first.material, shared, "first mesh keeps the shared material");
+  assert.equal(second.material, shared, "second mesh keeps the shared material");
+  assert.equal(colorAttributeAbsent(first.geometry), true, "first shared-material geometry color is deleted");
+  assert.equal(colorAttributeAbsent(second.geometry), true, "second shared-material geometry color is deleted");
+  assert.equal(firstColor.colorBytes, 36, "shared-material fixture color bytes stay the documented 36");
+  assert.equal(shared.version, 4, "entity helper does not touch material.version");
+  assert.equal(shared.vertexColors, false, "entity helper does not rewrite vertexColors");
+  assert.equal(first.name, "latchMesh", "reserved latchMesh name stays");
+  assert.equal(second.name, "fastenerMesh", "reserved fastenerMesh name stays");
+  assert.equal(first.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(sharedRoot.userData, rootBag, "entity helper does not replace entity userData");
+  let secondDeletes = 0;
+  const secondDelete = second.geometry.deleteAttribute.bind(second.geometry);
+  second.geometry.deleteAttribute = (name) => {
+    secondDeletes += 1;
+    return secondDelete(name);
+  };
+  pinColorOnlyUnlitBasicColorAttribute(second);
+  assert.equal(secondDeletes, 0, "a second sight of an already-absent color does not call deleteAttribute");
+});
+
+test("pinColorOnlyUnlitBasicColorAttribute / pinColorOnlyVisualColorAttribute skip mapped, lit, interleaved, colliders, shared blocked", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  colorMat.name = "lidMat";
+  colorMat.version = 4;
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  colorOnly.name = "lidMesh";
+  const colorAttr = attachLeftoverColorAttribute(colorOnly.geometry, 3);
+  colorOnly.matrixWorldNeedsUpdate = false;
+  colorOnly.matrixAutoUpdate = true;
+  const colorExtras = { part: "lid" };
+  colorOnly.userData = colorExtras;
+  const colorMatExtras = { material: "lid" };
+  colorOnly.material.userData = colorMatExtras;
+  pinColorOnlyUnlitBasicColorAttribute(colorOnly);
+  assert.equal(colorAttributeAbsent(colorOnly.geometry), true, "color-only leftover color is deleted");
+  assert.equal(colorAttr.colorBytes, 36, "color-only fixture documents 36 leftover color bytes");
+  assert.equal(colorOnly.material, colorMat, "per-mesh pin does not replace the material");
+  assert.equal(colorOnly.material.version, 4, "per-mesh pin does not touch material.version");
+  assert.equal(colorOnly.material.vertexColors, false, "per-mesh pin does not rewrite vertexColors");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin does not clear the reserved mesh name");
+  assert.equal(colorOnly.userData, colorExtras, "per-mesh pin does not replace mesh.userData");
+  assert.equal(colorOnly.material.name, "lidMat", "per-mesh pin does not clear material.name");
+  assert.equal(colorOnly.material.userData, colorMatExtras, "per-mesh pin does not replace material.userData");
+  assert.equal(colorOnly.matrixWorldNeedsUpdate, false, "per-mesh pin does not touch matrixWorldNeedsUpdate");
+  assert.equal(colorOnly.matrixAutoUpdate, true, "per-mesh pin does not freeze matrixAutoUpdate");
+
+  const mappedMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    map: { isTexture: true },
+  });
+  mappedMat.name = "mappedMat";
+  const mapped = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  const mappedColor = attachLeftoverColorAttribute(mapped.geometry, 3);
+  mapped.name = "mappedHero";
+  mapped.matrixWorldNeedsUpdate = true;
+  const std = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshStandardMaterial());
+  const stdColor = attachLeftoverColorAttribute(std.geometry, 4);
+  std.name = "litMesh";
+  pinColorOnlyUnlitBasicColorAttribute(mapped);
+  pinColorOnlyUnlitBasicColorAttribute(std);
+  assert.equal(mapped.geometry.getAttribute("color"), mappedColor.color, "mapped MeshBasic keeps authored color");
+  assert.equal(mapped.name, "mappedHero", "mapped mesh.name stays");
+  assert.equal(mapped.matrixWorldNeedsUpdate, true, "mapped matrixWorldNeedsUpdate stays authored");
+  assert.equal(std.geometry.getAttribute("color"), stdColor.color, "MeshStandard keeps authored color");
+  assert.equal(stdColor.colorBytes, 48, "lit fixture itemSize 4 is 48 bytes and stays");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  interleavedGeo.setIndex([0, 1, 2]);
+  const interleavedColor = new THREE.Float32BufferAttribute(6, 3);
+  interleavedGeo.setAttribute("color", interleavedColor);
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicColorAttribute(interleaved);
+  assert.equal(interleaved.geometry.getAttribute("color"), interleavedColor, "interleaved color stays authored");
+
+  const collider = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const colliderColor = attachLeftoverColorAttribute(collider.geometry, 3);
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicColorAttribute(collider);
+  assert.equal(collider.geometry.getAttribute("color"), colliderColor.color, "collider color stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  root.userData.parts = { latch: true };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.restLocal = new THREE.Vector3(0, 0.045, 0);
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(
+    groupsTestGeometry(),
+    new THREE.MeshBasicMaterial({ color: 0xbe7e31 }),
+  );
+  colorMesh.name = "dccLatch";
+  colorMesh.material.name = "latchMat";
+  colorMesh.material.version = 9;
+  attachLeftoverColorAttribute(colorMesh.geometry, 3);
+  colorMesh.matrixWorldNeedsUpdate = false;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.version = 11;
+  const sharedVisual = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  const sharedVisualColor = attachLeftoverColorAttribute(sharedVisual.geometry, 3);
+  const sharedCollider = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedColliderColor = attachLeftoverColorAttribute(sharedCollider.geometry, 3);
+  const mappedMesh = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  const mappedMeshColor = attachLeftoverColorAttribute(mappedMesh.geometry, 3);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.matrixWorldNeedsUpdate = false;
+  sharedGeoVisual.userData.fastener = true;
+  root.add(tool, colorMesh, mapped, mappedMesh, std, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualColorAttribute(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(root.userData.studio.objectId, "crate-toolbox", "studio metadata stays");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(tool.userData.feedbackEntity, root, "tool Group feedbackEntity stays");
+  assert.equal(colorAttributeAbsent(colorMesh.geometry), true, "entity helper deletes color-only color");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.material.name, "latchMat", "entity helper does not clear material.name");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.geometry.getAttribute("color"), mappedColor.color, "mapped color stays via entity helper");
+  assert.equal(std.geometry.getAttribute("color"), stdColor.color, "MeshStandard color stays via entity helper");
+  assert.equal(interleaved.geometry.getAttribute("color"), interleavedColor, "interleaved color stays via entity helper");
+  assert.equal(collider.geometry.getAttribute("color"), colliderColor.color, "collider color stays via entity helper");
+  assert.equal(sharedVisual.geometry.getAttribute("color"), sharedVisualColor.color, "shared collider material keeps authored color");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedCollider.geometry.getAttribute("color"), sharedColliderColor.color, "shared collider mesh color stays");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("color"), mappedMeshColor.color, "geometry shared with a mapped mesh keeps color");
+  assert.equal(mappedMesh.geometry.getAttribute("color"), mappedMeshColor.color, "mapped geometry color stays when a color-only mesh shares it");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.matrixWorldNeedsUpdate, false, "shared-geometry matrixWorldNeedsUpdate stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
 });

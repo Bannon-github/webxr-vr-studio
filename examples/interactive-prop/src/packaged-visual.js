@@ -2098,6 +2098,59 @@
  * `matrixWorldNeedsUpdate`. Collider meshes stay untouched.
  * Fail-soft (no lod groups) still runs this pin, including the
  * fastener.
+ *
+ * v1.7.0: after that matrixWorldNeedsUpdate pin,
+ * `pinColorOnlyVisualColorAttribute` strips leftover BufferGeometry
+ * `color` so the attribute is absent
+ * (`geometry.getAttribute('color')` is missing and
+ * `geometry.hasAttribute('color') === false`) on the 13 packed
+ * color-only unlit MeshBasic visual geometries (body LOD leaves +
+ * lid/latch/tool + fastener; measured colorAttribute-absent 13)
+ * when the material already has `vertexColors === false` (v0.57
+ * stays; same `isColorOnlyUnlitBasic` gate and the same collider /
+ * interleaved / mapped / lit / shared-material / shared-geometry
+ * skip rules). `COLOR_ONLY_UNUSED_COLOR_ATTRS` is `['color']` and is
+ * listed on `COLOR_ONLY_UNUSED_ATTRS`.
+ * `stripUnusedColorOnlyColorAttributes` deletes it from
+ * `stripUnusedColorOnlyAttributes` on the pack/weld path and skips
+ * interleaved geometries.
+ * **Checked installed three@0.170.0:** a fresh `BufferGeometry`
+ * assigns `this.attributes = {}` and has no `color` attribute.
+ * `deleteAttribute(name)` does `delete this.attributes[name]` and
+ * does not assign `null`. `WebGLPrograms.getParameters` copies
+ * `vertexColors: material.vertexColors` and enables the vertex-color
+ * program layer only when `parameters.vertexColors` is true.
+ * `WebGLProgram` emits `#define USE_COLOR` and `attribute vec3 color`
+ * only then. A leftover `color` BufferAttribute on a color-only
+ * MeshBasic with `vertexColors === false` is never read by the
+ * MeshBasic shader path. `WebGLGeometries.update` still uploads every
+ * `geometry.attributes` entry, so the leftover inflates pre-upload
+ * attrBytes and GPU buffer work on Quest 3 TBDR static props.
+ * Deleting it is load-time packaging. `GLTFLoader` maps `COLOR_0` →
+ * `color`. On clean procedural meshes draws / tris / attrBytes stay
+ * unchanged vs v1.6.0. A fixture with a leftover Float32 `color` may
+ * drop measured attrBytes (`count * itemSize * 4` bytes; a 24-vert
+ * BoxGeometry with itemSize 3 drops 288). Prefer
+ * `geometry.deleteAttribute('color')` when present. Do **not** invent
+ * a replacement attribute. Do **not** assign `null`. Do **not** enable
+ * `material.vertexColors`. Do **not** rewrite `vertexColors`. Do
+ * **not** replace the mesh, the material, the geometry, other
+ * attributes, or typed arrays. Do **not** delete `position` or the
+ * index. Do **not** touch Material `version` (v1.5.0
+ * material-version-zero stays) or Material `name` or Material
+ * `userData`. Do **not** touch Mesh / Object3D `userData` (v1.4.0) or
+ * Mesh / Object3D `name` (v1.3.0; reserved names `lidMesh` /
+ * `latchMesh` / `fastenerMesh` and any `collider_*` stay). Do **not**
+ * touch `matrixWorldNeedsUpdate` (v1.6.0 matrixWorldNeedsUpdate-false
+ * stays). Do **not** change `matrixAutoUpdate` or
+ * `matrixWorldAutoUpdate`. Do **not** touch BufferGeometry `userData`
+ * / `name`, other BufferAttribute fields, prior material
+ * program-cache / flag pins, bounds, morphs, animations, shadows,
+ * `frustumCulled`, or `mesh.visible`. Mapped / lit / interleaved keep
+ * authored `color`. Collider meshes stay untouched. Fail-soft (no lod
+ * groups) still runs this pin, including the fastener. 90 Hz ship
+ * (~11.1 ms) / 72 Hz fallback are **requested**, not measured. No
+ * invented headset ms.
  */
 
 import {
@@ -2141,6 +2194,7 @@ import {
   pinColorOnlyVisualMeshUserData,
   pinColorOnlyVisualMaterialVersion,
   pinColorOnlyVisualMatrixWorldNeedsUpdate,
+  pinColorOnlyVisualColorAttribute,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2335,6 +2389,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMeshUserData(root);
   pinColorOnlyVisualMaterialVersion(root);
   pinColorOnlyVisualMatrixWorldNeedsUpdate(root);
+  pinColorOnlyVisualColorAttribute(root);
   return root;
 }
 
