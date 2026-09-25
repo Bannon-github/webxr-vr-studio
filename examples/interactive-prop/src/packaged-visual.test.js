@@ -7825,6 +7825,10 @@ test("packaged ingest without lod groups still strips leftover color and drops t
   const { root, body, fastener } = makePackagedFixture({ withLod: false });
   const bodyMesh = visualMeshes(body)[0];
   const bodyColor = attachLeftoverColorAttribute(bodyMesh.geometry, 3);
+  const bodyChannels =
+    bodyMesh.geometry.getAttribute("uv").array.byteLength +
+    bodyMesh.geometry.getAttribute("normal").array.byteLength;
+  assert.equal(bodyChannels, 480, "fail-soft BoxGeometry also carries uv 192 + normal 288");
   const bodyBefore = cpuAttrBytes(bodyMesh.geometry);
   const bodyPosition = bodyMesh.geometry.getAttribute("position");
   const bodyIndex = bodyMesh.geometry.index;
@@ -7836,6 +7840,10 @@ test("packaged ingest without lod groups still strips leftover color and drops t
   const bodyBag = bodyMesh.userData;
   const alphaMesh = boxMesh("alphaBody", new THREE.MeshBasicMaterial({ color: 0x633318 }));
   const alphaColor = attachLeftoverColorAttribute(alphaMesh.geometry, 4);
+  const alphaChannels =
+    alphaMesh.geometry.getAttribute("uv").array.byteLength +
+    alphaMesh.geometry.getAttribute("normal").array.byteLength;
+  assert.equal(alphaChannels, 480, "fail-soft itemSize-4 BoxGeometry also carries uv + normal");
   const alphaBefore = cpuAttrBytes(alphaMesh.geometry);
   const alphaPosition = alphaMesh.geometry.getAttribute("position");
   body.add(alphaMesh);
@@ -7861,7 +7869,13 @@ test("packaged ingest without lod groups still strips leftover color and drops t
   assert.equal(bodyMesh.material, bodyMat, "fail-soft does not replace the body material");
   assert.equal(colorAttributeAbsent(bodyMesh.geometry), true, "fail-soft body color is deleted");
   assert.equal(bodyColor.colorBytes, 288, "fail-soft body fixture is 24 × 3 × 4 = 288 color bytes");
-  assert.equal(cpuAttrBytes(bodyMesh.geometry), bodyBefore - bodyColor.colorBytes, "fail-soft body pre-upload attrBytes drop by the leftover color bytes");
+  assert.equal(
+    cpuAttrBytes(bodyMesh.geometry),
+    bodyBefore - bodyColor.colorBytes - bodyChannels,
+    "fail-soft body drops leftover color plus unused uv/normal",
+  );
+  assert.equal(bodyMesh.geometry.getAttribute("uv"), undefined, "fail-soft unused uv is deleted");
+  assert.equal(bodyMesh.geometry.getAttribute("normal"), undefined, "fail-soft unused normal is deleted");
   assert.equal(bodyMesh.geometry.getAttribute("position"), bodyPosition, "fail-soft body position stays");
   assert.equal(bodyMesh.geometry.index, bodyIndex, "fail-soft body index stays");
   assert.equal(bodyMesh.material.vertexColors, false, "fail-soft body vertexColors stays false");
@@ -7871,7 +7885,11 @@ test("packaged ingest without lod groups still strips leftover color and drops t
   assert.equal(bodyMesh.userData, bodyBag, "fail-soft does not replace an already-empty mesh userData object when it was replaced before ingest");
   assert.equal(colorAttributeAbsent(alphaMesh.geometry), true, "fail-soft itemSize-4 color is deleted");
   assert.equal(alphaColor.colorBytes, 384, "fail-soft itemSize-4 fixture is 24 × 4 × 4 = 384 color bytes");
-  assert.equal(cpuAttrBytes(alphaMesh.geometry), alphaBefore - alphaColor.colorBytes, "fail-soft itemSize-4 attrBytes drop by 384");
+  assert.equal(
+    cpuAttrBytes(alphaMesh.geometry),
+    alphaBefore - alphaColor.colorBytes - alphaChannels,
+    "fail-soft itemSize-4 attrBytes drop by the color bytes plus unused uv/normal",
+  );
   assert.equal(alphaMesh.geometry.getAttribute("position"), alphaPosition, "fail-soft itemSize-4 position stays");
   assert.equal(colorAttributeAbsent(fastener.geometry), true, "fail-soft fastener color is deleted");
   assert.equal(fastenerColor.colorBytes, 288, "fail-soft fastener fixture carried 288 color bytes");
