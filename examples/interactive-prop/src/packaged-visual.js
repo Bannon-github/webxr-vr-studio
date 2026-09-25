@@ -2049,6 +2049,55 @@
  * interleaved keep authored `material.version`. Collider meshes
  * stay untouched. Fail-soft (no lod groups) still runs this pin,
  * including the fastener.
+ *
+ * v1.6.0: after that material-version pin,
+ * `pinColorOnlyVisualMatrixWorldNeedsUpdate` pins leftover Object3D /
+ * Mesh `matrixWorldNeedsUpdate` to the r170 constructor default
+ * `false` (`mesh.matrixWorldNeedsUpdate === false`) on the 13 packed
+ * color-only unlit MeshBasic visual meshes (body LOD leaves +
+ * lid/latch/tool + fastener; measured matrixWorldNeedsUpdate-false
+ * 13; same `isColorOnlyUnlitBasic` gate and the same collider /
+ * interleaved / mapped / lit / shared-material / shared-geometry
+ * skip rules).
+ * **Checked installed three@0.170.0:** the Object3D constructor
+ * assigns `this.matrixWorldNeedsUpdate = false`. `Mesh` does not
+ * override it. `updateMatrix()` assigns
+ * `this.matrixWorldNeedsUpdate = true`. `updateMatrixWorld(force)`
+ * recomputes `matrixWorld` when `this.matrixWorldNeedsUpdate || force`
+ * (and `matrixWorldAutoUpdate === true`), then assigns
+ * `this.matrixWorldNeedsUpdate = false`. `updateWorldMatrix` does
+ * not read or clear the flag; when `matrixAutoUpdate` is true it
+ * calls `updateMatrix()`, which sets the flag `true`.
+ * `Object3D.copy` copies `source.matrixWorldNeedsUpdate`.
+ * `applyMatrix4` calls `updateMatrix()` when `matrixAutoUpdate` is
+ * true, so a glTF node matrix leaves the flag `true` on a live node.
+ * `WebGLRenderer.render` calls `scene.updateMatrixWorld()` when
+ * `scene.matrixWorldAutoUpdate === true`. The fast path inside
+ * `updateMatrixWorld` skips `multiplyMatrices` only when the flag is
+ * `false` and `force` is false. A leftover `true` on a static packed
+ * color-only visual (`matrixAutoUpdate === false` from v0.45, so
+ * `updateMatrix` is not called first) forces that world-matrix
+ * multiply on the JS thread before the flag is cleared. On Quest 3
+ * TBDR that load-time / first-frame rebuild is packaging waste: no
+ * draw / tri / attrBytes change. Assign
+ * `mesh.matrixWorldNeedsUpdate = false` in place only when it is not
+ * already `false`. Do **not** call `updateMatrix` or
+ * `updateMatrixWorld` inside the pin. Do **not** replace the mesh,
+ * the material, the geometry, the attributes, or the typed arrays.
+ * Do **not** change `matrixAutoUpdate` (v0.45 freeze stays;
+ * lid/latch/tool/fastener stay live). Do **not** change
+ * `matrixWorldAutoUpdate` (v0.69 stays). Do **not** touch Material
+ * `version` (v1.5.0 material-version-zero stays) or Material `name`
+ * or Material `userData`. Do **not** touch Mesh / Object3D `userData`
+ * (v1.4.0) or Mesh / Object3D `name` (v1.3.0; reserved names
+ * `lidMesh` / `latchMesh` / `fastenerMesh` and any `collider_*`
+ * stay). Do **not** touch BufferGeometry `userData` / `name`. Do
+ * **not** touch BufferAttribute fields, prior material program-cache
+ * / flag pins, bounds, morphs, animations, shadows, `frustumCulled`,
+ * or `mesh.visible`. Mapped / lit / interleaved keep authored
+ * `matrixWorldNeedsUpdate`. Collider meshes stay untouched.
+ * Fail-soft (no lod groups) still runs this pin, including the
+ * fastener.
  */
 
 import {
@@ -2091,6 +2140,7 @@ import {
   pinColorOnlyVisualMeshName,
   pinColorOnlyVisualMeshUserData,
   pinColorOnlyVisualMaterialVersion,
+  pinColorOnlyVisualMatrixWorldNeedsUpdate,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2284,6 +2334,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMeshName(root);
   pinColorOnlyVisualMeshUserData(root);
   pinColorOnlyVisualMaterialVersion(root);
+  pinColorOnlyVisualMatrixWorldNeedsUpdate(root);
   return root;
 }
 
