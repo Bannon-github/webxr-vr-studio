@@ -2318,6 +2318,55 @@
  * (no lod groups) still runs this pin, including the fastener. 90 Hz
  * ship (~11.1 ms) / 72 Hz fallback are **requested**, not measured.
  * No invented headset ms.
+ *
+ * v1.12.0: after that extensions pin,
+ * `pinColorOnlyVisualMaterialDepthPacking` deletes leftover Material
+ * `depthPacking` so the r170 MeshBasic absence remains
+ * (`material.depthPacking === undefined` and
+ * `Object.hasOwn(material, 'depthPacking') === false`) on the 3 shared
+ * color-only MeshBasic materials (wood / brass / steel; measured
+ * depthPacking-absent 3; same `isColorOnlyUnlitBasic` gate and the same
+ * collider / interleaved / mapped / lit / shared-material /
+ * shared-geometry skip rules). Prefer `delete material.depthPacking`
+ * when the own property is present. An already-absent `depthPacking`
+ * is left alone. Pin once per shared material instance.
+ * **Checked installed three@0.170.0:** fresh `Material` /
+ * `MeshBasicMaterial` constructors do not assign `depthPacking`.
+ * `MeshDepthMaterial` assigns `this.depthPacking = BasicDepthPacking`
+ * and `copy` assigns `this.depthPacking = source.depthPacking`.
+ * `WebGLPrograms.getParameters` sets
+ * `useDepthPacking: material.depthPacking >= 0` and
+ * `depthPacking: material.depthPacking || 0`.
+ * `getProgramCacheKeyParameters` pushes `parameters.depthPacking`.
+ * `getProgramCacheKeyBooleans` enables program layer 13 when
+ * `useDepthPacking` is true. `WebGLProgram` emits
+ * `#define DEPTH_PACKING` plus `parameters.depthPacking` when
+ * `useDepthPacking` is true. A leftover `BasicDepthPacking` (3200) or
+ * `RGBADepthPacking` (3201) pushes a different cache-key number than
+ * the absent-material fallback `0`. A leftover `0` still sets
+ * `useDepthPacking` (`0 >= 0`), so the boolean program mask forks and
+ * the define is emitted. Assigning `null` also sets `useDepthPacking`
+ * (`null >= 0`). `delete material.depthPacking` restores the r170
+ * absence. Do **not** assign `null`, `undefined`, or `0`. Do **not**
+ * convert MeshBasic to MeshDepthMaterial. Do **not** invent depth
+ * packing. Do **not** touch `extensions` (v1.11.0 extensions-absent
+ * stays). Do **not** touch `indirect` (v1.10.0 indirect-null stays).
+ * Do **not** re-run the unused-channel strip (v1.9.0
+ * unusedAttributes-absent stays). Do **not** touch `onUpload` /
+ * `onUploadCallback` (v1.8.0 onUpload-release stays). Do **not**
+ * delete `color` (v1.7.0 colorAttribute-absent stays). Do **not**
+ * touch `matrixWorldNeedsUpdate` (v1.6.0 stays). Do **not** change
+ * `matrixAutoUpdate` or `matrixWorldAutoUpdate`. Do **not** touch
+ * Material `version` / `name` / `userData`, Mesh `name` / `userData`,
+ * BufferGeometry `name` / `userData`, BufferAttribute fields, prior
+ * Material program-cache / flag pins, bounds, morphs, animations,
+ * shadows, `frustumCulled`, or `mesh.visible`. Do **not** pin Material
+ * `index0AttributeName` (left for a later pulse). Mapped / lit /
+ * interleaved keep authored `depthPacking`. Collider meshes stay
+ * untouched. MeshDepthMaterial keeps authored `depthPacking`. Fail-soft
+ * (no lod groups) still runs this pin, including the fastener. 90 Hz
+ * ship (~11.1 ms) / 72 Hz fallback are **requested**, not measured.
+ * No invented headset ms.
  */
 
 import {
@@ -2366,6 +2415,7 @@ import {
   pinColorOnlyVisualUnusedAttributes,
   pinColorOnlyVisualIndirect,
   pinColorOnlyVisualMaterialExtensions,
+  pinColorOnlyVisualMaterialDepthPacking,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2565,6 +2615,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualUnusedAttributes(root);
   pinColorOnlyVisualIndirect(root);
   pinColorOnlyVisualMaterialExtensions(root);
+  pinColorOnlyVisualMaterialDepthPacking(root);
   return root;
 }
 

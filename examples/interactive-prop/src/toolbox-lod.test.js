@@ -123,6 +123,8 @@ const {
   pinColorOnlyVisualIndirect,
   pinColorOnlyUnlitBasicMaterialExtensions,
   pinColorOnlyVisualMaterialExtensions,
+  pinColorOnlyUnlitBasicMaterialDepthPacking,
+  pinColorOnlyVisualMaterialDepthPacking,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -20832,4 +20834,424 @@ test("pinColorOnlyUnlitBasicMaterialExtensions / pinColorOnlyVisualMaterialExten
   assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(indirectIsNull(colorMesh.geometry), false, "extensions pin does not clear leftover indirect");
+});
+
+function materialDepthPackingAbsent(material) {
+  return material?.depthPacking === undefined && Object.hasOwn(material, "depthPacking") === false;
+}
+
+function countVisualMaterialDepthPacking(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (materialDepthPackingAbsent(mat)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+function depthPackingProgramParameters(material) {
+  const useDepthPacking = material.depthPacking >= 0;
+  const depthPacking = material.depthPacking || 0;
+  const booleanMaskBit = useDepthPacking ? 1 << 13 : 0;
+  const defineLine = useDepthPacking ? `#define DEPTH_PACKING ${depthPacking}` : "";
+  return { useDepthPacking, depthPacking, booleanMaskBit, defineLine };
+}
+
+test("r170 MeshBasic leaves depthPacking absent; MeshDepthMaterial assigns BasicDepthPacking and copy bleeds it into the program cache key", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.equal(THREE.BasicDepthPacking, 3200, "BasicDepthPacking is 3200");
+  assert.equal(THREE.RGBADepthPacking, 3201, "RGBADepthPacking is 3201");
+  const freshMaterial = new THREE.Material();
+  const freshBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(freshMaterial.depthPacking, undefined, "Material constructor does not assign depthPacking");
+  assert.equal(Object.hasOwn(freshMaterial, "depthPacking"), false, "Material depthPacking is not an own property");
+  assert.equal(freshBasic.depthPacking, undefined, "MeshBasicMaterial constructor does not assign depthPacking");
+  assert.equal(Object.hasOwn(freshBasic, "depthPacking"), false, "MeshBasic depthPacking is not an own property");
+  assert.equal(Object.hasOwn(freshBasic, "index0AttributeName"), false, "MeshBasic does not assign index0AttributeName");
+  const absentParams = depthPackingProgramParameters(freshBasic);
+  assert.equal(absentParams.useDepthPacking, false, "absent depthPacking keeps useDepthPacking false");
+  assert.equal(absentParams.depthPacking, 0, "absent depthPacking falls back to cache-key 0");
+  assert.equal(absentParams.defineLine, "", "absent depthPacking emits no DEPTH_PACKING define");
+
+  const depth = new THREE.MeshDepthMaterial();
+  assert.equal(depth.depthPacking, THREE.BasicDepthPacking, "MeshDepthMaterial assigns BasicDepthPacking");
+  assert.equal(Object.hasOwn(depth, "depthPacking"), true, "MeshDepthMaterial depthPacking is an own property");
+  assert.equal(depth.isMeshDepthMaterial, true);
+  const depthParams = depthPackingProgramParameters(depth);
+  assert.equal(depthParams.useDepthPacking, true, "BasicDepthPacking sets useDepthPacking");
+  assert.equal(depthParams.depthPacking, 3200, "BasicDepthPacking is the pushed cache-key number");
+  assert.notEqual(depthParams.depthPacking, absentParams.depthPacking, "BasicDepthPacking forks the pushed cache-key number");
+  assert.notEqual(depthParams.booleanMaskBit, absentParams.booleanMaskBit, "useDepthPacking forks program layer 13");
+  assert.equal(depthParams.defineLine, "#define DEPTH_PACKING 3200");
+  depth.depthPacking = THREE.RGBADepthPacking;
+  const copied = new THREE.MeshDepthMaterial().copy(depth);
+  assert.equal(copied.depthPacking, THREE.RGBADepthPacking, "MeshDepthMaterial.copy copies source.depthPacking");
+  assert.equal(Object.hasOwn(copied, "depthPacking"), true, "copied depthPacking is an own property");
+  assert.notEqual(copied, depth, "copy does not return the source material");
+  const rgbaOnBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  rgbaOnBasic.depthPacking = copied.depthPacking;
+  const rgbaParams = depthPackingProgramParameters(rgbaOnBasic);
+  assert.equal(rgbaParams.depthPacking, 3201, "RGBADepthPacking bleed pushes 3201");
+  assert.notEqual(rgbaParams.depthPacking, absentParams.depthPacking, "RGBADepthPacking forks the pushed cache-key number");
+  assert.equal(rgbaParams.defineLine, "#define DEPTH_PACKING 3201");
+
+  const zero = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  zero.depthPacking = 0;
+  const zeroParams = depthPackingProgramParameters(zero);
+  assert.equal(zeroParams.depthPacking, 0, "leftover 0 pushes the same numeric fallback as absence");
+  assert.equal(zeroParams.useDepthPacking, true, "leftover 0 still sets useDepthPacking");
+  assert.notEqual(zeroParams.booleanMaskBit, absentParams.booleanMaskBit, "leftover 0 forks the useDepthPacking program mask");
+  assert.equal(zeroParams.defineLine, "#define DEPTH_PACKING 0");
+  const nulled = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  nulled.depthPacking = null;
+  assert.equal(depthPackingProgramParameters(nulled).useDepthPacking, true, "null would set useDepthPacking; do not assign null");
+  assert.equal(undefined >= 0, false, "an absent read does not set useDepthPacking");
+
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const material = readFileSync(require.resolve("three/src/materials/Material.js"), "utf8");
+  const meshBasic = readFileSync(require.resolve("three/src/materials/MeshBasicMaterial.js"), "utf8");
+  assert.equal(material.includes("this.depthPacking"), false, "Material.js does not assign depthPacking");
+  assert.equal(meshBasic.includes("this.depthPacking"), false, "MeshBasicMaterial.js does not assign depthPacking");
+  const depthSource = readFileSync(require.resolve("three/src/materials/MeshDepthMaterial.js"), "utf8");
+  assert.match(depthSource, /this\.depthPacking = BasicDepthPacking;/);
+  assert.match(depthSource, /this\.depthPacking = source\.depthPacking;/);
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.match(programs, /useDepthPacking: material\.depthPacking >= 0,/);
+  assert.match(programs, /depthPacking: material\.depthPacking \|\| 0,/);
+  assert.match(programs, /array\.push\( parameters\.depthPacking \);/);
+  assert.match(programs, /if \( parameters\.useDepthPacking \)\s+_programLayers\.enable\( 13 \);/);
+  const program = readFileSync(require.resolve("three/src/renderers/webgl/WebGLProgram.js"), "utf8");
+  assert.match(program, /parameters\.useDepthPacking \? '#define DEPTH_PACKING ' \+ parameters\.depthPacking : '',/);
+});
+
+test("v1.12.0 clears leftover Material depthPacking on packed color-only MeshBasics; envelope stays v1.11.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.12\.0 pins leftover Material depthPacking/);
+  assert.match(crate.userData.l2.note, /depthPacking-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.11\.0 pins leftover Material extensions/);
+  assert.match(crate.userData.l2.note, /extensions-absent 3/);
+  assert.match(crate.userData.l2.note, /indirect-null 13/);
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(materialDepthPackingAbsent(wood), true, "wood depthPacking is absent");
+  assert.equal(materialDepthPackingAbsent(brass), true, "brass depthPacking is absent");
+  assert.equal(materialDepthPackingAbsent(steel), true, "steel depthPacking is absent");
+  assert.equal(materialExtensionsAbsent(wood), true, "wood extensions stay absent");
+  assert.equal(wood.isMeshBasicMaterial, true, "wood stays MeshBasic");
+  assert.equal(brass.isMeshBasicMaterial, true, "brass stays MeshBasic");
+  assert.equal(steel.isMeshBasicMaterial, true, "steel stays MeshBasic");
+  assert.equal(wood.isMeshDepthMaterial, undefined, "wood is not converted to MeshDepthMaterial");
+  assert.equal(Object.hasOwn(wood, "index0AttributeName"), false, "index0AttributeName stays unpinned");
+  assert.equal(wood.version, 0, "wood material.version stays 0");
+  assert.equal(brass.name, "", "brass material.name stays empty");
+  assert.equal(materialUserDataEmpty(steel), true, "steel material.userData stays empty");
+
+  const depthPacking = countVisualMaterialDepthPacking(crate);
+  assert.equal(depthPacking.absent, 3, "depthPacking-absent count is 3");
+  assert.equal(depthPacking.leftover, 0);
+  assert.equal(depthPacking.total, 3);
+  assert.equal(countVisualMaterialExtensions(crate).absent, 3, "extensions-absent stays 3");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13");
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3");
+  assert.equal(countVisualMaterialName(crate).empty, 3, "material-name-empty stays 3");
+  assert.equal(countVisualMaterialUserData(crate).empty, 3, "material-userData-empty stays 3");
+  assert.equal(countVisualGeometryUserData(crate).empty, 13, "geometry-userData-empty stays 13");
+  assert.equal(countVisualGeometryName(crate).empty, 13, "geometry-name-empty stays 13");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10");
+  assert.equal(countVisualMeshName(crate).reserved, 3, "three reserved visual names stay");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(materialDepthPackingAbsent(mesh.material), true, "packed visual depthPacking stays absent");
+    assert.equal(materialExtensionsAbsent(mesh.material), true, "packed visual extensions stay absent");
+    assert.equal(indirectIsNull(mesh.geometry), true, "indirect stays null");
+    assert.equal(mesh.material.version, 0, "material.version stays 0");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+    assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  }
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lid = crate.getObjectByName("lidMesh");
+  const latch = crate.getObjectByName("latchMesh");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.equal(materialDepthPackingAbsent(fastener.material), true, "fastener shares the pinned brass material");
+  assert.equal(fastener.material, brass, "fastener still shares brass");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(lid.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latch.name, "latchMesh", "latchMesh name stays");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const rootBag = crate.userData;
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(countVisualMaterialDepthPacking(crate).absent, 3, "depthPacking-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialExtensions(crate).absent, 3, "extensions-absent stays 3 after L4/L5");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13 after L4/L5");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.equal(fastener.name, "fastenerMesh", "L5 keeps fastenerMesh");
+  assert.equal(lid.name, "lidMesh", "L4 keeps lidMesh");
+  assert.equal(latch.name, "latchMesh", "L4 keeps latchMesh");
+  assert.deepEqual(getToolboxLodStats(crate)[0], stats[0], "L4/L5 does not change the LOD0 envelope");
+});
+
+test("pinColorOnlyUnlitBasicMaterialDepthPacking deletes leftover depthPacking and leaves an already-absent depthPacking alone", () => {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  mat.version = 4;
+  mat.name = "woodStandIn";
+  mat.fog = false;
+  mat.toneMapped = false;
+  mat.flatShading = false;
+  mat.defines = { KEEP: "1" };
+  const matBag = mat.userData;
+  const extensions = { multiDraw: true };
+  mat.extensions = extensions;
+  mat.index0AttributeName = "position";
+  mat.depthPacking = THREE.BasicDepthPacking;
+  assert.equal(Object.hasOwn(mat, "depthPacking"), true, "fixture stores an own depthPacking number");
+  assert.equal(mat.depthPacking, 3200);
+  const geo = groupsTestGeometry();
+  const leftoverIndirect = { label: "stay-indirect" };
+  geo.setIndirect(leftoverIndirect);
+  const position = geo.getAttribute("position");
+  const index = geo.index;
+  const positionArray = position.array;
+  function rogue() {}
+  position.onUpload(rogue);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = "lidMesh";
+  mesh.matrixAutoUpdate = true;
+  mesh.matrixWorldNeedsUpdate = false;
+  mesh.matrixWorldAutoUpdate = true;
+  mesh.frustumCulled = true;
+  mesh.visible = true;
+  const bag = mesh.userData;
+  const returned = pinColorOnlyUnlitBasicMaterialDepthPacking(mesh);
+  assert.equal(returned, mesh, "pin returns the same mesh");
+  assert.equal(mesh.material, mat, "pin does not replace the material");
+  assert.equal(mat.isMeshBasicMaterial, true, "pin does not convert MeshBasic to MeshDepthMaterial");
+  assert.equal(mat.isMeshDepthMaterial, undefined, "pin does not stamp isMeshDepthMaterial");
+  assert.equal(materialDepthPackingAbsent(mat), true, "leftover BasicDepthPacking own property is deleted");
+  assert.equal(mat.depthPacking, undefined, "pin does not assign null, undefined, or 0");
+  assert.equal(mat.extensions, extensions, "depthPacking pin does not touch extensions");
+  assert.equal(mat.index0AttributeName, "position", "depthPacking pin does not pin index0AttributeName");
+  assert.equal(geo.getIndirect(), leftoverIndirect, "depthPacking pin does not touch indirect");
+  assert.equal(geo.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(geo.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not null position.array");
+  assert.equal(position.onUploadCallback, rogue, "pin does not touch position onUpload");
+  assert.equal(mesh.name, "lidMesh", "reserved lidMesh name stays");
+  assert.equal(mesh.userData, bag, "mesh.userData stays");
+  assert.equal(mesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+  assert.equal(mesh.matrixAutoUpdate, true, "matrixAutoUpdate stays live");
+  assert.equal(mesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+  assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  assert.equal(mesh.visible, true, "mesh.visible stays true");
+  assert.equal(mat.version, 4, "pin does not touch material.version");
+  assert.equal(mat.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(mat.userData, matBag, "pin does not replace material.userData");
+  assert.equal(mat.fog, false, "pin does not touch fog");
+  assert.equal(mat.toneMapped, false, "pin does not touch toneMapped");
+  assert.equal(mat.flatShading, false, "pin does not touch flatShading");
+  assert.deepEqual(mat.defines, { KEEP: "1" }, "pin does not touch defines");
+
+  const rgba = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  rgba.depthPacking = THREE.RGBADepthPacking;
+  pinColorOnlyUnlitBasicMaterialDepthPacking(new THREE.Mesh(groupsTestGeometry(), rgba));
+  assert.equal(materialDepthPackingAbsent(rgba), true, "RGBADepthPacking leftover is deleted");
+
+  const zero = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  zero.depthPacking = 0;
+  pinColorOnlyUnlitBasicMaterialDepthPacking(new THREE.Mesh(groupsTestGeometry(), zero));
+  assert.equal(materialDepthPackingAbsent(zero), true, "leftover 0 is deleted");
+  assert.equal(zero.depthPacking, undefined, "leftover 0 is not left assigned");
+
+  const absent = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(materialDepthPackingAbsent(absent), true, "fresh MeshBasic depthPacking is already absent");
+  const absentMesh = new THREE.Mesh(groupsTestGeometry(), absent);
+  absentMesh.name = "fastenerMesh";
+  pinColorOnlyUnlitBasicMaterialDepthPacking(absentMesh);
+  assert.equal(materialDepthPackingAbsent(absent), true, "already-absent depthPacking stays absent");
+  assert.equal(absent.depthPacking, undefined, "already-absent pin does not assign null or 0");
+  assert.equal(absentMesh.name, "fastenerMesh", "reserved fastenerMesh name stays");
+
+  const bleed = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  bleed.depthPacking = THREE.BasicDepthPacking;
+  pinColorOnlyUnlitBasicMaterialExtensions(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.depthPacking, THREE.BasicDepthPacking, "extensions pin does not delete depthPacking");
+  pinColorOnlyUnlitBasicIndirect(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.depthPacking, THREE.BasicDepthPacking, "indirect pin does not delete depthPacking");
+  pinColorOnlyUnlitBasicMaterialDepthPacking(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(materialDepthPackingAbsent(bleed), true, "BasicDepthPacking bleed on MeshBasic is deleted");
+
+  const depth = new THREE.MeshDepthMaterial();
+  depth.depthPacking = THREE.RGBADepthPacking;
+  const copied = new THREE.MeshDepthMaterial().copy(depth);
+  const copiedBleed = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  copiedBleed.depthPacking = copied.depthPacking;
+  pinColorOnlyUnlitBasicMaterialDepthPacking(new THREE.Mesh(groupsTestGeometry(), copiedBleed));
+  assert.equal(materialDepthPackingAbsent(copiedBleed), true, "copied RGBADepthPacking bleed on MeshBasic is deleted");
+  assert.equal(copied.depthPacking, THREE.RGBADepthPacking, "pin does not mutate the MeshDepthMaterial copy");
+
+  const shared = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  shared.depthPacking = THREE.BasicDepthPacking;
+  const first = new THREE.Mesh(groupsTestGeometry(), shared);
+  const second = new THREE.Mesh(groupsTestGeometry(), shared);
+  const sharedRoot = new THREE.Group();
+  const rootBag = sharedRoot.userData;
+  sharedRoot.add(first, second);
+  pinColorOnlyVisualMaterialDepthPacking(sharedRoot);
+  assert.equal(first.material, shared, "first mesh keeps the shared material");
+  assert.equal(second.material, shared, "second mesh keeps the shared material");
+  assert.equal(materialDepthPackingAbsent(shared), true, "shared material depthPacking is deleted once");
+  assert.equal(sharedRoot.userData, rootBag, "entity helper does not replace entity userData");
+  pinColorOnlyUnlitBasicMaterialDepthPacking(second);
+  assert.equal(materialDepthPackingAbsent(shared), true, "a second sight of an already-absent shared material does not assign");
+  assert.equal(shared.isMeshBasicMaterial, true, "shared material stays MeshBasic");
+  assert.equal(shared.isMeshDepthMaterial, undefined, "shared material is not converted to MeshDepthMaterial");
+});
+
+test("pinColorOnlyUnlitBasicMaterialDepthPacking / pinColorOnlyVisualMaterialDepthPacking skip mapped, lit, interleaved, colliders, MeshDepthMaterial, and shared blocked", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  colorMat.depthPacking = THREE.BasicDepthPacking;
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  colorOnly.name = "lidMesh";
+  pinColorOnlyUnlitBasicMaterialDepthPacking(colorOnly);
+  assert.equal(materialDepthPackingAbsent(colorOnly.material), true, "color-only leftover depthPacking is deleted");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin keeps lidMesh");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  mappedMat.depthPacking = THREE.BasicDepthPacking;
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  pinColorOnlyUnlitBasicMaterialDepthPacking(mapped);
+  assert.equal(mapped.material.depthPacking, THREE.BasicDepthPacking, "mapped MeshBasic keeps authored depthPacking");
+
+  const std = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  std.material.depthPacking = THREE.RGBADepthPacking;
+  pinColorOnlyUnlitBasicMaterialDepthPacking(std);
+  assert.equal(std.material.depthPacking, THREE.RGBADepthPacking, "MeshStandard keeps authored depthPacking");
+
+  const depthMat = new THREE.MeshDepthMaterial();
+  const depthMesh = new THREE.Mesh(groupsTestGeometry(), depthMat);
+  pinColorOnlyUnlitBasicMaterialDepthPacking(depthMesh);
+  assert.equal(depthMat.depthPacking, THREE.BasicDepthPacking, "MeshDepthMaterial keeps authored BasicDepthPacking");
+  assert.equal(depthMat.isMeshDepthMaterial, true, "pin does not convert MeshDepthMaterial");
+
+  const shader = new THREE.ShaderMaterial();
+  shader.depthPacking = 0;
+  const shaderMesh = new THREE.Mesh(groupsTestGeometry(), shader);
+  pinColorOnlyUnlitBasicMaterialDepthPacking(shaderMesh);
+  assert.equal(shader.depthPacking, 0, "ShaderMaterial keeps authored depthPacking");
+  assert.equal(Object.hasOwn(shader, "depthPacking"), true, "ShaderMaterial depthPacking own property stays");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  interleavedMat.depthPacking = THREE.RGBADepthPacking;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicMaterialDepthPacking(interleaved);
+  assert.equal(interleavedMat.depthPacking, THREE.RGBADepthPacking, "interleaved depthPacking stays authored");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.material.depthPacking = 0;
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicMaterialDepthPacking(collider);
+  assert.equal(collider.material.depthPacking, 0, "collider depthPacking stays");
+  assert.equal(Object.hasOwn(collider.material, "depthPacking"), true, "collider own depthPacking stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorMesh.name = "dccLatch";
+  colorMesh.material.version = 9;
+  colorMesh.material.depthPacking = THREE.RGBADepthPacking;
+  colorMesh.material.extensions = { clipCullDistance: true };
+  colorMesh.material.index0AttributeName = "position";
+  const colorIndirect = { label: "entity-indirect" };
+  colorMesh.geometry.setIndirect(colorIndirect);
+  colorMesh.matrixWorldNeedsUpdate = false;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.depthPacking = THREE.BasicDepthPacking;
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  sharedGeoMat.depthPacking = 0;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.userData.fastener = true;
+  root.add(tool, colorMesh, mapped, mappedMesh, std, depthMesh, shaderMesh, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualMaterialDepthPacking(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(materialDepthPackingAbsent(colorMesh.material), true, "entity helper deletes color-only depthPacking");
+  assert.equal(colorMesh.material.extensions.clipCullDistance, true, "entity helper does not touch extensions");
+  assert.equal(colorMesh.material.index0AttributeName, "position", "entity helper does not pin index0AttributeName");
+  assert.equal(colorMesh.geometry.getIndirect(), colorIndirect, "entity helper does not touch indirect");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.material.depthPacking, THREE.BasicDepthPacking, "mapped depthPacking stays via entity helper");
+  assert.equal(std.material.depthPacking, THREE.RGBADepthPacking, "MeshStandard depthPacking stays via entity helper");
+  assert.equal(depthMat.depthPacking, THREE.BasicDepthPacking, "MeshDepthMaterial depthPacking stays via entity helper");
+  assert.equal(shader.depthPacking, 0, "ShaderMaterial depthPacking stays via entity helper");
+  assert.equal(interleaved.material.depthPacking, THREE.RGBADepthPacking, "interleaved depthPacking stays via entity helper");
+  assert.equal(collider.material.depthPacking, 0, "collider depthPacking stays via entity helper");
+  assert.equal(sharedVisual.material.depthPacking, THREE.BasicDepthPacking, "shared collider material keeps authored depthPacking");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.material.depthPacking, 0, "geometry shared with a mapped mesh keeps depthPacking");
+  assert.equal(Object.hasOwn(sharedGeoMat, "depthPacking"), true, "shared-geometry 0 stays an own property");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(indirectIsNull(colorMesh.geometry), false, "depthPacking pin does not clear leftover indirect");
 });
