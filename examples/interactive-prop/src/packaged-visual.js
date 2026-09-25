@@ -2240,6 +2240,42 @@
  * lod groups) still runs this pin, including the fastener. 90 Hz ship
  * (~11.1 ms) / 72 Hz fallback are **requested**, not measured. No
  * invented headset ms.
+ *
+ * v1.10.0: after that unused-channel strip,
+ * `pinColorOnlyVisualIndirect` pins leftover BufferGeometry `indirect`
+ * to the r170 constructor default `null` (`geometry.indirect === null`)
+ * on the 13 packed color-only unlit MeshBasic visual geometries (body
+ * LOD leaves + lid/latch/tool + fastener; measured indirect-null 13;
+ * same `isColorOnlyUnlitBasic` gate and the same collider /
+ * interleaved / mapped / lit / shared-material / shared-geometry
+ * skip rules). Call `setIndirect(null)` only when `indirect` is not
+ * already `null`.
+ * **Checked installed three@0.170.0:** the BufferGeometry constructor
+ * assigns `this.indirect = null`. `setIndirect(indirect)` assigns
+ * `this.indirect = indirect`. `getIndirect()` returns `this.indirect`.
+ * In `src/renderers/common/Geometries.js`, when
+ * `renderObject.geometry.indirect !== null`, the renderer calls
+ * `updateAttribute(indirect, AttributeType.INDIRECT)`. Leftover
+ * indirect storage forces extra GPU attribute upload / binding work.
+ * Color-only static MeshBasic props do not use multi-draw /
+ * BatchedMesh indirect indexing. Clearing a leftover `indirect` to
+ * `null` is load-time packaging for Quest 3 TBDR. On clean procedural
+ * meshes draws / tris / attrBytes stay unchanged vs v1.9.0. Do
+ * **not** invent a replacement buffer. Do **not** call `delete` on
+ * unrelated fields. Do **not** re-run the unused-channel strip
+ * (v1.9.0 unusedAttributes-absent stays). Do **not** touch `onUpload`
+ * / `onUploadCallback` (v1.8.0 onUpload-release stays). Do **not**
+ * delete `color` (v1.7.0 colorAttribute-absent stays). Do **not**
+ * touch `matrixWorldNeedsUpdate` (v1.6.0 stays). Do **not** change
+ * `matrixAutoUpdate` or `matrixWorldAutoUpdate`. Do **not** touch
+ * Material `version` / `name` / `userData`, Mesh `name` / `userData`,
+ * BufferGeometry `name` / `userData`, other BufferAttribute fields,
+ * `drawRange`, `groups`, `skinIndex` / `skinWeight`, `position`, the
+ * index, bounds, morphs, animations, shadows, `frustumCulled`, or
+ * `mesh.visible`. Mapped / lit / interleaved keep authored `indirect`.
+ * Collider meshes stay untouched. Fail-soft (no lod groups) still
+ * runs this pin, including the fastener. 90 Hz ship (~11.1 ms) / 72 Hz
+ * fallback are **requested**, not measured. No invented headset ms.
  */
 
 import {
@@ -2286,6 +2322,7 @@ import {
   pinColorOnlyVisualColorAttribute,
   pinColorOnlyVisualOnUpload,
   pinColorOnlyVisualUnusedAttributes,
+  pinColorOnlyVisualIndirect,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2483,6 +2520,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualColorAttribute(root);
   pinColorOnlyVisualOnUpload(root);
   pinColorOnlyVisualUnusedAttributes(root);
+  pinColorOnlyVisualIndirect(root);
   return root;
 }
 

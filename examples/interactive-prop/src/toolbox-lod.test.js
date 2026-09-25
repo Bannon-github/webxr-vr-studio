@@ -119,6 +119,8 @@ const {
   pinColorOnlyVisualOnUpload,
   pinColorOnlyUnlitBasicUnusedAttributes,
   pinColorOnlyVisualUnusedAttributes,
+  pinColorOnlyUnlitBasicIndirect,
+  pinColorOnlyVisualIndirect,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -20121,4 +20123,352 @@ test("pinColorOnlyUnlitBasicUnusedAttributes / pinColorOnlyVisualUnusedAttribute
   assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(colorAttributeAbsent(colorMesh.geometry), true, "unused pin does not invent color");
+});
+
+function indirectIsNull(geometry) {
+  return geometry?.indirect === null && geometry.getIndirect?.() === null;
+}
+
+function countVisualIndirect(crate) {
+  let indirectNull = 0;
+  let leftover = 0;
+  const geos = new Set();
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.geometry) geos.add(mesh.geometry);
+    if (indirectIsNull(mesh.geometry)) indirectNull += 1;
+    else leftover += 1;
+  }
+  return { indirectNull, leftover, total: indirectNull + leftover, uniqueGeometries: geos.size };
+}
+
+test("r170 BufferGeometry indirect defaults to null and common Geometries uploads it only when set", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const fresh = new THREE.BufferGeometry();
+  assert.equal(fresh.indirect, null, "constructor assigns indirect null");
+  assert.equal(fresh.getIndirect(), null, "getIndirect returns the constructor null");
+  const stored = new THREE.Uint32BufferAttribute(new Uint32Array([0, 3, 0, 0]), 4);
+  const returned = fresh.setIndirect(stored);
+  assert.equal(returned, fresh, "setIndirect returns the geometry");
+  assert.equal(fresh.indirect, stored, "setIndirect assigns the leftover buffer");
+  assert.equal(fresh.getIndirect(), stored, "getIndirect returns the assigned buffer");
+  fresh.setIndirect(null);
+  assert.equal(fresh.indirect, null, "setIndirect(null) restores the constructor default");
+  assert.equal(fresh.getIndirect(), null, "getIndirect returns null after the clear");
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const bufferGeometry = readFileSync(require.resolve("three/src/core/BufferGeometry.js"), "utf8");
+  assert.match(bufferGeometry, /this\.indirect = null;/);
+  assert.match(bufferGeometry, /setIndirect\( indirect \) \{\s*this\.indirect = indirect;/);
+  assert.match(bufferGeometry, /getIndirect\(\) \{\s*return this\.indirect;/);
+  const geometries = readFileSync(require.resolve("three/src/renderers/common/Geometries.js"), "utf8");
+  assert.match(geometries, /const indirect = renderObject\.geometry\.indirect;/);
+  assert.match(
+    geometries,
+    /if \( indirect !== null \) \{\s*this\.updateAttribute\( indirect, AttributeType\.INDIRECT \);/,
+  );
+});
+
+test("v1.10.0 pins leftover indirect null on packed color-only visuals; envelope stays v1.9.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.10\.0 pins leftover BufferGeometry indirect/);
+  assert.match(crate.userData.l2.note, /indirect-null 13/);
+  assert.match(crate.userData.l2.note, /v1\.9\.0 strips leftover normal \/ uv \/ uv1 \/ uv2 \/ uv3 \/ tangent/);
+  assert.match(crate.userData.l2.note, /unusedAttributes-absent 13/);
+  assert.match(crate.userData.l2.note, /onUpload-release 13/);
+  assert.match(crate.userData.l2.note, /colorAttribute-absent 13/);
+  assert.match(crate.userData.l2.note, /matrixWorldNeedsUpdate-false 13/);
+  assert.match(crate.userData.l2.note, /material-version-zero 3/);
+
+  const indirect = countVisualIndirect(crate);
+  assert.equal(indirect.indirectNull, 13, "indirect-null count is 13");
+  assert.equal(indirect.leftover, 0);
+  assert.equal(indirect.total, 13);
+  assert.equal(indirect.uniqueGeometries, 13, "one geometry per visual");
+  const byLevel = [0, 1, 2].map((level) => {
+    let n = 0;
+    for (const g of crate.userData.lod.groups[level]) {
+      g.traverse((o) => {
+        if (o.isMesh && !o.userData.collider && indirectIsNull(o.geometry)) n += 1;
+      });
+    }
+    return n;
+  });
+  assert.deepEqual(byLevel, [6, 4, 2], "LOD indirect-null is 6 / 4 / 2");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13");
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10");
+  assert.equal(countVisualMeshName(crate).reserved, 3, "three reserved visual names stay");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    const position = mesh.geometry.getAttribute("position");
+    assert.equal(indirectIsNull(mesh.geometry), true, "packed visual indirect is null");
+    assert.equal(unusedChannelAttributesAbsent(mesh.geometry), true, "unused channels stay absent");
+    assert.ok(position, "position stays");
+    assert.ok(mesh.geometry.index, "index stays");
+    assert.equal(geometryOnUploadRelease(mesh.geometry), true, "onUpload release hook stays");
+    assert.ok(position.array, "indirect pin does not null position.array");
+    assert.equal(colorAttributeAbsent(mesh.geometry), true, "color attribute stays absent");
+    assert.equal(mesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+    assert.equal(mesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+    assert.equal(mesh.material.version, 0, "material.version stays 0");
+    assert.equal(mesh.material.vertexColors, false, "vertexColors stays false");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+    assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+    assert.equal(mesh.geometry.boundingBox, null, "bounds stay null");
+    assert.equal(mesh.geometry.boundingSphere, null, "boundingSphere stays null");
+    assert.equal(mesh.geometry.drawRange.start, 0, "drawRange.start stays 0");
+    assert.equal(mesh.geometry.drawRange.count, Infinity, "drawRange.count stays Infinity");
+    assert.equal(mesh.geometry.groups.length, 0, "groups stay empty");
+    assert.equal(meshUserDataEmpty(mesh), true, "mesh.userData stays empty");
+  }
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lid = crate.getObjectByName("lidMesh");
+  const latch = crate.getObjectByName("latchMesh");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.equal(indirectIsNull(fastener.geometry), true, "fastener indirect stays null");
+  assert.equal(unusedChannelAttributesAbsent(fastener.geometry), true, "fastener unused channels stay absent");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(lid.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latch.name, "latchMesh", "latchMesh name stays");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const rootBag = crate.userData;
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13 after L4/L5");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13 after L4/L5");
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13 after L4/L5");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13 after L4/L5");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.equal(fastener.name, "fastenerMesh", "L5 keeps fastenerMesh");
+  assert.equal(lid.name, "lidMesh", "L4 keeps lidMesh");
+  assert.equal(latch.name, "latchMesh", "L4 keeps latchMesh");
+  assert.deepEqual(getToolboxLodStats(crate)[0], stats[0], "L4/L5 does not change the LOD0 envelope");
+});
+
+test("pinColorOnlyUnlitBasicIndirect clears a leftover indirect and leaves an already-null indirect alone", () => {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  mat.version = 4;
+  mat.name = "woodStandIn";
+  mat.vertexColors = false;
+  const geo = groupsTestGeometry();
+  const leftover = { label: "leftover-indirect" };
+  geo.setIndirect(leftover);
+  assert.equal(geo.getIndirect(), leftover, "fixture stores a non-null indirect");
+  const uv = attachLeftoverChannelAttribute(geo, "uv", 2);
+  const position = geo.getAttribute("position");
+  const index = geo.index;
+  const positionArray = position.array;
+  const before = cpuAttrBytes(geo);
+  function rogue() {}
+  position.onUpload(rogue);
+  index.onUpload(rogue);
+  geo.boundingBox = null;
+  geo.boundingSphere = null;
+  geo.drawRange.start = 0;
+  geo.drawRange.count = Infinity;
+  const groups = geo.groups;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = "lidMesh";
+  mesh.matrixAutoUpdate = true;
+  mesh.matrixWorldNeedsUpdate = false;
+  mesh.matrixWorldAutoUpdate = true;
+  mesh.frustumCulled = true;
+  mesh.visible = true;
+  const bag = mesh.userData;
+  const calls = [];
+  const original = geo.setIndirect.bind(geo);
+  geo.setIndirect = (value) => {
+    calls.push(value);
+    return original(value);
+  };
+  const returned = pinColorOnlyUnlitBasicIndirect(mesh);
+  assert.equal(returned, mesh, "pin returns the same mesh");
+  assert.deepEqual(calls, [null], "pin calls setIndirect(null) once");
+  assert.equal(geo.indirect, null, "leftover indirect is cleared");
+  assert.equal(geo.getIndirect(), null, "getIndirect is null after the pin");
+  assert.equal(leftover.label, "leftover-indirect", "pin does not invent a replacement buffer");
+  assert.equal(cpuAttrBytes(geo), before, "clearing indirect does not change attrBytes");
+  assert.equal(geo.getAttribute("uv"), uv.attr, "indirect pin does not strip leftover uv");
+  assert.equal(geo.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(geo.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not null position.array");
+  assert.equal(position.onUploadCallback, rogue, "pin does not touch position onUpload");
+  assert.equal(index.onUploadCallback, rogue, "pin does not touch index onUpload");
+  assert.equal(geo.boundingBox, null, "pin does not recompute boundingBox");
+  assert.equal(geo.boundingSphere, null, "pin does not recompute boundingSphere");
+  assert.equal(geo.groups, groups, "pin does not replace groups");
+  assert.equal(mesh.name, "lidMesh", "reserved lidMesh name stays");
+  assert.equal(mesh.userData, bag, "mesh.userData stays");
+  assert.equal(mesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+  assert.equal(mesh.matrixAutoUpdate, true, "matrixAutoUpdate stays live");
+  assert.equal(mesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+  assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  assert.equal(mesh.visible, true, "mesh.visible stays true");
+  assert.equal(mat.version, 4, "pin does not touch material.version");
+  assert.equal(mat.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(mat.vertexColors, false, "pin does not rewrite vertexColors");
+
+  const absent = groupsTestGeometry();
+  assert.equal(absent.indirect, null, "fresh fixture indirect is already null");
+  let absentCalls = 0;
+  absent.setIndirect = () => {
+    absentCalls += 1;
+  };
+  const absentMesh = new THREE.Mesh(absent, mat);
+  absentMesh.name = "fastenerMesh";
+  pinColorOnlyUnlitBasicIndirect(absentMesh);
+  assert.equal(absentCalls, 0, "already-null indirect does not call setIndirect");
+  assert.equal(absent.indirect, null, "already-null indirect stays null");
+  assert.equal(absentMesh.name, "fastenerMesh", "reserved fastenerMesh name stays");
+
+  const kept = groupsTestGeometry();
+  const skinIndex = new THREE.Uint16BufferAttribute(12, 4);
+  const skinWeight = new THREE.Float32BufferAttribute(12, 4);
+  const color = new THREE.Float32BufferAttribute(9, 3);
+  kept.setAttribute("skinIndex", skinIndex);
+  kept.setAttribute("skinWeight", skinWeight);
+  kept.setAttribute("color", color);
+  const morph = new THREE.BufferAttribute(new Float32Array(9), 3);
+  kept.morphAttributes.position = [morph];
+  kept.morphTargetsRelative = true;
+  const keptIndirect = { label: "morph-indirect" };
+  kept.setIndirect(keptIndirect);
+  pinColorOnlyUnlitBasicUnusedAttributes(new THREE.Mesh(kept, mat));
+  assert.equal(kept.getIndirect(), keptIndirect, "unused-channel pin does not clear indirect");
+  pinColorOnlyUnlitBasicIndirect(new THREE.Mesh(kept, mat));
+  assert.equal(kept.indirect, null, "indirect pin still clears after the unused-channel pin");
+  assert.equal(kept.getAttribute("skinIndex"), skinIndex, "skinIndex stays");
+  assert.equal(kept.getAttribute("skinWeight"), skinWeight, "skinWeight stays");
+  assert.equal(kept.getAttribute("color"), color, "color stays");
+  assert.equal(kept.morphAttributes.position[0], morph, "pin does not replace morph attributes");
+  assert.equal(kept.morphTargetsRelative, true, "pin does not touch morphTargetsRelative");
+});
+
+test("pinColorOnlyUnlitBasicIndirect / pinColorOnlyVisualIndirect skip mapped, lit, interleaved, colliders, and shared blocked", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  const colorIndirect = { label: "color-indirect" };
+  colorOnly.geometry.setIndirect(colorIndirect);
+  colorOnly.name = "lidMesh";
+  pinColorOnlyUnlitBasicIndirect(colorOnly);
+  assert.equal(colorOnly.geometry.indirect, null, "color-only leftover indirect is cleared");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin keeps lidMesh");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const mappedIndirect = { label: "mapped-indirect" };
+  mapped.geometry.setIndirect(mappedIndirect);
+  pinColorOnlyUnlitBasicIndirect(mapped);
+  assert.equal(mapped.geometry.getIndirect(), mappedIndirect, "mapped MeshBasic keeps authored indirect");
+
+  const std = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  const stdIndirect = { label: "lit-indirect" };
+  std.geometry.setIndirect(stdIndirect);
+  pinColorOnlyUnlitBasicIndirect(std);
+  assert.equal(std.geometry.getIndirect(), stdIndirect, "MeshStandard keeps authored indirect");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedIndirect = { label: "interleaved-indirect" };
+  interleavedGeo.setIndirect(interleavedIndirect);
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  pinColorOnlyUnlitBasicIndirect(interleaved);
+  assert.equal(interleavedGeo.getIndirect(), interleavedIndirect, "interleaved indirect stays authored");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  const colliderIndirect = { label: "collider-indirect" };
+  collider.geometry.setIndirect(colliderIndirect);
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicIndirect(collider);
+  assert.equal(collider.geometry.getIndirect(), colliderIndirect, "collider indirect stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorMesh.name = "dccLatch";
+  colorMesh.material.version = 9;
+  const colorMeshIndirect = { label: "entity-indirect" };
+  colorMesh.geometry.setIndirect(colorMeshIndirect);
+  colorMesh.matrixWorldNeedsUpdate = false;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedVisualIndirect = { label: "shared-mat-indirect" };
+  sharedVisual.geometry.setIndirect(sharedVisualIndirect);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.userData.fastener = true;
+  const sharedGeoIndirect = { label: "shared-geo-indirect" };
+  mappedMesh.geometry.setIndirect(sharedGeoIndirect);
+  root.add(tool, colorMesh, mapped, mappedMesh, std, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualIndirect(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(colorMesh.geometry.indirect, null, "entity helper clears color-only indirect");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.geometry.getIndirect(), mappedIndirect, "mapped indirect stays via entity helper");
+  assert.equal(std.geometry.getIndirect(), stdIndirect, "MeshStandard indirect stays via entity helper");
+  assert.equal(interleaved.geometry.getIndirect(), interleavedIndirect, "interleaved indirect stays via entity helper");
+  assert.equal(collider.geometry.getIndirect(), colliderIndirect, "collider indirect stays via entity helper");
+  assert.equal(sharedVisual.geometry.getIndirect(), sharedVisualIndirect, "shared collider material keeps authored indirect");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.geometry.getIndirect(), sharedGeoIndirect, "geometry shared with a mapped mesh keeps indirect");
+  assert.equal(mappedMesh.geometry.getIndirect(), sharedGeoIndirect, "mapped geometry indirect stays when a color-only mesh shares it");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(colorAttributeAbsent(colorMesh.geometry), true, "indirect pin does not invent color");
+  assert.equal(unusedChannelAttributesAbsent(colorMesh.geometry), true, "indirect pin does not invent unused channels");
 });
