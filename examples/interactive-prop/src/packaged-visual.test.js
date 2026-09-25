@@ -8,6 +8,7 @@ import {
   packagedLodLevel,
 } from "./packaged-visual.js";
 import {
+  isCpuArrayReleaseOnUpload,
   mergeSameMaterialMeshes,
   noopColorOnlyVisualRaycast,
   setToolboxLod,
@@ -6401,7 +6402,8 @@ test("packaged ingest pins leftover BufferAttribute version to 0 after the name 
   assert.equal(wrongMesh.name, "", "v1.3.0 mesh-name pin clears leftover dccVersion mesh.name");
   assert.equal(position.version, 0, "leftover position version is pinned to 0");
   assert.equal(index.version, 0, "leftover index version is pinned to 0");
-  assert.equal(position.onUploadCallback, upload, "version pin does not replace onUploadCallback");
+  assert.equal(isCpuArrayReleaseOnUpload(position.onUploadCallback, wrongMesh.geometry), true, "v1.8 onUpload pin replaces a non-release callback after morphs are cleared");
+  assert.equal(position.array, positionArray, "v1.8 onUpload pin does not null position.array");
   assertQuestSafeUnlitVersion(wrongMesh, "packaged color-only MeshBasic");
   assertQuestSafeUnlitName(wrongMesh, "packaged color-only name still empty");
   assertQuestSafeUnlitGpuType(wrongMesh, "packaged color-only gpuType still FloatType");
@@ -6428,7 +6430,8 @@ test("packaged ingest pins leftover BufferAttribute version to 0 after the name 
   assert.equal(fastener.geometry.getAttribute("position"), fastenerPosition, "morph-blocked fastener position stays");
   assert.equal(fastenerPosition.array, fastenerArray, "fastener typed array stays");
   assert.equal(fastener.geometry.index, fastenerIndex, "fastener index stays");
-  assert.equal(fastenerPosition.onUploadCallback, fastenerUpload, "fastener onUploadCallback stays");
+  assert.equal(isCpuArrayReleaseOnUpload(fastenerPosition.onUploadCallback, fastener.geometry), true, "v1.8 onUpload pin replaces the fastener non-release callback");
+  assert.equal(fastenerPosition.array, fastenerArray, "v1.8 onUpload pin does not null the fastener array");
   assert.equal(fastenerPosition.updateRanges, fastenerRanges, "fastener updateRanges array is kept");
   assert.equal(fastenerRanges.length, 0, "fastener leftover updateRanges is cleared");
   assertQuestSafeUnlitVersion(fastener, "fastener");
@@ -6552,7 +6555,8 @@ test("packaged ingest without lod groups still pins leftover BufferAttribute ver
   assert.equal(packedBodyPosition.version, 0, "fail-soft Float16 position version is 0");
   assert.equal(bodyMesh.geometry.index.version, 0, "fail-soft body index version is 0");
   assert.equal(packedBodyPosition.name, "", "fail-soft name pin still holds on the Float16 position");
-  assert.equal(packedBodyPosition.onUploadCallback, float16Upload, "fail-soft version pin does not replace onUploadCallback");
+  assert.equal(isCpuArrayReleaseOnUpload(packedBodyPosition.onUploadCallback, bodyMesh.geometry), true, "v1.8 fail-soft onUpload pin replaces a non-release callback");
+  assert.equal(packedBodyPosition.array, float16Array, "v1.8 onUpload pin does not null the Float16 array");
   assert.equal(packedBodyPosition.gpuType, THREE.FloatType, "fail-soft gpuType pin still holds on the Float16 position");
   assertQuestSafeUnlitVersion(bodyMesh, "fail-soft body");
   assertQuestSafeUnlitName(bodyMesh, "fail-soft body name");
@@ -6683,7 +6687,8 @@ test("packaged ingest pins leftover BufferGeometry name to empty after the versi
   assert.equal(wrongMesh.geometry.name, "", "leftover geometry.name is pinned to empty");
   assert.equal(position.version, 0, "version pin still holds on position");
   assert.equal(index.version, 0, "version pin still holds on the index");
-  assert.equal(position.onUploadCallback, upload, "geometry-name pin does not replace onUploadCallback");
+  assert.equal(isCpuArrayReleaseOnUpload(position.onUploadCallback, wrongMesh.geometry), true, "v1.8 onUpload pin replaces a non-release callback after the geometry-name pin");
+  assert.equal(position.array, positionArray, "v1.8 onUpload pin does not null position.array");
   assertQuestSafeUnlitVersion(wrongMesh, "packaged color-only version still zero");
   assertQuestSafeUnlitName(wrongMesh, "packaged color-only attribute name still empty");
   assertQuestSafeUnlitGpuType(wrongMesh, "packaged color-only gpuType still FloatType");
@@ -6888,7 +6893,8 @@ test("packaged ingest pins leftover BufferGeometry userData to an empty plain ob
   assert.equal(wrongMesh.geometry.name, "", "geometry-name pin still clears leftover geometry.name");
   assert.equal(position.version, 0, "version pin still holds on position");
   assert.equal(index.version, 0, "version pin still holds on the index");
-  assert.equal(position.onUploadCallback, upload, "geometry-userData pin does not replace onUploadCallback");
+  assert.equal(isCpuArrayReleaseOnUpload(position.onUploadCallback, wrongMesh.geometry), true, "v1.8 onUpload pin replaces a non-release callback after the geometry-userData pin");
+  assert.equal(position.array, positionArray, "v1.8 onUpload pin does not null position.array");
   assertQuestSafeUnlitVersion(wrongMesh, "packaged color-only version still zero");
   assertQuestSafeUnlitName(wrongMesh, "packaged color-only attribute name still empty");
   assertQuestSafeUnlitGpuType(wrongMesh, "packaged color-only gpuType still FloatType");
@@ -7878,4 +7884,151 @@ test("packaged ingest without lod groups still strips leftover color and drops t
   assert.equal(mapped.material.version, 2, "fail-soft mapped material.version stays authored");
   assert.equal(colliderGrab.geometry.getAttribute("color"), colliderColor.color, "fail-soft collider color stays");
   assert.equal(colliderGrab.material.version, 7, "fail-soft collider material.version stays");
+});
+
+
+function geometryOnUploadRelease(geometry) {
+  if (!geometry) return false;
+  const position = geometry.getAttribute?.("position");
+  if (!isCpuArrayReleaseOnUpload(position?.onUploadCallback, geometry)) return false;
+  const index = geometry.index;
+  if (index && !isCpuArrayReleaseOnUpload(index.onUploadCallback, geometry)) return false;
+  return true;
+}
+
+test("packaged ingest pins the release onUpload hook on color-only visuals and the fastener", () => {
+  const { root, groups, fastener } = makePackagedFixture();
+  const shared = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const first = boxMesh("dccWall", shared);
+  function firstRogue() {}
+  first.geometry.getAttribute("position").onUpload(firstRogue);
+  first.geometry.index.onUpload(firstRogue);
+  const firstArray = first.geometry.getAttribute("position").array;
+  const second = boxMesh("dccWallB", shared);
+  function secondRogue() {}
+  second.geometry.getAttribute("position").onUpload(secondRogue);
+  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  function mappedRogue() {}
+  mappedMesh.geometry.getAttribute("position").onUpload(mappedRogue);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "sharedGeoBody";
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  interleavedGeo.setIndex([0, 1, 2]);
+  function interleavedRogue() {}
+  interleavedGeo.index.onUpload(interleavedRogue);
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  interleaved.name = "interleavedMesh";
+  const lit = boxMesh("litMesh", new THREE.MeshStandardMaterial());
+  function litRogue() {}
+  lit.geometry.getAttribute("position").onUpload(litRogue);
+  groups[0][0].add(first, mappedMesh, interleaved, lit);
+  groups[1][0].add(second);
+  root.add(sharedGeoVisual);
+  function fastenerRogue() {}
+  fastener.geometry.getAttribute("position").onUpload(fastenerRogue);
+  fastener.geometry.index.onUpload(fastenerRogue);
+  fastener.material = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  const fastenerMat = fastener.material;
+  const fastenerArray = fastener.geometry.getAttribute("position").array;
+  const colliderGrab = root.getObjectByName("collider_grab");
+  function colliderRogue() {}
+  colliderGrab.geometry.getAttribute("position").onUpload(colliderRogue);
+  const colliderBag = colliderGrab.userData;
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(geometryOnUploadRelease(fastener.geometry), true, "fastener position and index use the release hook");
+  assert.notEqual(fastener.geometry.getAttribute("position").onUploadCallback, fastenerRogue, "fastener rogue hook is replaced");
+  assert.ok(fastener.geometry.getAttribute("position").array, "ingest does not null fastener CPU arrays");
+  assert.equal(fastener.material, fastenerMat, "ingest does not replace the fastener material");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh stays named");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+  assert.equal(mappedMesh.geometry.getAttribute("position").onUploadCallback, mappedRogue, "mapped onUploadCallback stays authored");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("position").onUploadCallback, mappedRogue, "geometry shared with a mapped mesh keeps onUploadCallback");
+  assert.equal(sharedGeoVisual.name, "sharedGeoBody", "shared-geometry mesh name stays");
+  assert.equal(interleaved.geometry.index.onUploadCallback, interleavedRogue, "interleaved onUploadCallback stays authored");
+  assert.equal(lit.geometry.getAttribute("position").onUploadCallback, litRogue, "MeshStandard onUploadCallback stays authored");
+  assert.equal(colliderGrab.geometry.getAttribute("position").onUploadCallback, colliderRogue, "collider onUploadCallback stays authored");
+  assert.equal(colliderGrab.userData, colliderBag, "collider userData stays");
+  assert.equal(colliderGrab.name, "collider_grab", "collider mesh name stays");
+  // Merge/pack builds a new geometry for same-material siblings, so the
+  // pre-ingest rogue closure is not the survivor. The survivor still
+  // has the release hook and still holds its CPU arrays.
+  const survivors = groups[0][0].children.filter((o) => o.isMesh && o.material === shared);
+  assert.ok(survivors.length >= 1, "color-only lod mesh survives ingest");
+  for (const mesh of survivors) {
+    assert.equal(geometryOnUploadRelease(mesh.geometry), true, "packed color-only survivor uses the release hook");
+    assert.ok(mesh.geometry.getAttribute("position").array, "packed survivor CPU array stays until upload");
+    assert.equal(mesh.geometry.boundingBox, null, "bounds pin still leaves boundingBox null");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+  }
+  assert.ok(firstArray, "pre-ingest position array was present");
+  assert.ok(fastenerArray, "pre-ingest fastener array was present");
+});
+
+test("packaged ingest without lod groups still pins the release onUpload hook", () => {
+  const { root, body, fastener } = makePackagedFixture({ withLod: false });
+  const bodyMesh = visualMeshes(body)[0];
+  function bodyRogue() {}
+  bodyMesh.geometry.getAttribute("position").onUpload(bodyRogue);
+  bodyMesh.geometry.index.onUpload(bodyRogue);
+  bodyMesh.geometry.boundingBox = null;
+  bodyMesh.geometry.boundingSphere = null;
+  const bodyArray = bodyMesh.geometry.getAttribute("position").array;
+  const bodyIndexArray = bodyMesh.geometry.index.array;
+  const bodyMat = bodyMesh.material;
+  bodyMesh.name = "lidMesh";
+  bodyMesh.matrixWorldNeedsUpdate = false;
+  bodyMesh.material.version = 5;
+  const alphaMesh = boxMesh("alphaBody", new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  function alphaRogue() {}
+  alphaMesh.geometry.getAttribute("position").onUpload(alphaRogue);
+  alphaMesh.geometry.index.onUpload(alphaRogue);
+  const alphaArray = alphaMesh.geometry.getAttribute("position").array;
+  body.add(alphaMesh);
+  function fastenerRogue() {}
+  fastener.geometry.getAttribute("position").onUpload(fastenerRogue);
+  const fastenerMat = fastener.material;
+  const mapped = boxMesh("mappedHero", new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } }));
+  function mappedRogue() {}
+  mapped.geometry.getAttribute("position").onUpload(mappedRogue);
+  body.add(mapped);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  const sharedGeoVisual = new THREE.Mesh(mapped.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "sharedGeoBody";
+  body.add(sharedGeoVisual);
+  const colliderGrab = root.getObjectByName("collider_grab");
+  function colliderRogue() {}
+  colliderGrab.geometry.getAttribute("position").onUpload(colliderRogue);
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(root.userData.lod, undefined, "fail-soft still does not invent lod groups");
+  assert.equal(bodyMesh.material, bodyMat, "fail-soft does not replace the body material");
+  assert.notEqual(bodyMesh.geometry.getAttribute("position").onUploadCallback, bodyRogue, "fail-soft body rogue hook is replaced");
+  assert.equal(geometryOnUploadRelease(bodyMesh.geometry), true, "fail-soft body position and index use the release hook");
+  assert.equal(bodyMesh.geometry.getAttribute("position").array, bodyArray, "fail-soft pin does not null the body position array");
+  assert.equal(bodyMesh.geometry.index.array, bodyIndexArray, "fail-soft pin does not null the body index array");
+  assert.equal(bodyMesh.geometry.boundingBox, null, "fail-soft pin does not recompute boundingBox");
+  assert.equal(bodyMesh.geometry.boundingSphere, null, "fail-soft pin does not recompute boundingSphere");
+  assert.equal(bodyMesh.name, "lidMesh", "fail-soft reserved lidMesh name stays");
+  assert.equal(bodyMesh.matrixWorldNeedsUpdate, false, "fail-soft matrixWorldNeedsUpdate stays false");
+  assert.equal(bodyMesh.material.version, 0, "fail-soft material.version pin still runs");
+  assert.equal(bodyMesh.matrixAutoUpdate, false, "fail-soft v0.45 still freezes the static body mesh");
+  assert.equal(geometryOnUploadRelease(alphaMesh.geometry), true, "fail-soft second color-only mesh uses the release hook");
+  assert.equal(alphaMesh.geometry.getAttribute("position").array, alphaArray, "fail-soft second mesh CPU array stays");
+  assert.notEqual(alphaMesh.geometry.getAttribute("position").onUploadCallback, alphaRogue, "fail-soft second rogue hook is replaced");
+  assert.equal(geometryOnUploadRelease(fastener.geometry), true, "fail-soft fastener uses the release hook");
+  assert.notEqual(fastener.geometry.getAttribute("position").onUploadCallback, fastenerRogue, "fail-soft fastener rogue hook is replaced");
+  assert.ok(fastener.geometry.getAttribute("position").array, "fail-soft fastener CPU array stays");
+  assert.equal(fastener.material, fastenerMat, "fail-soft does not replace the fastener material");
+  assert.equal(fastener.name, "fastenerMesh", "fail-soft fastenerMesh stays named");
+  assert.equal(mapped.geometry.getAttribute("position").onUploadCallback, mappedRogue, "fail-soft mapped onUploadCallback stays authored");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("position").onUploadCallback, mappedRogue, "fail-soft geometry shared with a mapped mesh keeps onUploadCallback");
+  assert.equal(sharedGeoVisual.name, "sharedGeoBody", "fail-soft shared-geometry mesh name stays");
+  assert.equal(colliderGrab.geometry.getAttribute("position").onUploadCallback, colliderRogue, "fail-soft collider onUploadCallback stays");
 });

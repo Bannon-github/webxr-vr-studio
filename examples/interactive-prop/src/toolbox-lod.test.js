@@ -115,6 +115,9 @@ const {
   pinColorOnlyVisualMatrixWorldNeedsUpdate,
   pinColorOnlyUnlitBasicColorAttribute,
   pinColorOnlyVisualColorAttribute,
+  pinColorOnlyUnlitBasicOnUpload,
+  pinColorOnlyVisualOnUpload,
+  isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
   stripUnusedColorOnlyColorAttributes,
@@ -19258,4 +19261,397 @@ test("pinColorOnlyUnlitBasicColorAttribute / pinColorOnlyVisualColorAttribute sk
   assert.equal(sharedGeoVisual.matrixWorldNeedsUpdate, false, "shared-geometry matrixWorldNeedsUpdate stays");
   assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+});
+
+function geometryOnUploadRelease(geometry) {
+  if (!geometry) return false;
+  const position = geometry.getAttribute?.("position");
+  if (!isCpuArrayReleaseOnUpload(position?.onUploadCallback, geometry)) return false;
+  const index = geometry.index;
+  if (index && !isCpuArrayReleaseOnUpload(index.onUploadCallback, geometry)) return false;
+  return true;
+}
+
+function countVisualOnUploadRelease(crate) {
+  let release = 0;
+  let other = 0;
+  const geos = new Set();
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.geometry) geos.add(mesh.geometry);
+    if (geometryOnUploadRelease(mesh.geometry)) release += 1;
+    else other += 1;
+  }
+  return { release, other, total: release + other, uniqueGeometries: geos.size };
+}
+
+test("r170 BufferAttribute onUpload is an empty prototype method and WebGLAttributes runs it after upload", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const fresh = new THREE.BufferAttribute(new Float32Array(3), 1);
+  assert.equal(Object.prototype.hasOwnProperty.call(fresh, "onUploadCallback"), false, "constructor does not assign an own onUploadCallback");
+  assert.equal(fresh.onUploadCallback, THREE.BufferAttribute.prototype.onUploadCallback, "default callback is the prototype method");
+  assert.equal(fresh.onUploadCallback.name, "onUploadCallback", "r170 default name is onUploadCallback");
+  let ran = 0;
+  fresh.onUpload(function releaseProbe() { ran += 1; });
+  assert.equal(Object.prototype.hasOwnProperty.call(fresh, "onUploadCallback"), true, "onUpload assigns an own callback");
+  assert.equal(ran, 0, "onUpload does not invoke the callback");
+  assert.ok(fresh.array, "onUpload does not null .array");
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const bufferAttribute = readFileSync(require.resolve("three/src/core/BufferAttribute.js"), "utf8");
+  assert.match(bufferAttribute, /onUploadCallback\(\) \{\}/);
+  assert.match(bufferAttribute, /onUpload\( callback \) \{\s*this\.onUploadCallback = callback;/);
+  const copyFn = bufferAttribute.slice(bufferAttribute.indexOf("copy( source )"), bufferAttribute.indexOf("copyAt("));
+  assert.equal(copyFn.includes("onUpload"), false, "BufferAttribute.copy does not copy onUploadCallback");
+  const webglAttributes = readFileSync(require.resolve("three/src/renderers/webgl/WebGLAttributes.js"), "utf8");
+  assert.match(
+    webglAttributes,
+    /const array = attribute\.array;[\s\S]*?gl\.bufferData\( bufferType, array, usage \);\s*attribute\.onUploadCallback\(\);/,
+    "createBuffer uploads the local array, then runs onUploadCallback",
+  );
+  assert.match(webglAttributes, /gl\.bufferSubData\( bufferType, 0, array \);[\s\S]*?attribute\.onUploadCallback\(\);/);
+});
+
+test("v1.8.0 pins the release onUpload hook on packed color-only visuals; envelope stays v1.7.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.8\.0 pins leftover BufferAttribute onUpload/);
+  assert.match(crate.userData.l2.note, /onUpload-release 13/);
+  assert.match(crate.userData.l2.note, /v1\.7\.0 strips leftover BufferGeometry color/);
+  assert.match(crate.userData.l2.note, /colorAttribute-absent 13/);
+  assert.match(crate.userData.l2.note, /matrixWorldNeedsUpdate-false 13/);
+  assert.match(crate.userData.l2.note, /material-version-zero 3/);
+
+  const uploads = countVisualOnUploadRelease(crate);
+  assert.equal(uploads.release, 13, "onUpload-release count is 13");
+  assert.equal(uploads.other, 0);
+  assert.equal(uploads.total, 13);
+  assert.equal(uploads.uniqueGeometries, 13, "one geometry per visual");
+  const byLevel = [0, 1, 2].map((level) => {
+    let n = 0;
+    for (const g of crate.userData.lod.groups[level]) {
+      g.traverse((o) => {
+        if (o.isMesh && !o.userData.collider && geometryOnUploadRelease(o.geometry)) n += 1;
+      });
+    }
+    return n;
+  });
+  assert.deepEqual(byLevel, [6, 4, 2], "LOD onUpload-release is 6 / 4 / 2");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3");
+  assert.equal(countVisualBounds(crate).nulled, 13, "bounds-null stays 13");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10");
+  assert.equal(countVisualMeshName(crate).reserved, 3, "three reserved visual names stay");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    const position = mesh.geometry.getAttribute("position");
+    assert.equal(geometryOnUploadRelease(mesh.geometry), true, "packed visual position and index use the release hook");
+    assert.ok(position.array, "pin does not null position.array");
+    assert.ok(mesh.geometry.index.array, "pin does not null index.array");
+    assert.equal(position.onUploadCallback, mesh.geometry.index.onUploadCallback, "position and index share one release hook");
+    assert.equal(mesh.geometry.boundingBox, null, "pin does not recompute boundingBox");
+    assert.equal(mesh.geometry.boundingSphere, null, "pin does not recompute boundingSphere");
+    assert.equal(colorAttributeAbsent(mesh.geometry), true, "color attribute stays absent");
+    assert.equal(mesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+    assert.equal(mesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+    assert.equal(mesh.material.version, 0, "material.version stays 0");
+    assert.equal(mesh.material.vertexColors, false, "vertexColors stays false");
+    assert.equal(position.version, 0, "BufferAttribute version stays 0");
+    assert.equal(position.name, "", "BufferAttribute name stays empty");
+    assert.equal(position.usage, THREE.StaticDrawUsage, "usage stays StaticDrawUsage");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+    assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+    assert.equal(mesh.geometry.name, "", "geometry.name stays empty");
+    assert.equal(geometryUserDataEmpty(mesh.geometry), true, "geometry.userData stays empty");
+    assert.equal(meshUserDataEmpty(mesh), true, "mesh.userData stays empty");
+  }
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const bodyL0 = crate.userData.lod.groups[0][0];
+  const bodyHero = bodyL0.children.find((o) => o.isMesh && !o.userData.collider);
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.equal(geometryOnUploadRelease(fastener.geometry), true, "fastener onUpload is the release hook");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(bodyHero.matrixAutoUpdate, false, "v0.45 body LOD leaf still frozen");
+  assert.equal(geometryOnUploadRelease(bodyHero.geometry), true, "frozen body leaf onUpload is the release hook");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const rootBag = crate.userData;
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13 after L4/L5");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13 after L4/L5");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.ok(fastener.geometry.getAttribute("position").array, "L5 drive does not null CPU arrays");
+});
+
+test("pinColorOnlyUnlitBasicOnUpload replaces rogue and empty onUploadCallback and leaves an already-correct hook", () => {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const already = groupsTestGeometry();
+  releaseCpuArraysOnGpuUpload(already, mat);
+  const alreadyHook = already.getAttribute("position").onUploadCallback;
+  const alreadyIndexHook = already.index.onUploadCallback;
+  const alreadyBox = already.boundingBox;
+  const alreadySphere = already.boundingSphere;
+  const alreadyArray = already.getAttribute("position").array;
+  const alreadyMesh = new THREE.Mesh(already, mat);
+  alreadyMesh.name = "lidMesh";
+  alreadyMesh.matrixAutoUpdate = false;
+  alreadyMesh.matrixWorldAutoUpdate = true;
+  alreadyMesh.matrixWorldNeedsUpdate = false;
+  alreadyMesh.visible = true;
+  const returnedAlready = pinColorOnlyUnlitBasicOnUpload(alreadyMesh);
+  assert.equal(returnedAlready, alreadyMesh, "already-correct pin returns the same mesh");
+  assert.equal(already.getAttribute("position").onUploadCallback, alreadyHook, "already-correct position hook stays");
+  assert.equal(already.index.onUploadCallback, alreadyIndexHook, "already-correct index hook stays");
+  assert.equal(alreadyHook, alreadyIndexHook, "v0.43 installs one shared release hook");
+  assert.equal(isCpuArrayReleaseOnUpload(alreadyHook, already), true, "already-correct hook stays well-defined");
+  assert.equal(already.boundingBox, alreadyBox, "already-correct pin does not recompute boundingBox");
+  assert.equal(already.boundingSphere, alreadySphere, "already-correct pin does not recompute boundingSphere");
+  assert.equal(already.getAttribute("position").array, alreadyArray, "already-correct pin does not null .array");
+  assert.equal(alreadyMesh.matrixAutoUpdate, false, "already-correct pin does not change matrixAutoUpdate");
+  assert.equal(alreadyMesh.matrixWorldAutoUpdate, true, "already-correct pin does not change matrixWorldAutoUpdate");
+  assert.equal(alreadyMesh.visible, true, "already-correct pin does not change visible");
+
+  const empty = groupsTestGeometry();
+  empty.boundingBox = null;
+  empty.boundingSphere = null;
+  const emptyPos = empty.getAttribute("position");
+  const emptyIndex = empty.index;
+  const emptyArray = emptyPos.array;
+  const emptyIndexArray = emptyIndex.array;
+  assert.equal(emptyPos.onUploadCallback.name, "onUploadCallback", "fresh attribute uses the r170 empty callback");
+  const uv = new THREE.BufferAttribute(new Float32Array(6), 2);
+  uv.version = 4;
+  uv.name = "uv";
+  empty.setAttribute("uv", uv);
+  const emptyMesh = new THREE.Mesh(empty, mat);
+  emptyMesh.name = "latchMesh";
+  emptyMesh.matrixWorldNeedsUpdate = false;
+  emptyMesh.frustumCulled = true;
+  const emptyBag = emptyMesh.userData;
+  pinColorOnlyUnlitBasicOnUpload(emptyMesh);
+  assert.equal(emptyPos.array, emptyArray, "empty-callback pin does not null position.array");
+  assert.equal(emptyIndex.array, emptyIndexArray, "empty-callback pin does not null index.array");
+  assert.equal(uv.array.byteLength, 24, "pin does not replace the extra uv typed array");
+  assert.equal(empty.boundingBox, null, "empty-callback pin does not recompute bounds");
+  assert.equal(empty.boundingSphere, null, "empty-callback pin does not recompute boundingSphere");
+  assert.equal(isCpuArrayReleaseOnUpload(emptyPos.onUploadCallback, empty), true, "empty position callback becomes the release hook");
+  assert.equal(isCpuArrayReleaseOnUpload(emptyIndex.onUploadCallback, empty), true, "empty index callback becomes the release hook");
+  assert.equal(isCpuArrayReleaseOnUpload(uv.onUploadCallback, empty), true, "remaining uv attribute gets the release hook");
+  assert.equal(emptyPos.onUploadCallback, emptyIndex.onUploadCallback, "replaced position and index share the release hook");
+  assert.equal(emptyPos.onUploadCallback, uv.onUploadCallback, "remaining attributes share the release hook");
+  assert.equal(uv.version, 4, "pin does not touch BufferAttribute version");
+  assert.equal(uv.name, "uv", "pin does not touch BufferAttribute name");
+  assert.equal(emptyMesh.userData, emptyBag, "pin does not replace mesh.userData");
+  assert.equal(emptyMesh.name, "latchMesh", "pin does not clear the reserved mesh name");
+  assert.equal(emptyMesh.matrixWorldNeedsUpdate, false, "pin does not touch matrixWorldNeedsUpdate");
+  assert.equal(emptyMesh.frustumCulled, true, "pin does not change frustumCulled");
+  emptyPos.onUploadCallback();
+  assert.equal(emptyPos.array, null, "release hook nulls .array only when invoked");
+  assert.ok(empty.boundingBox, "release hook recomputes boundingBox on upload");
+  assert.ok(empty.boundingSphere, "release hook recomputes boundingSphere on upload");
+  assert.equal(emptyIndex.array, emptyIndexArray, "invoking the position hook does not null the index array");
+
+  const rogueGeo = groupsTestGeometry();
+  rogueGeo.boundingBox = null;
+  rogueGeo.boundingSphere = null;
+  const roguePos = rogueGeo.getAttribute("position");
+  const rogueIndex = rogueGeo.index;
+  const rogueArray = roguePos.array;
+  let rogueRan = 0;
+  function rogueUpload() {
+    rogueRan += 1;
+    this.array = new Float32Array(1);
+  }
+  roguePos.onUpload(rogueUpload);
+  rogueIndex.onUpload(rogueUpload);
+  roguePos.version = 3;
+  roguePos.usage = THREE.DynamicDrawUsage;
+  const rogueMesh = new THREE.Mesh(rogueGeo, mat);
+  rogueMesh.material.version = 8;
+  rogueMesh.material.name = "woodStandIn";
+  rogueMesh.material.vertexColors = false;
+  const geometryBefore = rogueGeo;
+  pinColorOnlyUnlitBasicOnUpload(rogueMesh);
+  assert.equal(rogueRan, 0, "pin does not invoke the rogue callback");
+  assert.notEqual(roguePos.onUploadCallback, rogueUpload, "rogue position callback is replaced");
+  assert.notEqual(rogueIndex.onUploadCallback, rogueUpload, "rogue index callback is replaced");
+  assert.equal(roguePos.onUploadCallback.name, "releaseCpuArray", "replacement hook is releaseCpuArray");
+  assert.equal(isCpuArrayReleaseOnUpload(roguePos.onUploadCallback, rogueGeo), true);
+  assert.equal(roguePos.array, rogueArray, "rogue pin does not null position.array");
+  assert.equal(rogueGeo.boundingBox, null, "rogue pin does not recompute bounds");
+  assert.equal(rogueGeo, geometryBefore, "pin does not replace the geometry");
+  assert.equal(roguePos.version, 3, "pin does not touch a leftover BufferAttribute version");
+  assert.equal(roguePos.usage, THREE.DynamicDrawUsage, "pin does not call setUsage");
+  assert.equal(rogueMesh.material.version, 8, "pin does not touch material.version");
+  assert.equal(rogueMesh.material.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(rogueMesh.material.vertexColors, false, "pin does not rewrite vertexColors");
+  assert.equal(colorAttributeAbsent(rogueGeo), true, "pin does not invent a color attribute");
+
+  const other = groupsTestGeometry();
+  releaseCpuArraysOnGpuUpload(other, mat);
+  const otherHook = other.getAttribute("position").onUploadCallback;
+  const moved = groupsTestGeometry();
+  moved.boundingBox = null;
+  moved.boundingSphere = null;
+  const movedPos = moved.getAttribute("position");
+  const movedArray = movedPos.array;
+  movedPos.onUpload(otherHook);
+  moved.index.onUpload(otherHook);
+  pinColorOnlyUnlitBasicOnUpload(new THREE.Mesh(moved, mat));
+  assert.notEqual(movedPos.onUploadCallback, otherHook, "a release hook stamped to another geometry is replaced");
+  assert.equal(isCpuArrayReleaseOnUpload(movedPos.onUploadCallback, moved), true, "replacement is stamped to this geometry");
+  assert.equal(movedPos.array, movedArray, "wrong-hook pin does not null .array");
+  assert.equal(moved.boundingBox, null, "wrong-hook pin does not recompute bounds");
+  assert.ok(other.getAttribute("position").array, "source geometry CPU array stays");
+
+  const noIndex = new THREE.BufferGeometry();
+  const noIndexPos = new THREE.BufferAttribute(new Float32Array(9), 3);
+  noIndex.setAttribute("position", noIndexPos);
+  noIndex.boundingBox = null;
+  noIndex.boundingSphere = null;
+  pinColorOnlyUnlitBasicOnUpload(new THREE.Mesh(noIndex, mat));
+  assert.equal(noIndex.index, null, "pin does not invent an index");
+  assert.equal(isCpuArrayReleaseOnUpload(noIndexPos.onUploadCallback, noIndex), true, "position-only geometry still gets the release hook");
+  assert.ok(noIndexPos.array, "position-only pin does not null .array");
+});
+
+test("pinColorOnlyUnlitBasicOnUpload / pinColorOnlyVisualOnUpload skip mapped, lit, interleaved, colliders, shared blocked, morphs", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  colorOnly.name = "lidMesh";
+  colorOnly.matrixAutoUpdate = true;
+  colorOnly.matrixWorldNeedsUpdate = false;
+  const colorPos = colorOnly.geometry.getAttribute("position");
+  function colorRogue() {}
+  colorPos.onUpload(colorRogue);
+  colorOnly.geometry.index.onUpload(colorRogue);
+  pinColorOnlyUnlitBasicOnUpload(colorOnly);
+  assert.equal(isCpuArrayReleaseOnUpload(colorPos.onUploadCallback, colorOnly.geometry), true, "color-only rogue hook is replaced");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin does not clear the reserved mesh name");
+  assert.equal(colorOnly.matrixAutoUpdate, true, "per-mesh pin does not freeze matrixAutoUpdate");
+  assert.equal(colorOnly.matrixWorldNeedsUpdate, false, "per-mesh pin does not touch matrixWorldNeedsUpdate");
+  assert.ok(colorPos.array, "per-mesh pin does not null .array");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const mapped = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  function mappedRogue() {}
+  mapped.geometry.getAttribute("position").onUpload(mappedRogue);
+  const std = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshStandardMaterial());
+  function stdRogue() {}
+  std.geometry.getAttribute("position").onUpload(stdRogue);
+  pinColorOnlyUnlitBasicOnUpload(mapped);
+  pinColorOnlyUnlitBasicOnUpload(std);
+  assert.equal(mapped.geometry.getAttribute("position").onUploadCallback, mappedRogue, "mapped MeshBasic keeps its onUploadCallback");
+  assert.equal(std.geometry.getAttribute("position").onUploadCallback, stdRogue, "MeshStandard keeps its onUploadCallback");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  interleavedGeo.setIndex([0, 1, 2]);
+  function interleavedRogue() {}
+  interleavedGeo.index.onUpload(interleavedRogue);
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  pinColorOnlyUnlitBasicOnUpload(interleaved);
+  assert.equal(interleavedGeo.index.onUploadCallback, interleavedRogue, "interleaved index callback stays authored");
+
+  const collider = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  function colliderRogue() {}
+  collider.geometry.getAttribute("position").onUpload(colliderRogue);
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicOnUpload(collider);
+  assert.equal(collider.geometry.getAttribute("position").onUploadCallback, colliderRogue, "collider onUploadCallback stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const morphGeo = groupsTestGeometry();
+  const morphAttr = new THREE.BufferAttribute(new Float32Array(9), 3);
+  morphGeo.morphAttributes.position = [morphAttr];
+  morphGeo.morphTargetsRelative = true;
+  function morphRogue() {}
+  morphGeo.getAttribute("position").onUpload(morphRogue);
+  const morphMesh = new THREE.Mesh(morphGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  pinColorOnlyUnlitBasicOnUpload(morphMesh);
+  assert.equal(morphGeo.getAttribute("position").onUploadCallback, morphRogue, "morph geometry keeps its authored onUploadCallback");
+  assert.equal(morphGeo.morphAttributes.position[0], morphAttr, "pin does not replace morph attributes");
+  assert.equal(morphGeo.morphTargetsRelative, true, "pin does not touch morphTargetsRelative");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.restLocal = new THREE.Vector3(0, 0.045, 0);
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorMesh.name = "dccLatch";
+  colorMesh.material.version = 9;
+  function entityRogue() {}
+  colorMesh.geometry.getAttribute("position").onUpload(entityRogue);
+  colorMesh.geometry.index.onUpload(entityRogue);
+  colorMesh.matrixWorldNeedsUpdate = false;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  function sharedRogue() {}
+  sharedVisual.geometry.getAttribute("position").onUpload(sharedRogue);
+  const sharedCollider = new THREE.Mesh(groupsTestGeometry(), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const mappedMesh = new THREE.Mesh(groupsTestGeometry(), mappedMat);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  function sharedGeoRogue() {}
+  mappedMesh.geometry.getAttribute("position").onUpload(sharedGeoRogue);
+  root.add(tool, colorMesh, mapped, mappedMesh, std, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualOnUpload(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(isCpuArrayReleaseOnUpload(colorMesh.geometry.getAttribute("position").onUploadCallback, colorMesh.geometry), true, "entity helper replaces the color-only rogue hook");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(mapped.geometry.getAttribute("position").onUploadCallback, mappedRogue, "mapped callback stays via entity helper");
+  assert.equal(std.geometry.getAttribute("position").onUploadCallback, stdRogue, "MeshStandard callback stays via entity helper");
+  assert.equal(interleaved.geometry.index.onUploadCallback, interleavedRogue, "interleaved callback stays via entity helper");
+  assert.equal(collider.geometry.getAttribute("position").onUploadCallback, colliderRogue, "collider callback stays via entity helper");
+  assert.equal(sharedVisual.geometry.getAttribute("position").onUploadCallback, sharedRogue, "shared collider material keeps authored onUploadCallback");
+  assert.equal(mappedMesh.geometry.getAttribute("position").onUploadCallback, sharedGeoRogue, "geometry shared with a mapped mesh keeps onUploadCallback");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(colorAttributeAbsent(colorMesh.geometry), true, "onUpload pin does not invent color");
 });
