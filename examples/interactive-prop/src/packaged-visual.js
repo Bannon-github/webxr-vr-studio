@@ -2190,6 +2190,56 @@
  * untouched. Fail-soft (no lod groups) still runs this pin, including
  * the fastener. 90 Hz ship (~11.1 ms) / 72 Hz fallback are
  * **requested**, not measured. No invented headset ms.
+ *
+ * v1.9.0: after that onUpload pin,
+ * `pinColorOnlyVisualUnusedAttributes` strips leftover `normal` /
+ * `uv` / `uv1` / `uv2` / `uv3` / `tangent` so none of those channels
+ * remain (`geometry.getAttribute(name)` is missing and
+ * `geometry.hasAttribute(name) === false`) on the 13 packed
+ * color-only unlit MeshBasic visual geometries (body LOD leaves +
+ * lid/latch/tool + fastener; measured unusedAttributes-absent 13;
+ * same `isColorOnlyUnlitBasic` gate and the same collider /
+ * interleaved / mapped / lit / shared-material / shared-geometry
+ * skip rules). `COLOR_ONLY_UNUSED_CHANNEL_ATTRS` is derived from
+ * `COLOR_ONLY_UNUSED_ATTRS` (source of truth) and excludes
+ * `skinIndex` / `skinWeight` (v0.89 pin) and `color` (v1.7.0 pin).
+ * `stripUnusedColorOnlyChannelAttributes` deletes them from
+ * `stripUnusedColorOnlyAttributes` on the pack/weld path and skips
+ * interleaved geometries. Fail-soft (no lod groups) never enters
+ * that pack helper on body/lid/latch/tool, so this visual pin is the
+ * fence.
+ * **Checked installed three@0.170.0:** `WebGLProgram` prefix always
+ * emits `attribute vec3 normal` and `attribute vec2 uv`. `uv1` /
+ * `uv2` / `uv3` / `tangent` are behind `USE_UV1` / `USE_UV2` /
+ * `USE_UV3` / `USE_TANGENT`, which stay off without maps.
+ * `meshbasic.glsl.js` reads `normal` only inside `USE_ENVMAP` or
+ * `USE_SKINNING`. `uv_vertex.glsl.js` reads `uv` only under `USE_UV`
+ * or `USE_ANISOTROPY`. Color-only MeshBasic does not enable those
+ * defines. `WebGLGeometries.update` still uploads every
+ * `geometry.attributes` entry, so leftover channels inflate
+ * pre-upload attrBytes and GPU buffer work on Quest 3 TBDR static
+ * props. Deleting them is load-time packaging. `GLTFLoader` maps
+ * `NORMAL` → `normal`, `TANGENT` → `tangent`, `TEXCOORD_0` → `uv`,
+ * `TEXCOORD_1` → `uv1`, `TEXCOORD_2` → `uv2`, `TEXCOORD_3` → `uv3`.
+ * On clean procedural meshes draws / tris / attrBytes stay unchanged
+ * vs v1.8.0. A fixture with a leftover Float32 `uv` drops
+ * `count * 2 * 4` bytes; a leftover Float32 `normal` drops
+ * `count * 3 * 4` bytes. Prefer `geometry.deleteAttribute(name)` when
+ * present. Do **not** invent a replacement attribute. Do **not**
+ * assign `null`. Do **not** delete `position` or the index. Do
+ * **not** delete `skinIndex` / `skinWeight` or `color`. Do **not**
+ * touch `onUpload` / `onUploadCallback` (v1.8.0 onUpload-release
+ * stays). Do **not** touch Material `version` / `name` / `userData`,
+ * Mesh `name` / `userData`, BufferGeometry `name` / `userData`,
+ * BufferAttribute `version` / `name` / `gpuType` / `normalized` /
+ * `usage` / `updateRange` / `updateRanges`,
+ * `matrixWorldNeedsUpdate`, `matrixAutoUpdate`,
+ * `matrixWorldAutoUpdate`, bounds, morphs, animations, shadows,
+ * `frustumCulled`, or `mesh.visible`. Mapped / lit / interleaved keep
+ * authored channels. Collider meshes stay untouched. Fail-soft (no
+ * lod groups) still runs this pin, including the fastener. 90 Hz ship
+ * (~11.1 ms) / 72 Hz fallback are **requested**, not measured. No
+ * invented headset ms.
  */
 
 import {
@@ -2235,6 +2285,7 @@ import {
   pinColorOnlyVisualMatrixWorldNeedsUpdate,
   pinColorOnlyVisualColorAttribute,
   pinColorOnlyVisualOnUpload,
+  pinColorOnlyVisualUnusedAttributes,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2431,6 +2482,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMatrixWorldNeedsUpdate(root);
   pinColorOnlyVisualColorAttribute(root);
   pinColorOnlyVisualOnUpload(root);
+  pinColorOnlyVisualUnusedAttributes(root);
   return root;
 }
 

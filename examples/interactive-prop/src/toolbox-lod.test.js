@@ -117,10 +117,14 @@ const {
   pinColorOnlyVisualColorAttribute,
   pinColorOnlyUnlitBasicOnUpload,
   pinColorOnlyVisualOnUpload,
+  pinColorOnlyUnlitBasicUnusedAttributes,
+  pinColorOnlyVisualUnusedAttributes,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
+  COLOR_ONLY_UNUSED_CHANNEL_ATTRS,
   stripUnusedColorOnlyColorAttributes,
+  stripUnusedColorOnlyChannelAttributes,
   pinColorOnlyVisualCustomShadowMaterials,
   pinColorOnlyVisualRenderCallbacks,
   pinColorOnlyVisualShadowCallbacks,
@@ -19654,4 +19658,467 @@ test("pinColorOnlyUnlitBasicOnUpload / pinColorOnlyVisualOnUpload skip mapped, l
   assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(colorAttributeAbsent(colorMesh.geometry), true, "onUpload pin does not invent color");
+});
+
+function unusedChannelAttributesAbsent(geometry) {
+  if (!geometry?.getAttribute) return false;
+  for (const name of COLOR_ONLY_UNUSED_CHANNEL_ATTRS) {
+    if (geometry.getAttribute(name) != null) return false;
+    if (geometry.hasAttribute(name) !== false) return false;
+  }
+  return true;
+}
+
+function countVisualUnusedAttributes(crate) {
+  let absent = 0;
+  let leftover = 0;
+  const geos = new Set();
+  for (const mesh of crateVisualMeshes(crate)) {
+    if (mesh.geometry) geos.add(mesh.geometry);
+    if (unusedChannelAttributesAbsent(mesh.geometry)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover, uniqueGeometries: geos.size };
+}
+
+/** Leftover Float32 channel. Byte length is count * itemSize * 4. */
+function attachLeftoverChannelAttribute(geometry, name, itemSize) {
+  const count = geometry.getAttribute("position").count;
+  const attr = new THREE.Float32BufferAttribute(count * itemSize, itemSize);
+  geometry.setAttribute(name, attr);
+  return { attr, bytes: attr.array.byteLength, count, itemSize, name };
+}
+
+test("r170 color-only MeshBasic does not sample normal/uv/tangent and WebGLGeometries still uploads every attribute", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  assert.deepEqual(
+    [...COLOR_ONLY_UNUSED_CHANNEL_ATTRS],
+    ["normal", "uv", "uv1", "uv2", "uv3", "tangent"],
+  );
+  for (const name of COLOR_ONLY_UNUSED_CHANNEL_ATTRS) {
+    assert.ok(COLOR_ONLY_UNUSED_ATTRS.includes(name), `${name} stays on COLOR_ONLY_UNUSED_ATTRS`);
+  }
+  assert.equal(COLOR_ONLY_UNUSED_CHANNEL_ATTRS.includes("color"), false, "color stays on the v1.7.0 pin");
+  assert.equal(COLOR_ONLY_UNUSED_CHANNEL_ATTRS.includes("skinIndex"), false, "skinIndex stays on the v0.89 pin");
+  assert.equal(COLOR_ONLY_UNUSED_CHANNEL_ATTRS.includes("skinWeight"), false, "skinWeight stays on the v0.89 pin");
+  assert.equal(COLOR_ONLY_UNUSED_CHANNEL_ATTRS.includes("position"), false, "position is not an unused channel");
+  const fresh = new THREE.BufferGeometry();
+  for (const name of COLOR_ONLY_UNUSED_CHANNEL_ATTRS) {
+    assert.equal(fresh.hasAttribute(name), false, `fresh BufferGeometry has no ${name}`);
+    assert.equal(fresh.getAttribute(name), undefined, `fresh getAttribute('${name}') is missing`);
+  }
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const program = readFileSync(require.resolve("three/src/renderers/webgl/WebGLProgram.js"), "utf8");
+  assert.match(program, /'attribute vec3 normal;'/);
+  assert.match(program, /'attribute vec2 uv;'/);
+  assert.match(program, /parameters\.vertexUv1s \? '#define USE_UV1' : ''/);
+  assert.match(program, /parameters\.vertexTangents && parameters\.flatShading === false \? '#define USE_TANGENT' : ''/);
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.match(programs, /vertexTangents: !! geometry\.attributes\.tangent && \( HAS_NORMALMAP \|\| HAS_ANISOTROPY \),/);
+  const meshbasic = readFileSync(require.resolve("three/src/renderers/shaders/ShaderLib/meshbasic.glsl.js"), "utf8");
+  assert.match(meshbasic, /#if defined \( USE_ENVMAP \) \|\| defined \( USE_SKINNING \)/);
+  const uvVertex = readFileSync(require.resolve("three/src/renderers/shaders/ShaderChunk/uv_vertex.glsl.js"), "utf8");
+  assert.match(uvVertex, /#if defined\( USE_UV \) \|\| defined\( USE_ANISOTROPY \)/);
+  const geometries = readFileSync(require.resolve("three/src/renderers/webgl/WebGLGeometries.js"), "utf8");
+  assert.match(geometries, /for \( const name in geometryAttributes \) \{\s*attributes\.update\( geometryAttributes\[ name \], gl\.ARRAY_BUFFER \);/);
+  const gltf = readFileSync(require.resolve("three/examples/jsm/loaders/GLTFLoader.js"), "utf8");
+  assert.match(gltf, /NORMAL: 'normal',/);
+  assert.match(gltf, /TANGENT: 'tangent',/);
+  assert.match(gltf, /TEXCOORD_0: 'uv',/);
+  assert.match(gltf, /TEXCOORD_1: 'uv1',/);
+  assert.match(gltf, /TEXCOORD_2: 'uv2',/);
+  assert.match(gltf, /TEXCOORD_3: 'uv3',/);
+});
+
+test("stripUnusedColorOnlyChannelAttributes drops leftover normal/uv/tangent and keeps skin, color, position, and index", () => {
+  const colorOnly = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const box = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const uvBytes = box.getAttribute("uv").array.byteLength;
+  const normalBytes = box.getAttribute("normal").array.byteLength;
+  assert.equal(box.getAttribute("position").count, 24, "BoxGeometry channel fixture has 24 vertices");
+  assert.equal(uvBytes, 192, "24 verts × Float32 uv itemSize 2 × 4 B = 192");
+  assert.equal(normalBytes, 288, "24 verts × Float32 normal itemSize 3 × 4 B = 288");
+  const position = box.getAttribute("position");
+  const index = box.index;
+  const before = cpuAttrBytes(box);
+  stripUnusedColorOnlyChannelAttributes(box, colorOnly);
+  assert.equal(unusedChannelAttributesAbsent(box), true, "channel strip drops uv and normal");
+  assert.equal(box.getAttribute("position"), position, "channel strip does not replace position");
+  assert.equal(box.index, index, "channel strip does not replace the index");
+  assert.equal(cpuAttrBytes(box), before - 480, "measured attrBytes drop is uv 192 + normal 288");
+
+  const fixture = groupsTestGeometry();
+  const channels = {
+    uv: attachLeftoverChannelAttribute(fixture, "uv", 2),
+    normal: attachLeftoverChannelAttribute(fixture, "normal", 3),
+    uv1: attachLeftoverChannelAttribute(fixture, "uv1", 2),
+    uv2: attachLeftoverChannelAttribute(fixture, "uv2", 2),
+    uv3: attachLeftoverChannelAttribute(fixture, "uv3", 2),
+    tangent: attachLeftoverChannelAttribute(fixture, "tangent", 4),
+  };
+  assert.equal(channels.uv.bytes, 24, "3 verts × Float32 uv = 24");
+  assert.equal(channels.normal.bytes, 36, "3 verts × Float32 normal = 36");
+  assert.equal(channels.tangent.bytes, 48, "3 verts × Float32 tangent = 48");
+  const skinIndex = new THREE.Uint16BufferAttribute(12, 4);
+  const skinWeight = new THREE.Float32BufferAttribute(12, 4);
+  const color = new THREE.Float32BufferAttribute(9, 3);
+  fixture.setAttribute("skinIndex", skinIndex);
+  fixture.setAttribute("skinWeight", skinWeight);
+  fixture.setAttribute("color", color);
+  const fixturePosition = fixture.getAttribute("position");
+  const fixtureIndex = fixture.index;
+  const fixtureBefore = cpuAttrBytes(fixture);
+  const dropped = 24 + 36 + 24 + 24 + 24 + 48;
+  stripUnusedColorOnlyChannelAttributes(fixture, colorOnly);
+  assert.equal(unusedChannelAttributesAbsent(fixture), true, "all six leftover channels drop");
+  assert.equal(fixture.getAttribute("skinIndex"), skinIndex, "channel strip does not delete skinIndex");
+  assert.equal(fixture.getAttribute("skinWeight"), skinWeight, "channel strip does not delete skinWeight");
+  assert.equal(fixture.getAttribute("color"), color, "channel strip does not delete color");
+  assert.equal(fixture.getAttribute("position"), fixturePosition, "channel strip keeps position");
+  assert.equal(fixture.index, fixtureIndex, "channel strip keeps the index");
+  assert.equal(cpuAttrBytes(fixture), fixtureBefore - dropped, "3-vert six-channel drop is 180 bytes");
+
+  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const mappedGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const mappedUv = mappedGeo.getAttribute("uv");
+  const mappedNormal = mappedGeo.getAttribute("normal");
+  stripUnusedColorOnlyChannelAttributes(mappedGeo, mapped);
+  assert.equal(mappedGeo.getAttribute("uv"), mappedUv, "mapped MeshBasic keeps uv");
+  assert.equal(mappedGeo.getAttribute("normal"), mappedNormal, "mapped MeshBasic keeps normal");
+  const stdGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const stdUv = stdGeo.getAttribute("uv");
+  stripUnusedColorOnlyChannelAttributes(stdGeo, new THREE.MeshStandardMaterial());
+  assert.equal(stdGeo.getAttribute("uv"), stdUv, "MeshStandard keeps uv");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedUv = new THREE.Float32BufferAttribute(6, 2);
+  interleavedGeo.setAttribute("uv", interleavedUv);
+  stripUnusedColorOnlyChannelAttributes(interleavedGeo, colorOnly);
+  assert.equal(interleavedGeo.getAttribute("uv"), interleavedUv, "interleaved geometry keeps authored uv");
+
+  const already = groupsTestGeometry();
+  let deletes = 0;
+  const original = already.deleteAttribute.bind(already);
+  already.deleteAttribute = (name) => {
+    deletes += 1;
+    return original(name);
+  };
+  stripUnusedColorOnlyChannelAttributes(already, colorOnly);
+  assert.equal(deletes, 0, "already-absent channels are not deleteAttribute'd");
+  assert.equal(unusedChannelAttributesAbsent(already), true, "already-absent channels stay absent");
+});
+
+test("v1.9.0 strips leftover unused channels on packed color-only visuals; envelope stays v1.8.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.9\.0 strips leftover normal \/ uv \/ uv1 \/ uv2 \/ uv3 \/ tangent/);
+  assert.match(crate.userData.l2.note, /unusedAttributes-absent 13/);
+  assert.match(crate.userData.l2.note, /v1\.8\.0 pins leftover BufferAttribute onUpload/);
+  assert.match(crate.userData.l2.note, /onUpload-release 13/);
+  assert.match(crate.userData.l2.note, /colorAttribute-absent 13/);
+  assert.match(crate.userData.l2.note, /matrixWorldNeedsUpdate-false 13/);
+  assert.match(crate.userData.l2.note, /material-version-zero 3/);
+
+  const unused = countVisualUnusedAttributes(crate);
+  assert.equal(unused.absent, 13, "unusedAttributes-absent count is 13");
+  assert.equal(unused.leftover, 0);
+  assert.equal(unused.total, 13);
+  assert.equal(unused.uniqueGeometries, 13, "one geometry per visual");
+  const byLevel = [0, 1, 2].map((level) => {
+    let n = 0;
+    for (const g of crate.userData.lod.groups[level]) {
+      g.traverse((o) => {
+        if (o.isMesh && !o.userData.collider && unusedChannelAttributesAbsent(o.geometry)) n += 1;
+      });
+    }
+    return n;
+  });
+  assert.deepEqual(byLevel, [6, 4, 2], "LOD unusedAttributes-absent is 6 / 4 / 2");
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10");
+  assert.equal(countVisualMeshName(crate).reserved, 3, "three reserved visual names stay");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    const position = mesh.geometry.getAttribute("position");
+    assert.equal(unusedChannelAttributesAbsent(mesh.geometry), true, "packed visual has no unused channels");
+    assert.ok(position, "position stays");
+    assert.ok(mesh.geometry.index, "index stays");
+    assert.equal(geometryOnUploadRelease(mesh.geometry), true, "onUpload release hook stays");
+    assert.ok(position.array, "unused pin does not null position.array");
+    assert.equal(colorAttributeAbsent(mesh.geometry), true, "color attribute stays absent");
+    assert.equal(mesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+    assert.equal(mesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+    assert.equal(mesh.material.version, 0, "material.version stays 0");
+    assert.equal(mesh.material.vertexColors, false, "vertexColors stays false");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+    assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+    assert.equal(mesh.geometry.boundingBox, null, "bounds stay null");
+    assert.equal(mesh.geometry.boundingSphere, null, "boundingSphere stays null");
+    assert.equal(meshUserDataEmpty(mesh), true, "mesh.userData stays empty");
+  }
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lid = crate.getObjectByName("lidMesh");
+  const latch = crate.getObjectByName("latchMesh");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.equal(unusedChannelAttributesAbsent(fastener.geometry), true, "fastener unused channels stay absent");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(lid.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latch.name, "latchMesh", "latchMesh name stays");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const rootBag = crate.userData;
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13 after L4/L5");
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13 after L4/L5");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13 after L4/L5");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.equal(fastener.name, "fastenerMesh", "L5 keeps fastenerMesh");
+  assert.equal(lid.name, "lidMesh", "L4 keeps lidMesh");
+  assert.equal(latch.name, "latchMesh", "L4 keeps latchMesh");
+});
+
+test("pinColorOnlyUnlitBasicUnusedAttributes drops leftover uv and normal bytes and leaves prior pins", () => {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  mat.version = 4;
+  mat.name = "woodStandIn";
+  mat.vertexColors = false;
+  const uvOnly = groupsTestGeometry();
+  const uv = attachLeftoverChannelAttribute(uvOnly, "uv", 2);
+  assert.equal(uv.bytes, 24, "3-vert Float32 uv is 24 bytes");
+  const uvPosition = uvOnly.getAttribute("position");
+  const uvIndex = uvOnly.index;
+  const uvArray = uvPosition.array;
+  const uvBefore = cpuAttrBytes(uvOnly);
+  function uvRogue() {}
+  uvPosition.onUpload(uvRogue);
+  uvIndex.onUpload(uvRogue);
+  uv.attr.onUpload(uvRogue);
+  uvOnly.boundingBox = null;
+  uvOnly.boundingSphere = null;
+  const uvMesh = new THREE.Mesh(uvOnly, mat);
+  uvMesh.name = "lidMesh";
+  uvMesh.matrixAutoUpdate = true;
+  uvMesh.matrixWorldNeedsUpdate = false;
+  uvMesh.matrixWorldAutoUpdate = true;
+  uvMesh.frustumCulled = true;
+  uvMesh.visible = true;
+  const uvBag = uvMesh.userData;
+  const returned = pinColorOnlyUnlitBasicUnusedAttributes(uvMesh);
+  assert.equal(returned, uvMesh, "pin returns the same mesh");
+  assert.equal(uvOnly.getAttribute("uv"), undefined, "leftover uv is deleted");
+  assert.equal(uvOnly.hasAttribute("uv"), false, "uv hasAttribute is false");
+  assert.equal(cpuAttrBytes(uvOnly), uvBefore - 24, "uv fixture drops 24 pre-upload attrBytes");
+  assert.equal(uvOnly.getAttribute("position"), uvPosition, "pin does not replace position");
+  assert.equal(uvOnly.index, uvIndex, "pin does not replace the index");
+  assert.equal(uvPosition.array, uvArray, "pin does not null position.array");
+  assert.equal(uvPosition.onUploadCallback, uvRogue, "pin does not touch position onUpload");
+  assert.equal(uvIndex.onUploadCallback, uvRogue, "pin does not touch index onUpload");
+  assert.equal(uvOnly.boundingBox, null, "pin does not recompute boundingBox");
+  assert.equal(uvOnly.boundingSphere, null, "pin does not recompute boundingSphere");
+  assert.equal(uvMesh.name, "lidMesh", "reserved lidMesh name stays");
+  assert.equal(uvMesh.userData, uvBag, "mesh.userData stays");
+  assert.equal(uvMesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+  assert.equal(uvMesh.matrixAutoUpdate, true, "matrixAutoUpdate stays live");
+  assert.equal(uvMesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+  assert.equal(uvMesh.frustumCulled, true, "frustumCulled stays true");
+  assert.equal(uvMesh.visible, true, "mesh.visible stays true");
+  assert.equal(mat.version, 4, "pin does not touch material.version");
+  assert.equal(mat.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(mat.vertexColors, false, "pin does not rewrite vertexColors");
+
+  const normalOnly = groupsTestGeometry();
+  const normal = attachLeftoverChannelAttribute(normalOnly, "normal", 3);
+  assert.equal(normal.bytes, 36, "3-vert Float32 normal is 36 bytes");
+  const normalBefore = cpuAttrBytes(normalOnly);
+  const normalMesh = new THREE.Mesh(normalOnly, mat);
+  normalMesh.name = "latchMesh";
+  pinColorOnlyUnlitBasicUnusedAttributes(normalMesh);
+  assert.equal(normalOnly.getAttribute("normal"), undefined, "leftover normal is deleted");
+  assert.equal(cpuAttrBytes(normalOnly), normalBefore - 36, "normal fixture drops 36 pre-upload attrBytes");
+  assert.equal(normalMesh.name, "latchMesh", "reserved latchMesh name stays");
+
+  const box = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+  const boxUv = box.getAttribute("uv").array.byteLength;
+  const boxNormal = box.getAttribute("normal").array.byteLength;
+  const boxBefore = cpuAttrBytes(box);
+  const boxPosition = box.getAttribute("position");
+  const boxIndex = box.index;
+  const boxMesh = new THREE.Mesh(box, new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  boxMesh.name = "fastenerMesh";
+  pinColorOnlyUnlitBasicUnusedAttributes(boxMesh);
+  assert.equal(unusedChannelAttributesAbsent(box), true, "BoxGeometry uv and normal drop");
+  assert.equal(cpuAttrBytes(box), boxBefore - boxUv - boxNormal, "BoxGeometry drop is uv plus normal");
+  assert.equal(boxUv + boxNormal, 480, "24-vert uv 192 + normal 288 = 480");
+  assert.equal(box.getAttribute("position"), boxPosition, "BoxGeometry position stays");
+  assert.equal(box.index, boxIndex, "BoxGeometry index stays");
+  assert.equal(boxMesh.name, "fastenerMesh", "reserved fastenerMesh name stays");
+
+  const kept = groupsTestGeometry();
+  const skinIndex = new THREE.Uint16BufferAttribute(12, 4);
+  const skinWeight = new THREE.Float32BufferAttribute(12, 4);
+  const color = new THREE.Float32BufferAttribute(9, 3);
+  kept.setAttribute("skinIndex", skinIndex);
+  kept.setAttribute("skinWeight", skinWeight);
+  kept.setAttribute("color", color);
+  attachLeftoverChannelAttribute(kept, "tangent", 4);
+  const morph = new THREE.BufferAttribute(new Float32Array(9), 3);
+  kept.morphAttributes.position = [morph];
+  kept.morphTargetsRelative = true;
+  pinColorOnlyUnlitBasicUnusedAttributes(new THREE.Mesh(kept, mat));
+  assert.equal(kept.getAttribute("tangent"), undefined, "tangent drops on a morph geometry");
+  assert.equal(kept.getAttribute("skinIndex"), skinIndex, "skinIndex stays");
+  assert.equal(kept.getAttribute("skinWeight"), skinWeight, "skinWeight stays");
+  assert.equal(kept.getAttribute("color"), color, "color stays");
+  assert.equal(kept.morphAttributes.position[0], morph, "pin does not replace morph attributes");
+  assert.equal(kept.morphTargetsRelative, true, "pin does not touch morphTargetsRelative");
+
+  const absent = groupsTestGeometry();
+  let deletes = 0;
+  const originalDelete = absent.deleteAttribute.bind(absent);
+  absent.deleteAttribute = (name) => {
+    deletes += 1;
+    return originalDelete(name);
+  };
+  pinColorOnlyUnlitBasicUnusedAttributes(new THREE.Mesh(absent, mat));
+  assert.equal(deletes, 0, "already-absent channels are not deleteAttribute'd");
+
+  const hooked = groupsTestGeometry();
+  const hookedUv = attachLeftoverChannelAttribute(hooked, "uv", 2);
+  releaseCpuArraysOnGpuUpload(hooked, mat);
+  const releaseHook = hooked.getAttribute("position").onUploadCallback;
+  assert.equal(hookedUv.attr.onUploadCallback, releaseHook, "v0.43 stamps the leftover uv too");
+  const hookedArray = hooked.getAttribute("position").array;
+  const hookedBox = hooked.boundingBox;
+  pinColorOnlyUnlitBasicUnusedAttributes(new THREE.Mesh(hooked, mat));
+  assert.equal(hooked.getAttribute("uv"), undefined, "release-hooked leftover uv is still deleted");
+  assert.equal(hooked.getAttribute("position").onUploadCallback, releaseHook, "position release hook stays");
+  assert.equal(hooked.index.onUploadCallback, releaseHook, "index release hook stays");
+  assert.equal(hooked.getAttribute("position").array, hookedArray, "deleting uv does not null position.array");
+  assert.equal(hooked.boundingBox, hookedBox, "deleting uv does not recompute bounds");
+});
+
+test("pinColorOnlyUnlitBasicUnusedAttributes / pinColorOnlyVisualUnusedAttributes skip mapped, lit, interleaved, colliders, and shared blocked", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  const colorUv = attachLeftoverChannelAttribute(colorOnly.geometry, "uv", 2);
+  colorOnly.name = "lidMesh";
+  pinColorOnlyUnlitBasicUnusedAttributes(colorOnly);
+  assert.equal(colorOnly.geometry.getAttribute("uv"), undefined, "color-only uv is deleted");
+  assert.equal(colorUv.bytes, 24);
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin keeps lidMesh");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const mappedUv = mapped.geometry.getAttribute("uv");
+  const mappedNormal = mapped.geometry.getAttribute("normal");
+  pinColorOnlyUnlitBasicUnusedAttributes(mapped);
+  assert.equal(mapped.geometry.getAttribute("uv"), mappedUv, "mapped MeshBasic keeps uv");
+  assert.equal(mapped.geometry.getAttribute("normal"), mappedNormal, "mapped MeshBasic keeps normal");
+
+  const std = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  const stdNormal = std.geometry.getAttribute("normal");
+  pinColorOnlyUnlitBasicUnusedAttributes(std);
+  assert.equal(std.geometry.getAttribute("normal"), stdNormal, "MeshStandard keeps normal");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedUv = new THREE.Float32BufferAttribute(6, 2);
+  interleavedGeo.setAttribute("uv", interleavedUv);
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  pinColorOnlyUnlitBasicUnusedAttributes(interleaved);
+  assert.equal(interleavedGeo.getAttribute("uv"), interleavedUv, "interleaved uv stays authored");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  const colliderUv = collider.geometry.getAttribute("uv");
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicUnusedAttributes(collider);
+  assert.equal(collider.geometry.getAttribute("uv"), colliderUv, "collider uv stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorMesh.name = "dccLatch";
+  colorMesh.material.version = 9;
+  attachLeftoverChannelAttribute(colorMesh.geometry, "normal", 3);
+  colorMesh.matrixWorldNeedsUpdate = false;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedVisualUv = sharedVisual.geometry.getAttribute("uv");
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.userData.fastener = true;
+  const sharedGeoUv = mappedMesh.geometry.getAttribute("uv");
+  root.add(tool, colorMesh, mapped, mappedMesh, std, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualUnusedAttributes(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(colorMesh.geometry.getAttribute("normal"), undefined, "entity helper deletes color-only normal");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.geometry.getAttribute("uv"), mappedUv, "mapped uv stays via entity helper");
+  assert.equal(std.geometry.getAttribute("normal"), stdNormal, "MeshStandard normal stays via entity helper");
+  assert.equal(interleaved.geometry.getAttribute("uv"), interleavedUv, "interleaved uv stays via entity helper");
+  assert.equal(collider.geometry.getAttribute("uv"), colliderUv, "collider uv stays via entity helper");
+  assert.equal(sharedVisual.geometry.getAttribute("uv"), sharedVisualUv, "shared collider material keeps authored uv");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("uv"), sharedGeoUv, "geometry shared with a mapped mesh keeps uv");
+  assert.equal(mappedMesh.geometry.getAttribute("uv"), sharedGeoUv, "mapped geometry uv stays when a color-only mesh shares it");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(colorAttributeAbsent(colorMesh.geometry), true, "unused pin does not invent color");
 });
