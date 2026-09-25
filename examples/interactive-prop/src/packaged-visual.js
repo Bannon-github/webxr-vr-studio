@@ -2276,6 +2276,48 @@
  * Collider meshes stay untouched. Fail-soft (no lod groups) still
  * runs this pin, including the fastener. 90 Hz ship (~11.1 ms) / 72 Hz
  * fallback are **requested**, not measured. No invented headset ms.
+ *
+ * v1.11.0: after that indirect pin,
+ * `pinColorOnlyVisualMaterialExtensions` deletes leftover Material
+ * `extensions` so the r170 MeshBasic absence remains
+ * (`material.extensions === undefined` and
+ * `Object.hasOwn(material, 'extensions') === false`) on the 3 shared
+ * color-only MeshBasic materials (wood / brass / steel; measured
+ * extensions-absent 3; same `isColorOnlyUnlitBasic` gate and the same
+ * collider / interleaved / mapped / lit / shared-material /
+ * shared-geometry skip rules). Prefer `delete material.extensions`
+ * when the own property is present. An already-absent `extensions` is
+ * left alone. Pin once per shared material instance.
+ * **Checked installed three@0.170.0:** fresh `Material` /
+ * `MeshBasicMaterial` constructors do not assign `extensions`.
+ * `ShaderMaterial` assigns
+ * `this.extensions = { clipCullDistance: false, multiDraw: false }`
+ * and copies via `Object.assign`. `WebGLPrograms.getParameters` sets
+ * `HAS_EXTENSIONS = !! material.extensions`, then
+ * `extensionClipCullDistance` / `extensionMultiDraw` from that object.
+ * A leftover own `extensions` object on MeshBasic keeps
+ * `HAS_EXTENSIONS` true even when both flags are false. A sentinel
+ * `{ clipCullDistance: false, multiDraw: false }` keeps
+ * `HAS_EXTENSIONS` true. `delete material.extensions` restores the
+ * r170 absence. Do **not** assign `null` or that sentinel. Do **not**
+ * convert MeshBasic to ShaderMaterial. Do **not** invent extension
+ * maps. Do **not** enable multi-draw or clip-cull-distance. Do
+ * **not** touch `indirect` (v1.10.0 indirect-null stays). Do **not**
+ * re-run the unused-channel strip (v1.9.0 unusedAttributes-absent
+ * stays). Do **not** touch `onUpload` / `onUploadCallback` (v1.8.0
+ * onUpload-release stays). Do **not** delete `color` (v1.7.0
+ * colorAttribute-absent stays). Do **not** touch
+ * `matrixWorldNeedsUpdate` (v1.6.0 stays). Do **not** change
+ * `matrixAutoUpdate` or `matrixWorldAutoUpdate`. Do **not** touch
+ * Material `version` / `name` / `userData`, Mesh `name` / `userData`,
+ * BufferGeometry `name` / `userData`, BufferAttribute fields, prior
+ * Material program-cache / flag pins, bounds, morphs, animations,
+ * shadows, `frustumCulled`, or `mesh.visible`. Mapped / lit /
+ * interleaved keep authored `extensions`. Collider meshes stay
+ * untouched. ShaderMaterial keeps authored `extensions`. Fail-soft
+ * (no lod groups) still runs this pin, including the fastener. 90 Hz
+ * ship (~11.1 ms) / 72 Hz fallback are **requested**, not measured.
+ * No invented headset ms.
  */
 
 import {
@@ -2323,6 +2365,7 @@ import {
   pinColorOnlyVisualOnUpload,
   pinColorOnlyVisualUnusedAttributes,
   pinColorOnlyVisualIndirect,
+  pinColorOnlyVisualMaterialExtensions,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2521,6 +2564,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualOnUpload(root);
   pinColorOnlyVisualUnusedAttributes(root);
   pinColorOnlyVisualIndirect(root);
+  pinColorOnlyVisualMaterialExtensions(root);
   return root;
 }
 

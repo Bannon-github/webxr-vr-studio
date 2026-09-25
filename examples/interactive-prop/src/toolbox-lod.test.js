@@ -121,6 +121,8 @@ const {
   pinColorOnlyVisualUnusedAttributes,
   pinColorOnlyUnlitBasicIndirect,
   pinColorOnlyVisualIndirect,
+  pinColorOnlyUnlitBasicMaterialExtensions,
+  pinColorOnlyVisualMaterialExtensions,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -20471,4 +20473,363 @@ test("pinColorOnlyUnlitBasicIndirect / pinColorOnlyVisualIndirect skip mapped, l
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(colorAttributeAbsent(colorMesh.geometry), true, "indirect pin does not invent color");
   assert.equal(unusedChannelAttributesAbsent(colorMesh.geometry), true, "indirect pin does not invent unused channels");
+});
+
+function materialExtensionsAbsent(material) {
+  return material?.extensions === undefined && Object.hasOwn(material, "extensions") === false;
+}
+
+function countVisualMaterialExtensions(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (materialExtensionsAbsent(mat)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+test("r170 MeshBasic leaves extensions absent; ShaderMaterial assigns and copies the map", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const freshMaterial = new THREE.Material();
+  const freshBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(freshMaterial.extensions, undefined, "Material constructor does not assign extensions");
+  assert.equal(Object.hasOwn(freshMaterial, "extensions"), false, "Material extensions is not an own property");
+  assert.equal(freshBasic.extensions, undefined, "MeshBasicMaterial constructor does not assign extensions");
+  assert.equal(Object.hasOwn(freshBasic, "extensions"), false, "MeshBasic extensions is not an own property");
+  assert.equal(!!freshBasic.extensions, false, "absent extensions keeps HAS_EXTENSIONS false");
+  const shader = new THREE.ShaderMaterial();
+  assert.deepEqual(shader.extensions, { clipCullDistance: false, multiDraw: false });
+  assert.equal(Object.hasOwn(shader, "extensions"), true, "ShaderMaterial assigns an own extensions object");
+  assert.equal(!!shader.extensions, true, "ShaderMaterial extensions keeps HAS_EXTENSIONS true");
+  shader.extensions.multiDraw = true;
+  const copied = new THREE.ShaderMaterial().copy(shader);
+  assert.equal(copied.extensions.multiDraw, true, "ShaderMaterial.copy copies extensions via Object.assign");
+  assert.notEqual(copied.extensions, shader.extensions, "ShaderMaterial.copy does not share the extensions object");
+  const sentinel = { clipCullDistance: false, multiDraw: false };
+  const empty = {};
+  assert.equal(!!sentinel, true, "sentinel extensions object keeps HAS_EXTENSIONS true");
+  assert.equal(!!empty, true, "empty extensions object keeps HAS_EXTENSIONS true");
+  assert.equal(!!null, false, "null is falsy but is not the r170 absence");
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const material = readFileSync(require.resolve("three/src/materials/Material.js"), "utf8");
+  const meshBasic = readFileSync(require.resolve("three/src/materials/MeshBasicMaterial.js"), "utf8");
+  assert.equal(material.includes("this.extensions"), false, "Material.js does not assign extensions");
+  assert.equal(meshBasic.includes("this.extensions"), false, "MeshBasicMaterial.js does not assign extensions");
+  const shaderSource = readFileSync(require.resolve("three/src/materials/ShaderMaterial.js"), "utf8");
+  assert.match(shaderSource, /this\.extensions = \{\s*clipCullDistance: false,/);
+  assert.match(shaderSource, /multiDraw: false/);
+  assert.match(shaderSource, /this\.extensions = Object\.assign\( \{\}, source\.extensions \);/);
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.match(programs, /const HAS_EXTENSIONS = !! material\.extensions;/);
+  assert.match(
+    programs,
+    /extensionClipCullDistance: HAS_EXTENSIONS && material\.extensions\.clipCullDistance === true && extensions\.has\( 'WEBGL_clip_cull_distance' \),/,
+  );
+  assert.match(
+    programs,
+    /extensionMultiDraw: \( HAS_EXTENSIONS && material\.extensions\.multiDraw === true \|\| IS_BATCHEDMESH \) && extensions\.has\( 'WEBGL_multi_draw' \),/,
+  );
+});
+
+test("v1.11.0 clears leftover Material extensions on packed color-only MeshBasics; envelope stays v1.10.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.11\.0 pins leftover Material extensions/);
+  assert.match(crate.userData.l2.note, /extensions-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.10\.0 pins leftover BufferGeometry indirect/);
+  assert.match(crate.userData.l2.note, /indirect-null 13/);
+  assert.match(crate.userData.l2.note, /unusedAttributes-absent 13/);
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(materialExtensionsAbsent(wood), true, "wood extensions is absent");
+  assert.equal(materialExtensionsAbsent(brass), true, "brass extensions is absent");
+  assert.equal(materialExtensionsAbsent(steel), true, "steel extensions is absent");
+  assert.equal(wood.isMeshBasicMaterial, true, "wood stays MeshBasic");
+  assert.equal(brass.isMeshBasicMaterial, true, "brass stays MeshBasic");
+  assert.equal(steel.isMeshBasicMaterial, true, "steel stays MeshBasic");
+  assert.equal(wood.isShaderMaterial, undefined, "wood is not converted to ShaderMaterial");
+  assert.equal(wood.version, 0, "wood material.version stays 0");
+  assert.equal(brass.name, "", "brass material.name stays empty");
+  assert.equal(materialUserDataEmpty(steel), true, "steel material.userData stays empty");
+
+  const extensions = countVisualMaterialExtensions(crate);
+  assert.equal(extensions.absent, 3, "extensions-absent count is 3");
+  assert.equal(extensions.leftover, 0);
+  assert.equal(extensions.total, 3);
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13");
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3");
+  assert.equal(countVisualMaterialName(crate).empty, 3, "material-name-empty stays 3");
+  assert.equal(countVisualMaterialUserData(crate).empty, 3, "material-userData-empty stays 3");
+  assert.equal(countVisualGeometryUserData(crate).empty, 13, "geometry-userData-empty stays 13");
+  assert.equal(countVisualGeometryName(crate).empty, 13, "geometry-name-empty stays 13");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10");
+  assert.equal(countVisualMeshName(crate).reserved, 3, "three reserved visual names stay");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(materialExtensionsAbsent(mesh.material), true, "packed visual extensions stay absent");
+    assert.equal(indirectIsNull(mesh.geometry), true, "indirect stays null");
+    assert.equal(mesh.material.version, 0, "material.version stays 0");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+    assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  }
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lid = crate.getObjectByName("lidMesh");
+  const latch = crate.getObjectByName("latchMesh");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.equal(materialExtensionsAbsent(fastener.material), true, "fastener shares the pinned brass material");
+  assert.equal(fastener.material, brass, "fastener still shares brass");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(lid.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latch.name, "latchMesh", "latchMesh name stays");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const rootBag = crate.userData;
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(countVisualMaterialExtensions(crate).absent, 3, "extensions-absent stays 3 after L4/L5");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13 after L4/L5");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.equal(fastener.name, "fastenerMesh", "L5 keeps fastenerMesh");
+  assert.equal(lid.name, "lidMesh", "L4 keeps lidMesh");
+  assert.equal(latch.name, "latchMesh", "L4 keeps latchMesh");
+  assert.deepEqual(getToolboxLodStats(crate)[0], stats[0], "L4/L5 does not change the LOD0 envelope");
+});
+
+test("pinColorOnlyUnlitBasicMaterialExtensions deletes leftover extensions and leaves an already-absent extensions alone", () => {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  mat.version = 4;
+  mat.name = "woodStandIn";
+  mat.fog = false;
+  mat.toneMapped = false;
+  mat.flatShading = false;
+  mat.defines = { KEEP: "1" };
+  const matBag = mat.userData;
+  const multi = { multiDraw: true };
+  mat.extensions = multi;
+  assert.equal(Object.hasOwn(mat, "extensions"), true, "fixture stores an own extensions object");
+  const geo = groupsTestGeometry();
+  const leftoverIndirect = { label: "stay-indirect" };
+  geo.setIndirect(leftoverIndirect);
+  const position = geo.getAttribute("position");
+  const index = geo.index;
+  const positionArray = position.array;
+  function rogue() {}
+  position.onUpload(rogue);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = "lidMesh";
+  mesh.matrixAutoUpdate = true;
+  mesh.matrixWorldNeedsUpdate = false;
+  mesh.matrixWorldAutoUpdate = true;
+  mesh.frustumCulled = true;
+  mesh.visible = true;
+  const bag = mesh.userData;
+  const returned = pinColorOnlyUnlitBasicMaterialExtensions(mesh);
+  assert.equal(returned, mesh, "pin returns the same mesh");
+  assert.equal(mesh.material, mat, "pin does not replace the material");
+  assert.equal(mat.isMeshBasicMaterial, true, "pin does not convert MeshBasic to ShaderMaterial");
+  assert.equal(mat.isShaderMaterial, undefined, "pin does not stamp isShaderMaterial");
+  assert.equal(materialExtensionsAbsent(mat), true, "leftover extensions own property is deleted");
+  assert.equal(multi.multiDraw, true, "pin does not invent a replacement extension map");
+  assert.equal(mat.extensions, undefined, "pin does not assign null");
+  assert.equal(geo.getIndirect(), leftoverIndirect, "extensions pin does not touch indirect");
+  assert.equal(geo.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(geo.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not null position.array");
+  assert.equal(position.onUploadCallback, rogue, "pin does not touch position onUpload");
+  assert.equal(mesh.name, "lidMesh", "reserved lidMesh name stays");
+  assert.equal(mesh.userData, bag, "mesh.userData stays");
+  assert.equal(mesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+  assert.equal(mesh.matrixAutoUpdate, true, "matrixAutoUpdate stays live");
+  assert.equal(mesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+  assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  assert.equal(mesh.visible, true, "mesh.visible stays true");
+  assert.equal(mat.version, 4, "pin does not touch material.version");
+  assert.equal(mat.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(mat.userData, matBag, "pin does not replace material.userData");
+  assert.equal(mat.fog, false, "pin does not touch fog");
+  assert.equal(mat.toneMapped, false, "pin does not touch toneMapped");
+  assert.equal(mat.flatShading, false, "pin does not touch flatShading");
+  assert.deepEqual(mat.defines, { KEEP: "1" }, "pin does not touch defines");
+
+  const clip = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  clip.extensions = { clipCullDistance: true };
+  pinColorOnlyUnlitBasicMaterialExtensions(new THREE.Mesh(groupsTestGeometry(), clip));
+  assert.equal(materialExtensionsAbsent(clip), true, "clipCullDistance leftover is deleted");
+
+  const empty = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  empty.extensions = {};
+  pinColorOnlyUnlitBasicMaterialExtensions(new THREE.Mesh(groupsTestGeometry(), empty));
+  assert.equal(materialExtensionsAbsent(empty), true, "empty extensions object is deleted");
+
+  const absent = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(materialExtensionsAbsent(absent), true, "fresh MeshBasic extensions is already absent");
+  const absentMesh = new THREE.Mesh(groupsTestGeometry(), absent);
+  absentMesh.name = "fastenerMesh";
+  pinColorOnlyUnlitBasicMaterialExtensions(absentMesh);
+  assert.equal(materialExtensionsAbsent(absent), true, "already-absent extensions stays absent");
+  assert.equal(absent.extensions, undefined, "already-absent pin does not assign null");
+  assert.equal(absentMesh.name, "fastenerMesh", "reserved fastenerMesh name stays");
+
+  const bleed = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  bleed.extensions = { clipCullDistance: false, multiDraw: false };
+  pinColorOnlyUnlitBasicIndirect(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.deepEqual(bleed.extensions, { clipCullDistance: false, multiDraw: false }, "indirect pin does not delete extensions");
+  pinColorOnlyUnlitBasicMaterialExtensions(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(materialExtensionsAbsent(bleed), true, "ShaderMaterial-shaped bleed on MeshBasic is deleted");
+
+  const shared = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  shared.extensions = { multiDraw: true, clipCullDistance: true };
+  const first = new THREE.Mesh(groupsTestGeometry(), shared);
+  const second = new THREE.Mesh(groupsTestGeometry(), shared);
+  const sharedRoot = new THREE.Group();
+  const rootBag = sharedRoot.userData;
+  sharedRoot.add(first, second);
+  pinColorOnlyVisualMaterialExtensions(sharedRoot);
+  assert.equal(first.material, shared, "first mesh keeps the shared material");
+  assert.equal(second.material, shared, "second mesh keeps the shared material");
+  assert.equal(materialExtensionsAbsent(shared), true, "shared material extensions is deleted once");
+  assert.equal(sharedRoot.userData, rootBag, "entity helper does not replace entity userData");
+  pinColorOnlyUnlitBasicMaterialExtensions(second);
+  assert.equal(materialExtensionsAbsent(shared), true, "a second sight of an already-absent shared material does not assign");
+  assert.equal(shared.isMeshBasicMaterial, true, "shared material stays MeshBasic");
+});
+
+test("pinColorOnlyUnlitBasicMaterialExtensions / pinColorOnlyVisualMaterialExtensions skip mapped, lit, interleaved, colliders, ShaderMaterial, and shared blocked", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  colorMat.extensions = { multiDraw: true };
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  colorOnly.name = "lidMesh";
+  pinColorOnlyUnlitBasicMaterialExtensions(colorOnly);
+  assert.equal(materialExtensionsAbsent(colorOnly.material), true, "color-only leftover extensions is deleted");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin keeps lidMesh");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const mappedExtensions = { clipCullDistance: true };
+  mappedMat.extensions = mappedExtensions;
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  pinColorOnlyUnlitBasicMaterialExtensions(mapped);
+  assert.equal(mapped.material.extensions, mappedExtensions, "mapped MeshBasic keeps authored extensions");
+
+  const std = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  const stdExtensions = { multiDraw: true };
+  std.material.extensions = stdExtensions;
+  pinColorOnlyUnlitBasicMaterialExtensions(std);
+  assert.equal(std.material.extensions, stdExtensions, "MeshStandard keeps authored extensions");
+
+  const shader = new THREE.ShaderMaterial();
+  const shaderExtensions = shader.extensions;
+  const shaderMesh = new THREE.Mesh(groupsTestGeometry(), shader);
+  pinColorOnlyUnlitBasicMaterialExtensions(shaderMesh);
+  assert.equal(shader.extensions, shaderExtensions, "ShaderMaterial keeps authored extensions");
+  assert.equal(Object.hasOwn(shader, "extensions"), true, "ShaderMaterial extensions own property stays");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const interleavedExtensions = { multiDraw: false };
+  interleavedMat.extensions = interleavedExtensions;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicMaterialExtensions(interleaved);
+  assert.equal(interleavedMat.extensions, interleavedExtensions, "interleaved extensions stay authored");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  const colliderExtensions = {};
+  collider.material.extensions = colliderExtensions;
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicMaterialExtensions(collider);
+  assert.equal(collider.material.extensions, colliderExtensions, "collider extensions stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorMesh.name = "dccLatch";
+  colorMesh.material.version = 9;
+  colorMesh.material.extensions = { clipCullDistance: true };
+  const colorIndirect = { label: "entity-indirect" };
+  colorMesh.geometry.setIndirect(colorIndirect);
+  colorMesh.matrixWorldNeedsUpdate = false;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedBlockedExtensions = { multiDraw: true };
+  sharedBlocked.extensions = sharedBlockedExtensions;
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  const sharedGeoExtensions = { clipCullDistance: true, multiDraw: true };
+  sharedGeoMat.extensions = sharedGeoExtensions;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.userData.fastener = true;
+  root.add(tool, colorMesh, mapped, mappedMesh, std, shaderMesh, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualMaterialExtensions(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(materialExtensionsAbsent(colorMesh.material), true, "entity helper deletes color-only extensions");
+  assert.equal(colorMesh.geometry.getIndirect(), colorIndirect, "entity helper does not touch indirect");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.material.extensions, mappedExtensions, "mapped extensions stays via entity helper");
+  assert.equal(std.material.extensions, stdExtensions, "MeshStandard extensions stays via entity helper");
+  assert.equal(shader.extensions, shaderExtensions, "ShaderMaterial extensions stays via entity helper");
+  assert.equal(interleaved.material.extensions, interleavedExtensions, "interleaved extensions stays via entity helper");
+  assert.equal(collider.material.extensions, colliderExtensions, "collider extensions stays via entity helper");
+  assert.equal(sharedVisual.material.extensions, sharedBlockedExtensions, "shared collider material keeps authored extensions");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.material.extensions, sharedGeoExtensions, "geometry shared with a mapped mesh keeps extensions");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(indirectIsNull(colorMesh.geometry), false, "extensions pin does not clear leftover indirect");
 });
