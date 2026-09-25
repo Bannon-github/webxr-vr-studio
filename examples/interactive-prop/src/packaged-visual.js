@@ -2367,6 +2367,55 @@
  * (no lod groups) still runs this pin, including the fastener. 90 Hz
  * ship (~11.1 ms) / 72 Hz fallback are **requested**, not measured.
  * No invented headset ms.
+ *
+ * v1.13.0: after that depthPacking pin,
+ * `pinColorOnlyVisualMaterialIndex0AttributeName` deletes leftover
+ * Material `index0AttributeName` so the r170 MeshBasic absence remains
+ * (`material.index0AttributeName === undefined` and
+ * `Object.hasOwn(material, 'index0AttributeName') === false`) on the 3
+ * shared color-only MeshBasic materials (wood / brass / steel; measured
+ * index0AttributeName-absent 3; same `isColorOnlyUnlitBasic` gate and
+ * the same collider / interleaved / mapped / lit / shared-material /
+ * shared-geometry skip rules). Prefer
+ * `delete material.index0AttributeName` when the own property is
+ * present. An already-absent `index0AttributeName` is left alone. Pin
+ * once per shared material instance.
+ * **Checked installed three@0.170.0:** fresh `Material` /
+ * `MeshBasicMaterial` constructors do not assign
+ * `index0AttributeName`. `ShaderMaterial` assigns
+ * `this.index0AttributeName = undefined`. `ShaderMaterial.copy` does
+ * not copy it. `WebGLPrograms.getParameters` copies
+ * `index0AttributeName: material.index0AttributeName`.
+ * `getProgramCacheKey` does not push that name (no cache-key token and
+ * no program-layer bit). `WebGLProgram` emits no `#define` for it.
+ * Before `gl.linkProgram`, when
+ * `parameters.index0AttributeName !== undefined`, it calls
+ * `gl.bindAttribLocation(program, 0, parameters.index0AttributeName)`.
+ * A leftover string or empty string `''` binds attribute 0 while the
+ * program cache key stays identical to constructor absence, so the
+ * first material to compile bakes that binding for later materials
+ * that share the other parameters. Assigning `null` also binds
+ * (`null !== undefined`). `delete material.index0AttributeName`
+ * restores the r170 absence. Do **not** assign `null`, `undefined`, or
+ * `''`. Do **not** invent a replacement attribute name. Do **not**
+ * touch `depthPacking` (v1.12.0 depthPacking-absent stays). Do **not**
+ * touch `extensions` (v1.11.0 extensions-absent stays). Do **not**
+ * touch `indirect` (v1.10.0 indirect-null stays). Do **not** re-run
+ * the unused-channel strip (v1.9.0 unusedAttributes-absent stays). Do
+ * **not** touch `onUpload` / `onUploadCallback` (v1.8.0
+ * onUpload-release stays). Do **not** delete `color` (v1.7.0
+ * colorAttribute-absent stays). Do **not** touch
+ * `matrixWorldNeedsUpdate` (v1.6.0 stays). Do **not** change
+ * `matrixAutoUpdate` or `matrixWorldAutoUpdate`. Do **not** touch
+ * Material `version` / `name` / `userData`, Mesh `name` / `userData`,
+ * BufferGeometry `name` / `userData`, BufferAttribute fields, prior
+ * Material program-cache / flag pins, bounds, morphs, animations,
+ * shadows, `frustumCulled`, or `mesh.visible`. Mapped / lit /
+ * interleaved keep authored `index0AttributeName`. Collider meshes stay
+ * untouched. ShaderMaterial keeps its constructor
+ * `index0AttributeName`. Fail-soft (no lod groups) still runs this
+ * pin, including the fastener. 90 Hz ship (~11.1 ms) / 72 Hz fallback
+ * are **requested**, not measured. No invented headset ms.
  */
 
 import {
@@ -2416,6 +2465,7 @@ import {
   pinColorOnlyVisualIndirect,
   pinColorOnlyVisualMaterialExtensions,
   pinColorOnlyVisualMaterialDepthPacking,
+  pinColorOnlyVisualMaterialIndex0AttributeName,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2616,6 +2666,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualIndirect(root);
   pinColorOnlyVisualMaterialExtensions(root);
   pinColorOnlyVisualMaterialDepthPacking(root);
+  pinColorOnlyVisualMaterialIndex0AttributeName(root);
   return root;
 }
 
