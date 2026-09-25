@@ -8,6 +8,7 @@ import {
   packagedLodLevel,
 } from "./packaged-visual.js";
 import {
+  COLOR_ONLY_UNUSED_CHANNEL_ATTRS,
   isCpuArrayReleaseOnUpload,
   mergeSameMaterialMeshes,
   noopColorOnlyVisualRaycast,
@@ -8031,4 +8032,172 @@ test("packaged ingest without lod groups still pins the release onUpload hook", 
   assert.equal(sharedGeoVisual.geometry.getAttribute("position").onUploadCallback, mappedRogue, "fail-soft geometry shared with a mapped mesh keeps onUploadCallback");
   assert.equal(sharedGeoVisual.name, "sharedGeoBody", "fail-soft shared-geometry mesh name stays");
   assert.equal(colliderGrab.geometry.getAttribute("position").onUploadCallback, colliderRogue, "fail-soft collider onUploadCallback stays");
+});
+
+function unusedChannelAttributesAbsent(geometry) {
+  if (!geometry?.getAttribute) return false;
+  for (const name of COLOR_ONLY_UNUSED_CHANNEL_ATTRS) {
+    if (geometry.getAttribute(name) != null) return false;
+    if (geometry.hasAttribute(name) !== false) return false;
+  }
+  return true;
+}
+
+function channelByteLength(geometry) {
+  let bytes = 0;
+  for (const name of COLOR_ONLY_UNUSED_CHANNEL_ATTRS) {
+    const arr = geometry.getAttribute(name)?.array;
+    if (arr) bytes += arr.byteLength;
+  }
+  return bytes;
+}
+
+test("packaged ingest strips leftover normal/uv on color-only visuals and the fastener", () => {
+  const { root, groups, fastener, lid, latch } = makePackagedFixture();
+  const shared = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const first = boxMesh("dccWall", shared);
+  const firstChannels = channelByteLength(first.geometry);
+  assert.equal(first.geometry.getAttribute("position").count, 24);
+  assert.equal(first.geometry.getAttribute("uv").array.byteLength, 192);
+  assert.equal(first.geometry.getAttribute("normal").array.byteLength, 288);
+  assert.equal(firstChannels, 480, "BoxGeometry leftover uv + normal is 480 bytes");
+  const firstPosition = first.geometry.getAttribute("position");
+  const second = boxMesh("dccWallB", shared);
+  const mapped = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const mappedMesh = boxMesh("mappedHero", mapped);
+  const mappedUv = mappedMesh.geometry.getAttribute("uv");
+  const mappedNormal = mappedMesh.geometry.getAttribute("normal");
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "sharedGeoBody";
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedUv = new THREE.Float32BufferAttribute(6, 2);
+  interleavedGeo.setAttribute("uv", interleavedUv);
+  const interleaved = new THREE.Mesh(interleavedGeo, new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  interleaved.name = "interleavedMesh";
+  const lit = boxMesh("litMesh", new THREE.MeshStandardMaterial());
+  const litNormal = lit.geometry.getAttribute("normal");
+  groups[0][0].add(first, mappedMesh, interleaved, lit);
+  groups[1][0].add(second);
+  root.add(sharedGeoVisual);
+  const fastenerChannels = channelByteLength(fastener.geometry);
+  fastener.material = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  const fastenerMat = fastener.material;
+  const colliderGrab = root.getObjectByName("collider_grab");
+  const colliderUv = colliderGrab.geometry.getAttribute("uv");
+  const lidMesh = lid.getObjectByName("lidL0");
+  const latchMesh = latch.getObjectByName("latchL0");
+  lidMesh.name = "lidMesh";
+  latchMesh.name = "latchMesh";
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh stays named");
+  assert.equal(lidMesh.name, "lidMesh", "reserved lidMesh name stays");
+  assert.equal(latchMesh.name, "latchMesh", "reserved latchMesh name stays");
+  assert.equal(unusedChannelAttributesAbsent(fastener.geometry), true, "fastener unused channels are absent");
+  assert.ok(fastener.geometry.getAttribute("position"), "fastener position stays");
+  assert.ok(fastener.geometry.index, "fastener index stays");
+  assert.equal(fastener.material, fastenerMat, "ingest does not replace the fastener material");
+  assert.equal(geometryOnUploadRelease(fastener.geometry), true, "fastener onUpload release hook still runs before the unused strip");
+  assert.equal(mappedMesh.geometry.getAttribute("uv"), mappedUv, "mapped uv stays authored");
+  assert.equal(mappedMesh.geometry.getAttribute("normal"), mappedNormal, "mapped normal stays authored");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("uv"), mappedUv, "geometry shared with a mapped mesh keeps uv");
+  assert.equal(sharedGeoVisual.name, "sharedGeoBody", "shared-geometry mesh name stays");
+  assert.equal(interleaved.geometry.getAttribute("uv"), interleavedUv, "interleaved uv stays authored");
+  assert.equal(lit.geometry.getAttribute("normal"), litNormal, "MeshStandard normal stays authored");
+  assert.equal(colliderGrab.geometry.getAttribute("uv"), colliderUv, "collider uv stays authored");
+  assert.equal(colliderGrab.name, "collider_grab", "collider mesh name stays");
+  const survivors = groups[0][0].children.filter((o) => o.isMesh && o.material === shared);
+  assert.ok(survivors.length >= 1, "color-only lod mesh survives ingest");
+  for (const mesh of survivors) {
+    assert.equal(unusedChannelAttributesAbsent(mesh.geometry), true, "packed color-only survivor has no unused channels");
+    assert.ok(mesh.geometry.getAttribute("position"), "packed survivor keeps position");
+    assert.ok(mesh.geometry.index, "packed survivor keeps the index");
+    assert.equal(geometryOnUploadRelease(mesh.geometry), true, "packed survivor still has the release hook");
+  }
+  assert.equal(firstChannels, 480, "pre-ingest channel bytes were the BoxGeometry uv+normal pair");
+  assert.equal(fastenerChannels, 480, "pre-ingest fastener channel bytes were the BoxGeometry uv+normal pair");
+  assert.equal(firstPosition.count, 24, "pre-ingest position count stays the fixture count");
+});
+
+test("packaged ingest without lod groups still strips leftover normal/uv and drops attrBytes", () => {
+  const { root, body, lid, latch, fastener } = makePackagedFixture({ withLod: false });
+  const bodyMesh = visualMeshes(body)[0];
+  const bodyUv = bodyMesh.geometry.getAttribute("uv");
+  const bodyNormal = bodyMesh.geometry.getAttribute("normal");
+  const bodyChannels = bodyUv.array.byteLength + bodyNormal.array.byteLength;
+  assert.equal(bodyChannels, 480, "fail-soft BoxGeometry uv + normal is 480 bytes");
+  const extraUv1 = new THREE.Float32BufferAttribute(bodyMesh.geometry.getAttribute("position").count * 2, 2);
+  bodyMesh.geometry.setAttribute("uv1", extraUv1);
+  const bodyBefore = cpuAttrBytes(bodyMesh.geometry);
+  const bodyPosition = bodyMesh.geometry.getAttribute("position");
+  const bodyIndex = bodyMesh.geometry.index;
+  const bodyMat = bodyMesh.material;
+  bodyMesh.name = "lidMesh";
+  bodyMesh.matrixWorldNeedsUpdate = false;
+  bodyMesh.material.version = 5;
+  const bodyBag = bodyMesh.userData;
+  const alphaMesh = boxMesh("alphaBody", new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  const alphaChannels = channelByteLength(alphaMesh.geometry);
+  const alphaBefore = cpuAttrBytes(alphaMesh.geometry);
+  const alphaPosition = alphaMesh.geometry.getAttribute("position");
+  body.add(alphaMesh);
+  const fastenerMat = fastener.material;
+  const mapped = boxMesh("mappedHero", new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } }));
+  const mappedUv = mapped.geometry.getAttribute("uv");
+  const mappedNormal = mapped.geometry.getAttribute("normal");
+  body.add(mapped);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 6;
+  const sharedGeoVisual = new THREE.Mesh(mapped.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "sharedGeoBody";
+  body.add(sharedGeoVisual);
+  const colliderGrab = root.getObjectByName("collider_grab");
+  const colliderUv = colliderGrab.geometry.getAttribute("uv");
+  const colliderNormal = colliderGrab.geometry.getAttribute("normal");
+  const lidMesh = lid.getObjectByName("lidMesh");
+  const latchMesh = latch.getObjectByName("latchMesh");
+  const lidChannels = channelByteLength(lidMesh.geometry);
+  const lidBefore = cpuAttrBytes(lidMesh.geometry);
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(root.userData.lod, undefined, "fail-soft still does not invent lod groups");
+  assert.equal(bodyMesh.material, bodyMat, "fail-soft does not replace the body material");
+  assert.equal(bodyMesh.geometry, bodyMesh.geometry, "fail-soft keeps the body mesh");
+  assert.equal(unusedChannelAttributesAbsent(bodyMesh.geometry), true, "fail-soft body unused channels are absent");
+  assert.equal(cpuAttrBytes(bodyMesh.geometry), bodyBefore - bodyChannels - extraUv1.array.byteLength, "fail-soft body drops uv, normal, and uv1 bytes");
+  assert.equal(extraUv1.array.byteLength, 192, "24-vert Float32 uv1 is 192 bytes");
+  assert.equal(bodyMesh.geometry.getAttribute("position"), bodyPosition, "fail-soft pin does not replace position");
+  assert.equal(bodyMesh.geometry.index, bodyIndex, "fail-soft pin does not replace the index");
+  assert.ok(bodyPosition.array, "fail-soft pin does not null the body position array");
+  assert.equal(bodyMesh.name, "lidMesh", "fail-soft reserved lidMesh name stays");
+  assert.equal(bodyMesh.userData, bodyBag, "fail-soft mesh.userData identity stays when already empty");
+  assert.equal(bodyMesh.matrixWorldNeedsUpdate, false, "fail-soft matrixWorldNeedsUpdate stays false");
+  assert.equal(bodyMesh.material.version, 0, "fail-soft material.version pin still runs");
+  assert.equal(geometryOnUploadRelease(bodyMesh.geometry), true, "fail-soft onUpload release hook still runs");
+  assert.equal(unusedChannelAttributesAbsent(alphaMesh.geometry), true, "fail-soft second color-only mesh drops unused channels");
+  assert.equal(cpuAttrBytes(alphaMesh.geometry), alphaBefore - alphaChannels, "fail-soft second mesh drops uv and normal bytes");
+  assert.equal(alphaMesh.geometry.getAttribute("position"), alphaPosition, "fail-soft second mesh position stays");
+  assert.equal(unusedChannelAttributesAbsent(fastener.geometry), true, "fail-soft fastener drops unused channels");
+  assert.ok(fastener.geometry.getAttribute("position"), "fail-soft fastener position stays");
+  assert.ok(fastener.geometry.index, "fail-soft fastener index stays");
+  assert.equal(fastener.material, fastenerMat, "fail-soft does not replace the fastener material");
+  assert.equal(fastener.name, "fastenerMesh", "fail-soft fastenerMesh stays named");
+  assert.equal(unusedChannelAttributesAbsent(lidMesh.geometry), true, "fail-soft lidMesh drops unused channels");
+  assert.equal(cpuAttrBytes(lidMesh.geometry), lidBefore - lidChannels, "fail-soft lidMesh drops uv and normal bytes");
+  assert.equal(lidMesh.name, "lidMesh", "fail-soft authored lidMesh name stays");
+  assert.equal(latchMesh.name, "latchMesh", "fail-soft latchMesh name stays");
+  assert.equal(unusedChannelAttributesAbsent(latchMesh.geometry), true, "fail-soft latchMesh drops unused channels");
+  assert.equal(mapped.geometry.getAttribute("uv"), mappedUv, "fail-soft mapped uv stays authored");
+  assert.equal(mapped.geometry.getAttribute("normal"), mappedNormal, "fail-soft mapped normal stays authored");
+  assert.equal(sharedGeoVisual.geometry.getAttribute("uv"), mappedUv, "fail-soft geometry shared with a mapped mesh keeps uv");
+  assert.equal(sharedGeoVisual.name, "sharedGeoBody", "fail-soft shared-geometry mesh name stays");
+  assert.equal(sharedGeoMat.version, 6, "fail-soft shared material.version stays");
+  assert.equal(colliderGrab.geometry.getAttribute("uv"), colliderUv, "fail-soft collider uv stays");
+  assert.equal(colliderGrab.geometry.getAttribute("normal"), colliderNormal, "fail-soft collider normal stays");
+  assert.equal(colliderGrab.name, "collider_grab", "fail-soft collider name stays");
 });
