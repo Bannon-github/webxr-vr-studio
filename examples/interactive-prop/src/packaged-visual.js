@@ -2642,6 +2642,75 @@
  * groups) still runs this pin, including the fastener. 90 Hz ship
  * (~11.1 ms) / 72 Hz fallback are **requested**, not measured. No
  * invented headset ms.
+ *
+ * v1.18.0: after that uniformsGroups pin,
+ * `pinColorOnlyVisualMaterialVertexShader` deletes leftover Material
+ * `vertexShader` so the r170 MeshBasic absence remains
+ * (`material.vertexShader === undefined` and
+ * `Object.hasOwn(material, 'vertexShader') === false`) on the 3
+ * shared color-only MeshBasic materials (wood / brass / steel;
+ * measured vertexShader-absent 3; same `isColorOnlyUnlitBasic` gate
+ * and the same collider / interleaved / mapped / lit / shared-material
+ * / shared-geometry skip rules). Prefer `delete material.vertexShader`
+ * when the own property is present. An already-absent `vertexShader`
+ * is left alone. Pin once per shared material instance.
+ * **Checked installed three@0.170.0:** fresh `Material` /
+ * `MeshBasicMaterial` constructors do not assign `vertexShader`.
+ * `Material.js` does not mention `vertexShader`; `Material.copy` and
+ * `MeshBasicMaterial.copy` do not copy it. `ShaderMaterial` assigns
+ * `this.vertexShader = default_vertex`. `ShaderMaterial.copy` assigns
+ * `this.vertexShader = source.vertexShader` (the source string, not a
+ * rewritten stub). `ShaderMaterial.toJSON` writes
+ * `data.vertexShader = this.vertexShader`. `RawShaderMaterial` extends
+ * `ShaderMaterial` and does not assign its own `vertexShader`, so it
+ * keeps that constructor string. `MaterialLoader.parse` assigns
+ * `material.vertexShader = json.vertexShader` when
+ * `json.vertexShader !== undefined`, including onto a MeshBasic.
+ * `WebGLPrograms.getParameters` resolves shaderID from
+ * `shaderIDs[material.type]`. When shaderID is set (`MeshBasicMaterial`
+ * maps to `'basic'`), `vertexShader` comes from
+ * `ShaderLib[shaderID].vertexShader`, not `material.vertexShader`.
+ * The custom path (`vertexShader = material.vertexShader` and
+ * `WebGLShaderCache.update`) runs only when shaderID is absent.
+ * `getProgramCacheKey` pushes `parameters.shaderID` when present, so a
+ * leftover `material.vertexShader` is not a cache-key token for
+ * MeshBasic. `WebGLProgram` compiles `parameters.vertexShader`, which
+ * for MeshBasic is the ShaderLib basic shader. `getUniforms` still
+ * resolves shaderID from `shaderIDs[material.type]`. MeshBasic stays
+ * shaderID `'basic'` and clones `ShaderLib` uniforms, so a leftover
+ * `vertexShader` string does not invent a custom shader path and does
+ * not change draws, tris, or attrBytes. Assigning `null`, `undefined`,
+ * `''`, or a stub GLSL string stores an own property, which is not the
+ * r170 MeshBasic absence. `delete material.vertexShader` restores the
+ * r170 absence. Do **not** assign `null`, `undefined`, `''`, or a stub
+ * GLSL string. Do **not** invent a custom shader path. Do **not**
+ * convert MeshBasic to ShaderMaterial. Do **not** clear `vertexShader`
+ * on real ShaderMaterial / RawShaderMaterial. Do **not** touch
+ * `uniformsGroups` (v1.17.0 uniformsGroups-absent stays). Do **not**
+ * touch `uniformsNeedUpdate` (v1.16.0 uniformsNeedUpdate-absent stays).
+ * Do **not** touch `uniforms` (v1.15.0 uniforms-absent stays). Do
+ * **not** touch `defaultAttributeValues` (v1.14.0
+ * defaultAttributeValues-absent stays). Do **not** touch
+ * `index0AttributeName` (v1.13.0 index0AttributeName-absent stays). Do
+ * **not** touch `depthPacking` (v1.12.0 depthPacking-absent stays). Do
+ * **not** touch `extensions` (v1.11.0 extensions-absent stays). Do
+ * **not** touch `indirect` (v1.10.0 indirect-null stays). Do **not**
+ * re-run the unused-channel strip (v1.9.0 unusedAttributes-absent
+ * stays). Do **not** touch `onUpload` / `onUploadCallback` (v1.8.0
+ * onUpload-release stays). Do **not** delete `color` (v1.7.0
+ * colorAttribute-absent stays). Do **not** touch
+ * `matrixWorldNeedsUpdate` (v1.6.0 stays). Do **not** change
+ * `matrixAutoUpdate` or `matrixWorldAutoUpdate`. Do **not** touch
+ * Material `version` / `name` / `userData`, Mesh `name` / `userData`,
+ * BufferGeometry `name` / `userData`, BufferAttribute fields, prior
+ * Material program-cache / flag pins, `fragmentShader`, `lights`,
+ * `clipping`, `isShaderMaterial`, bounds, morphs, animations, shadows,
+ * `frustumCulled`, or `mesh.visible`. Mapped / lit / interleaved keep
+ * authored `vertexShader`. Collider meshes stay untouched.
+ * ShaderMaterial / RawShaderMaterial keep constructor `vertexShader`
+ * (the `default_vertex` chunk). Fail-soft (no lod groups) still runs
+ * this pin, including the fastener. 90 Hz ship (~11.1 ms) / 72 Hz
+ * fallback are **requested**, not measured. No invented headset ms.
  */
 
 import {
@@ -2696,6 +2765,7 @@ import {
   pinColorOnlyVisualMaterialUniforms,
   pinColorOnlyVisualMaterialUniformsNeedUpdate,
   pinColorOnlyVisualMaterialUniformsGroups,
+  pinColorOnlyVisualMaterialVertexShader,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2901,6 +2971,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialUniforms(root);
   pinColorOnlyVisualMaterialUniformsNeedUpdate(root);
   pinColorOnlyVisualMaterialUniformsGroups(root);
+  pinColorOnlyVisualMaterialVertexShader(root);
   return root;
 }
 
