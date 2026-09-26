@@ -125,6 +125,8 @@ const {
   pinColorOnlyVisualMaterialExtensions,
   pinColorOnlyUnlitBasicMaterialDepthPacking,
   pinColorOnlyVisualMaterialDepthPacking,
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName,
+  pinColorOnlyVisualMaterialIndex0AttributeName,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -21254,4 +21256,429 @@ test("pinColorOnlyUnlitBasicMaterialDepthPacking / pinColorOnlyVisualMaterialDep
   assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(indirectIsNull(colorMesh.geometry), false, "depthPacking pin does not clear leftover indirect");
+});
+
+function materialIndex0AttributeNameAbsent(material) {
+  return material?.index0AttributeName === undefined && Object.hasOwn(material, "index0AttributeName") === false;
+}
+
+function countVisualMaterialIndex0AttributeName(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (materialIndex0AttributeNameAbsent(mat)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+function index0ProgramParameters(material) {
+  const index0AttributeName = material.index0AttributeName;
+  const cacheKeyParts = [];
+  const bindsAttrib0 = index0AttributeName !== undefined;
+  return {
+    index0AttributeName,
+    cacheKey: cacheKeyParts.join(),
+    bindsAttrib0,
+    bindName: bindsAttrib0 ? index0AttributeName : undefined,
+    defineLine: "",
+  };
+}
+
+test("r170 MeshBasic leaves index0AttributeName absent; a leftover string or empty string binds attribute 0 without a distinct program cache key", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const freshMaterial = new THREE.Material();
+  const freshBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(freshMaterial.index0AttributeName, undefined, "Material constructor does not assign index0AttributeName");
+  assert.equal(Object.hasOwn(freshMaterial, "index0AttributeName"), false, "Material index0AttributeName is not an own property");
+  assert.equal(freshBasic.index0AttributeName, undefined, "MeshBasicMaterial constructor does not assign index0AttributeName");
+  assert.equal(Object.hasOwn(freshBasic, "index0AttributeName"), false, "MeshBasic index0AttributeName is not an own property");
+  assert.equal(Object.hasOwn(freshBasic, "depthPacking"), false, "MeshBasic depthPacking stays unassigned");
+  const absentParams = index0ProgramParameters(freshBasic);
+  assert.equal(absentParams.bindsAttrib0, false, "absent index0AttributeName does not bind attribute 0");
+  assert.equal(absentParams.bindName, undefined, "absent index0AttributeName has no bind name");
+  assert.equal(absentParams.defineLine, "", "WebGLProgram emits no index0AttributeName define");
+  assert.equal(absentParams.cacheKey, "", "r170 cache key does not push index0AttributeName");
+
+  const shader = new THREE.ShaderMaterial();
+  assert.equal(shader.index0AttributeName, undefined, "ShaderMaterial assigns undefined");
+  assert.equal(Object.hasOwn(shader, "index0AttributeName"), true, "ShaderMaterial index0AttributeName is an own property");
+  assert.equal(index0ProgramParameters(shader).bindsAttrib0, false, "own undefined does not bind attribute 0");
+  const copiedShader = new THREE.ShaderMaterial().copy(shader);
+  assert.equal(Object.hasOwn(copiedShader, "index0AttributeName"), true, "ShaderMaterial constructor still owns index0AttributeName after copy");
+  assert.equal(copiedShader.index0AttributeName, undefined, "ShaderMaterial.copy does not copy a string over the constructor undefined");
+
+  const named = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  named.index0AttributeName = "position";
+  const namedParams = index0ProgramParameters(named);
+  assert.equal(namedParams.bindsAttrib0, true, "leftover position string binds attribute 0");
+  assert.equal(namedParams.bindName, "position");
+  assert.equal(namedParams.cacheKey, absentParams.cacheKey, "leftover position shares the absent-material cache key");
+  assert.notEqual(namedParams.bindsAttrib0, absentParams.bindsAttrib0, "leftover position forks attribute-0 binding against the same cache key");
+
+  const colorName = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  colorName.index0AttributeName = "color";
+  const colorParams = index0ProgramParameters(colorName);
+  assert.equal(colorParams.bindName, "color", "leftover color string is the bind name");
+  assert.equal(colorParams.cacheKey, absentParams.cacheKey, "leftover color shares the absent-material cache key");
+  assert.notEqual(colorParams.bindName, namedParams.bindName, "position and color request different attribute-0 names");
+  assert.equal(colorParams.cacheKey, namedParams.cacheKey, "different leftover strings still share one cache key");
+
+  const empty = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  empty.index0AttributeName = "";
+  const emptyParams = index0ProgramParameters(empty);
+  assert.equal(emptyParams.bindsAttrib0, true, "empty string is not undefined, so it still binds attribute 0");
+  assert.equal(emptyParams.bindName, "", "empty string is the bind name");
+  assert.equal(emptyParams.cacheKey, absentParams.cacheKey, "empty string shares the absent-material cache key");
+  assert.notEqual(emptyParams.bindsAttrib0, absentParams.bindsAttrib0, "empty string forks attribute-0 binding against the same cache key");
+
+  const nulled = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  nulled.index0AttributeName = null;
+  assert.equal(index0ProgramParameters(nulled).bindsAttrib0, true, "null would bind attribute 0; do not assign null");
+  const ownUndef = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  ownUndef.index0AttributeName = undefined;
+  assert.equal(Object.hasOwn(ownUndef, "index0AttributeName"), true, "assigning undefined stores an own property");
+  assert.equal(index0ProgramParameters(ownUndef).bindsAttrib0, false, "own undefined skips the bind but is not constructor absence");
+
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const material = readFileSync(require.resolve("three/src/materials/Material.js"), "utf8");
+  const meshBasic = readFileSync(require.resolve("three/src/materials/MeshBasicMaterial.js"), "utf8");
+  const shaderSource = readFileSync(require.resolve("three/src/materials/ShaderMaterial.js"), "utf8");
+  assert.equal(material.includes("index0AttributeName"), false, "Material.js does not mention index0AttributeName");
+  assert.equal(meshBasic.includes("index0AttributeName"), false, "MeshBasicMaterial.js does not mention index0AttributeName");
+  assert.match(shaderSource, /this\.index0AttributeName = undefined;/);
+  assert.equal(shaderSource.includes("this.index0AttributeName = source.index0AttributeName"), false, "ShaderMaterial.copy does not copy index0AttributeName");
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.match(programs, /index0AttributeName: material\.index0AttributeName,/);
+  assert.equal(programs.includes("array.push( parameters.index0AttributeName )"), false, "getProgramCacheKey does not push index0AttributeName");
+  assert.equal(programs.includes("parameters.index0AttributeName"), false, "WebGLPrograms.js copies material.index0AttributeName and does not read parameters.index0AttributeName");
+  const program = readFileSync(require.resolve("three/src/renderers/webgl/WebGLProgram.js"), "utf8");
+  assert.match(program, /if \( parameters\.index0AttributeName !== undefined \) \{\s+gl\.bindAttribLocation\( program, 0, parameters\.index0AttributeName \);/s);
+  assert.equal(program.includes("#define"), true, "WebGLProgram emits other defines");
+  assert.equal(program.includes("INDEX0"), false, "WebGLProgram emits no INDEX0 define for index0AttributeName");
+});
+
+test("v1.13.0 clears leftover Material index0AttributeName on packed color-only MeshBasics; envelope stays v1.12.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.13\.0 pins leftover Material index0AttributeName/);
+  assert.match(crate.userData.l2.note, /index0AttributeName-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.12\.0 pins leftover Material depthPacking/);
+  assert.match(crate.userData.l2.note, /depthPacking-absent 3/);
+  assert.match(crate.userData.l2.note, /extensions-absent 3/);
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(materialIndex0AttributeNameAbsent(wood), true, "wood index0AttributeName is absent");
+  assert.equal(materialIndex0AttributeNameAbsent(brass), true, "brass index0AttributeName is absent");
+  assert.equal(materialIndex0AttributeNameAbsent(steel), true, "steel index0AttributeName is absent");
+  assert.equal(materialDepthPackingAbsent(wood), true, "wood depthPacking stays absent");
+  assert.equal(materialExtensionsAbsent(wood), true, "wood extensions stay absent");
+  assert.equal(wood.isMeshBasicMaterial, true, "wood stays MeshBasic");
+  assert.equal(brass.isMeshBasicMaterial, true, "brass stays MeshBasic");
+  assert.equal(steel.isMeshBasicMaterial, true, "steel stays MeshBasic");
+  assert.equal(wood.version, 0, "wood material.version stays 0");
+  assert.equal(brass.name, "", "brass material.name stays empty");
+  assert.equal(materialUserDataEmpty(steel), true, "steel material.userData stays empty");
+
+  const index0 = countVisualMaterialIndex0AttributeName(crate);
+  assert.equal(index0.absent, 3, "index0AttributeName-absent count is 3");
+  assert.equal(index0.leftover, 0);
+  assert.equal(index0.total, 3);
+  assert.equal(countVisualMaterialDepthPacking(crate).absent, 3, "depthPacking-absent stays 3");
+  assert.equal(countVisualMaterialExtensions(crate).absent, 3, "extensions-absent stays 3");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13");
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3");
+  assert.equal(countVisualMaterialName(crate).empty, 3, "material-name-empty stays 3");
+  assert.equal(countVisualMaterialUserData(crate).empty, 3, "material-userData-empty stays 3");
+  assert.equal(countVisualGeometryUserData(crate).empty, 13, "geometry-userData-empty stays 13");
+  assert.equal(countVisualGeometryName(crate).empty, 13, "geometry-name-empty stays 13");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10");
+  assert.equal(countVisualMeshName(crate).reserved, 3, "three reserved visual names stay");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(materialIndex0AttributeNameAbsent(mesh.material), true, "packed visual index0AttributeName stays absent");
+    assert.equal(materialDepthPackingAbsent(mesh.material), true, "packed visual depthPacking stays absent");
+    assert.equal(indirectIsNull(mesh.geometry), true, "indirect stays null");
+    assert.equal(mesh.material.version, 0, "material.version stays 0");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+    assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  }
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lid = crate.getObjectByName("lidMesh");
+  const latch = crate.getObjectByName("latchMesh");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.equal(materialIndex0AttributeNameAbsent(fastener.material), true, "fastener shares the pinned brass material");
+  assert.equal(fastener.material, brass, "fastener still shares brass");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(lid.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latch.name, "latchMesh", "latchMesh name stays");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const rootBag = crate.userData;
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(countVisualMaterialIndex0AttributeName(crate).absent, 3, "index0AttributeName-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialDepthPacking(crate).absent, 3, "depthPacking-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialExtensions(crate).absent, 3, "extensions-absent stays 3 after L4/L5");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13 after L4/L5");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.equal(fastener.name, "fastenerMesh", "L5 keeps fastenerMesh");
+  assert.equal(lid.name, "lidMesh", "L4 keeps lidMesh");
+  assert.equal(latch.name, "latchMesh", "L4 keeps latchMesh");
+  assert.deepEqual(getToolboxLodStats(crate)[0], stats[0], "L4/L5 does not change the LOD0 envelope");
+});
+
+test("pinColorOnlyUnlitBasicMaterialIndex0AttributeName deletes leftover index0AttributeName and leaves an already-absent index0AttributeName alone", () => {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  mat.version = 4;
+  mat.name = "woodStandIn";
+  mat.fog = false;
+  mat.toneMapped = false;
+  mat.flatShading = false;
+  mat.defines = { KEEP: "1" };
+  const matBag = mat.userData;
+  const extensions = { multiDraw: true };
+  mat.extensions = extensions;
+  mat.depthPacking = THREE.BasicDepthPacking;
+  mat.index0AttributeName = "position";
+  assert.equal(Object.hasOwn(mat, "index0AttributeName"), true, "fixture stores an own index0AttributeName string");
+  assert.equal(mat.index0AttributeName, "position");
+  const geo = groupsTestGeometry();
+  const leftoverIndirect = { label: "stay-indirect" };
+  geo.setIndirect(leftoverIndirect);
+  const position = geo.getAttribute("position");
+  const index = geo.index;
+  const positionArray = position.array;
+  function rogue() {}
+  position.onUpload(rogue);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = "lidMesh";
+  mesh.matrixAutoUpdate = true;
+  mesh.matrixWorldNeedsUpdate = false;
+  mesh.matrixWorldAutoUpdate = true;
+  mesh.frustumCulled = true;
+  mesh.visible = true;
+  const bag = mesh.userData;
+  const returned = pinColorOnlyUnlitBasicMaterialIndex0AttributeName(mesh);
+  assert.equal(returned, mesh, "pin returns the same mesh");
+  assert.equal(mesh.material, mat, "pin does not replace the material");
+  assert.equal(mat.isMeshBasicMaterial, true, "pin does not replace MeshBasic");
+  assert.equal(materialIndex0AttributeNameAbsent(mat), true, "leftover position own property is deleted");
+  assert.equal(mat.index0AttributeName, undefined, "pin does not assign null, undefined, or an empty string");
+  assert.equal(mat.depthPacking, THREE.BasicDepthPacking, "index0AttributeName pin does not touch depthPacking");
+  assert.equal(mat.extensions, extensions, "index0AttributeName pin does not touch extensions");
+  assert.equal(geo.getIndirect(), leftoverIndirect, "index0AttributeName pin does not touch indirect");
+  assert.equal(geo.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(geo.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not null position.array");
+  assert.equal(position.onUploadCallback, rogue, "pin does not touch position onUpload");
+  assert.equal(mesh.name, "lidMesh", "reserved lidMesh name stays");
+  assert.equal(mesh.userData, bag, "mesh.userData stays");
+  assert.equal(mesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+  assert.equal(mesh.matrixAutoUpdate, true, "matrixAutoUpdate stays live");
+  assert.equal(mesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+  assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  assert.equal(mesh.visible, true, "mesh.visible stays true");
+  assert.equal(mat.version, 4, "pin does not touch material.version");
+  assert.equal(mat.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(mat.userData, matBag, "pin does not replace material.userData");
+  assert.equal(mat.fog, false, "pin does not touch fog");
+  assert.equal(mat.toneMapped, false, "pin does not touch toneMapped");
+  assert.equal(mat.flatShading, false, "pin does not touch flatShading");
+  assert.deepEqual(mat.defines, { KEEP: "1" }, "pin does not touch defines");
+
+  const colorName = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  colorName.index0AttributeName = "color";
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(new THREE.Mesh(groupsTestGeometry(), colorName));
+  assert.equal(materialIndex0AttributeNameAbsent(colorName), true, "color leftover is deleted");
+
+  const empty = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  empty.index0AttributeName = "";
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(new THREE.Mesh(groupsTestGeometry(), empty));
+  assert.equal(materialIndex0AttributeNameAbsent(empty), true, "empty-string leftover is deleted");
+  assert.equal(empty.index0AttributeName, undefined, "empty string is not left assigned");
+
+  const ownUndef = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  ownUndef.index0AttributeName = undefined;
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(new THREE.Mesh(groupsTestGeometry(), ownUndef));
+  assert.equal(materialIndex0AttributeNameAbsent(ownUndef), true, "own undefined is deleted back to constructor absence");
+
+  const absent = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(materialIndex0AttributeNameAbsent(absent), true, "fresh MeshBasic index0AttributeName is already absent");
+  const absentMesh = new THREE.Mesh(groupsTestGeometry(), absent);
+  absentMesh.name = "fastenerMesh";
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(absentMesh);
+  assert.equal(materialIndex0AttributeNameAbsent(absent), true, "already-absent index0AttributeName stays absent");
+  assert.equal(absent.index0AttributeName, undefined, "already-absent pin does not assign null or an empty string");
+  assert.equal(absentMesh.name, "fastenerMesh", "reserved fastenerMesh name stays");
+
+  const bleed = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  bleed.index0AttributeName = "position";
+  pinColorOnlyUnlitBasicMaterialDepthPacking(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.index0AttributeName, "position", "depthPacking pin does not delete index0AttributeName");
+  pinColorOnlyUnlitBasicMaterialExtensions(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.index0AttributeName, "position", "extensions pin does not delete index0AttributeName");
+  pinColorOnlyUnlitBasicIndirect(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.index0AttributeName, "position", "indirect pin does not delete index0AttributeName");
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(materialIndex0AttributeNameAbsent(bleed), true, "position bleed on MeshBasic is deleted");
+
+  const shared = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  shared.index0AttributeName = "position";
+  const first = new THREE.Mesh(groupsTestGeometry(), shared);
+  const second = new THREE.Mesh(groupsTestGeometry(), shared);
+  const sharedRoot = new THREE.Group();
+  const rootBag = sharedRoot.userData;
+  sharedRoot.add(first, second);
+  pinColorOnlyVisualMaterialIndex0AttributeName(sharedRoot);
+  assert.equal(first.material, shared, "first mesh keeps the shared material");
+  assert.equal(second.material, shared, "second mesh keeps the shared material");
+  assert.equal(materialIndex0AttributeNameAbsent(shared), true, "shared material index0AttributeName is deleted once");
+  assert.equal(sharedRoot.userData, rootBag, "entity helper does not replace entity userData");
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(second);
+  assert.equal(materialIndex0AttributeNameAbsent(shared), true, "a second sight of an already-absent shared material does not assign");
+  assert.equal(shared.isMeshBasicMaterial, true, "shared material stays MeshBasic");
+});
+
+test("pinColorOnlyUnlitBasicMaterialIndex0AttributeName / pinColorOnlyVisualMaterialIndex0AttributeName skip mapped, lit, interleaved, colliders, and shared blocked", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  colorMat.index0AttributeName = "position";
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  colorOnly.name = "lidMesh";
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(colorOnly);
+  assert.equal(materialIndex0AttributeNameAbsent(colorOnly.material), true, "color-only leftover index0AttributeName is deleted");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin keeps lidMesh");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  mappedMat.index0AttributeName = "uv";
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(mapped);
+  assert.equal(mapped.material.index0AttributeName, "uv", "mapped MeshBasic keeps authored index0AttributeName");
+
+  const std = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  std.material.index0AttributeName = "position";
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(std);
+  assert.equal(std.material.index0AttributeName, "position", "MeshStandard keeps authored index0AttributeName");
+
+  const shader = new THREE.ShaderMaterial();
+  const shaderOwn = shader.index0AttributeName;
+  assert.equal(Object.hasOwn(shader, "index0AttributeName"), true, "ShaderMaterial starts with an own index0AttributeName");
+  shader.index0AttributeName = "position";
+  const shaderMesh = new THREE.Mesh(groupsTestGeometry(), shader);
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(shaderMesh);
+  assert.equal(shader.index0AttributeName, "position", "ShaderMaterial keeps authored index0AttributeName");
+  assert.equal(Object.hasOwn(shader, "index0AttributeName"), true, "ShaderMaterial own property stays");
+  assert.notEqual(shader.index0AttributeName, shaderOwn, "fixture overwrote the constructor undefined");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  interleavedMat.index0AttributeName = "";
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(interleaved);
+  assert.equal(interleavedMat.index0AttributeName, "", "interleaved index0AttributeName stays authored");
+  assert.equal(Object.hasOwn(interleavedMat, "index0AttributeName"), true, "interleaved empty string stays an own property");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.material.index0AttributeName = "position";
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(collider);
+  assert.equal(collider.material.index0AttributeName, "position", "collider index0AttributeName stays");
+  assert.equal(Object.hasOwn(collider.material, "index0AttributeName"), true, "collider own index0AttributeName stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorMesh.name = "dccLatch";
+  colorMesh.material.version = 9;
+  colorMesh.material.index0AttributeName = "color";
+  colorMesh.material.depthPacking = THREE.BasicDepthPacking;
+  colorMesh.material.extensions = { clipCullDistance: true };
+  const colorIndirect = { label: "entity-indirect" };
+  colorMesh.geometry.setIndirect(colorIndirect);
+  colorMesh.matrixWorldNeedsUpdate = false;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.index0AttributeName = "position";
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  sharedGeoMat.index0AttributeName = "";
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.userData.fastener = true;
+  root.add(tool, colorMesh, mapped, mappedMesh, std, shaderMesh, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualMaterialIndex0AttributeName(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(materialIndex0AttributeNameAbsent(colorMesh.material), true, "entity helper deletes color-only index0AttributeName");
+  assert.equal(colorMesh.material.depthPacking, THREE.BasicDepthPacking, "entity helper does not touch depthPacking");
+  assert.equal(colorMesh.material.extensions.clipCullDistance, true, "entity helper does not touch extensions");
+  assert.equal(colorMesh.geometry.getIndirect(), colorIndirect, "entity helper does not touch indirect");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.material.index0AttributeName, "uv", "mapped index0AttributeName stays via entity helper");
+  assert.equal(std.material.index0AttributeName, "position", "MeshStandard index0AttributeName stays via entity helper");
+  assert.equal(shader.index0AttributeName, "position", "ShaderMaterial index0AttributeName stays via entity helper");
+  assert.equal(interleaved.material.index0AttributeName, "", "interleaved index0AttributeName stays via entity helper");
+  assert.equal(collider.material.index0AttributeName, "position", "collider index0AttributeName stays via entity helper");
+  assert.equal(sharedVisual.material.index0AttributeName, "position", "shared collider material keeps authored index0AttributeName");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.material.index0AttributeName, "", "geometry shared with a mapped mesh keeps index0AttributeName");
+  assert.equal(Object.hasOwn(sharedGeoMat, "index0AttributeName"), true, "shared-geometry empty string stays an own property");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(indirectIsNull(colorMesh.geometry), false, "index0AttributeName pin does not clear leftover indirect");
 });
