@@ -137,6 +137,8 @@ const {
   pinColorOnlyVisualMaterialUniformsGroups,
   pinColorOnlyUnlitBasicMaterialVertexShader,
   pinColorOnlyVisualMaterialVertexShader,
+  pinColorOnlyUnlitBasicMaterialFragmentShader,
+  pinColorOnlyVisualMaterialFragmentShader,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -24286,4 +24288,556 @@ test("pinColorOnlyUnlitBasicMaterialVertexShader / pinColorOnlyVisualMaterialVer
   assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(indirectIsNull(colorMesh.geometry), false, "vertexShader pin does not clear leftover indirect");
+});
+
+function materialFragmentShaderAbsent(material) {
+  return material?.fragmentShader === undefined && Object.hasOwn(material, "fragmentShader") === false;
+}
+
+function countVisualMaterialFragmentShader(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (materialFragmentShaderAbsent(mat)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+/** r170 WebGLPrograms.getParameters: builtin materials use ShaderLib, not material.fragmentShader. */
+function resolvedProgramFragmentShader(material) {
+  const shaderID = R170_SHADER_IDS[material.type];
+  if (shaderID) {
+    return {
+      shaderID,
+      source: "shaderlib",
+      fragmentShader: THREE.ShaderLib[shaderID].fragmentShader,
+    };
+  }
+  return {
+    shaderID: undefined,
+    source: "material",
+    fragmentShader: material.fragmentShader,
+  };
+}
+
+test("r170 MeshBasic leaves fragmentShader absent; a leftover string does not invent a custom shader path", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const freshMaterial = new THREE.Material();
+  const freshBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(freshMaterial.fragmentShader, undefined, "Material constructor does not assign fragmentShader");
+  assert.equal(Object.hasOwn(freshMaterial, "fragmentShader"), false, "Material fragmentShader is not an own property");
+  assert.equal(freshBasic.fragmentShader, undefined, "MeshBasicMaterial constructor does not assign fragmentShader");
+  assert.equal(Object.hasOwn(freshBasic, "fragmentShader"), false, "MeshBasic fragmentShader is not an own property");
+  const absentProgram = resolvedProgramFragmentShader(freshBasic);
+  assert.equal(absentProgram.shaderID, "basic", "MeshBasic still resolves shaderID basic");
+  assert.equal(absentProgram.source, "shaderlib", "MeshBasic fragment shader comes from ShaderLib");
+  assert.match(absentProgram.fragmentShader, /#include <common>/, "ShaderLib basic fragment shader is the chunk includes");
+  const absentUpload = resolvedUploadUniforms(freshBasic);
+  assert.equal(absentUpload.shaderID, "basic", "MeshBasic still resolves shaderID basic for uniforms");
+  assert.equal(absentUpload.usesMaterialUniforms, false, "MeshBasic still clones ShaderLib uniforms");
+
+  const shader = new THREE.ShaderMaterial();
+  assert.equal(Object.hasOwn(shader, "fragmentShader"), true, "ShaderMaterial fragmentShader is an own property");
+  assert.match(shader.fragmentShader, /gl_FragColor/, "ShaderMaterial assigns this.fragmentShader = default_fragment");
+  assert.notEqual(shader.fragmentShader, absentProgram.fragmentShader, "default_fragment is not ShaderLib basic");
+  assert.equal(resolvedProgramFragmentShader(shader).source, "material", "ShaderMaterial uses material.fragmentShader");
+  assert.equal(resolvedProgramFragmentShader(shader).shaderID, undefined, "ShaderMaterial is not in shaderIDs");
+  const authoredShader = "void main(){ gl_FragColor = vec4(1.0); }";
+  shader.fragmentShader = authoredShader;
+  const copiedShader = new THREE.ShaderMaterial().copy(shader);
+  assert.equal(copiedShader.fragmentShader, authoredShader, "ShaderMaterial.copy assigns source.fragmentShader");
+  assert.equal(copiedShader.fragmentShader, shader.fragmentShader, "copy keeps the source string, not a rewritten stub");
+
+  const raw = new THREE.RawShaderMaterial();
+  const freshShader = new THREE.ShaderMaterial();
+  assert.equal(raw.fragmentShader, freshShader.fragmentShader, "RawShaderMaterial keeps the ShaderMaterial constructor string");
+  assert.equal(Object.hasOwn(raw, "fragmentShader"), true, "RawShaderMaterial fragmentShader is an own property");
+  assert.equal(raw.isRawShaderMaterial, true, "RawShaderMaterial flag stays");
+  assert.equal(resolvedProgramFragmentShader(raw).source, "material", "RawShaderMaterial uses material.fragmentShader");
+
+  const copiedBasic = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  const bleedSource = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  bleedSource.fragmentShader = "void main(){}";
+  copiedBasic.copy(bleedSource);
+  assert.equal(materialFragmentShaderAbsent(copiedBasic), true, "MeshBasicMaterial.copy does not copy fragmentShader");
+  assert.equal(bleedSource.fragmentShader, "void main(){}", "copy source string stays on the source");
+
+  const leftover = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  leftover.fragmentShader = authoredShader;
+  assert.equal(Object.hasOwn(leftover, "fragmentShader"), true, "assigning a string stores an own property");
+  assert.equal(leftover.fragmentShader, authoredShader, "leftover string is not constructor absence");
+  const leftoverProgram = resolvedProgramFragmentShader(leftover);
+  assert.equal(leftoverProgram.shaderID, "basic", "leftover string still resolves shaderID basic");
+  assert.equal(leftoverProgram.source, "shaderlib", "leftover string does not switch to material.fragmentShader");
+  assert.notEqual(leftoverProgram.fragmentShader, leftover.fragmentShader, "compiled basic shader is not the leftover string");
+  assert.equal(leftover.isShaderMaterial, undefined, "leftover string does not set isShaderMaterial");
+
+  const emptyStr = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  emptyStr.fragmentShader = "";
+  assert.equal(Object.hasOwn(emptyStr, "fragmentShader"), true, "assigning '' stores an own property");
+  assert.equal(emptyStr.fragmentShader, "", "'' is not constructor absence");
+
+  const nulled = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  nulled.fragmentShader = null;
+  assert.equal(Object.hasOwn(nulled, "fragmentShader"), true, "assigning null stores an own property");
+  assert.equal(nulled.fragmentShader, null, "null is not constructor absence");
+
+  const ownUndef = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  ownUndef.fragmentShader = undefined;
+  assert.equal(Object.hasOwn(ownUndef, "fragmentShader"), true, "assigning undefined stores an own property");
+  assert.equal(ownUndef.fragmentShader, undefined, "own undefined is not constructor absence");
+
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const material = readFileSync(require.resolve("three/src/materials/Material.js"), "utf8");
+  const meshBasic = readFileSync(require.resolve("three/src/materials/MeshBasicMaterial.js"), "utf8");
+  const shaderSource = readFileSync(require.resolve("three/src/materials/ShaderMaterial.js"), "utf8");
+  const rawSource = readFileSync(require.resolve("three/src/materials/RawShaderMaterial.js"), "utf8");
+  const loader = readFileSync(require.resolve("three/src/loaders/MaterialLoader.js"), "utf8");
+  assert.equal(material.includes("fragmentShader"), false, "Material.js does not mention fragmentShader");
+  assert.equal(meshBasic.includes("fragmentShader"), false, "MeshBasicMaterial.js does not mention fragmentShader");
+  assert.match(shaderSource, /this\.fragmentShader = default_fragment;/);
+  assert.match(shaderSource, /this\.fragmentShader = source\.fragmentShader;/);
+  assert.match(shaderSource, /data\.fragmentShader = this\.fragmentShader;/);
+  assert.match(rawSource, /class RawShaderMaterial extends ShaderMaterial/);
+  assert.equal(rawSource.includes("fragmentShader"), false, "RawShaderMaterial does not assign its own fragmentShader");
+  assert.match(loader, /if \( json\.fragmentShader !== undefined \) material\.fragmentShader = json\.fragmentShader;/);
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.match(programs, /const shaderID = shaderIDs\[ material\.type \];/);
+  assert.match(programs, /fragmentShader = shader\.fragmentShader;/);
+  assert.match(programs, /fragmentShader = material\.fragmentShader;/);
+  assert.match(programs, /_customShaders\.update\( material \);/);
+  assert.match(programs, /array\.push\( parameters\.shaderID \);/);
+  assert.match(programs, /array\.push\( parameters\.customFragmentShaderID \);/);
+  assert.match(programs, /MeshBasicMaterial: 'basic'/);
+  const cache = readFileSync(require.resolve("three/src/renderers/webgl/WebGLShaderCache.js"), "utf8");
+  assert.match(cache, /const fragmentShader = material\.fragmentShader;/);
+  const program = readFileSync(require.resolve("three/src/renderers/webgl/WebGLProgram.js"), "utf8");
+  assert.match(program, /let fragmentShader = parameters\.fragmentShader;/);
+});
+
+test("v1.19.0 clears leftover Material fragmentShader on packed color-only MeshBasics; envelope stays v1.18.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.19\.0 pins leftover Material fragmentShader/);
+  assert.match(crate.userData.l2.note, /fragmentShader-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.18\.0 pins leftover Material vertexShader/);
+  assert.match(crate.userData.l2.note, /vertexShader-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.17\.0 pins leftover Material uniformsGroups/);
+  assert.match(crate.userData.l2.note, /uniformsGroups-absent 3/);
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(materialFragmentShaderAbsent(wood), true, "wood fragmentShader is absent");
+  assert.equal(materialFragmentShaderAbsent(brass), true, "brass fragmentShader is absent");
+  assert.equal(materialFragmentShaderAbsent(steel), true, "steel fragmentShader is absent");
+  assert.equal(materialVertexShaderAbsent(wood), true, "wood vertexShader stays absent");
+  assert.equal(materialVertexShaderAbsent(brass), true, "brass vertexShader stays absent");
+  assert.equal(materialVertexShaderAbsent(steel), true, "steel vertexShader stays absent");
+  assert.equal(materialUniformsGroupsAbsent(wood), true, "wood uniformsGroups stays absent");
+  assert.equal(materialUniformsNeedUpdateAbsent(wood), true, "wood uniformsNeedUpdate stays absent");
+  assert.equal(materialUniformsAbsent(wood), true, "wood uniforms stays absent");
+  assert.equal(materialDefaultAttributeValuesAbsent(wood), true, "wood defaultAttributeValues stays absent");
+  assert.equal(materialIndex0AttributeNameAbsent(wood), true, "wood index0AttributeName stays absent");
+  assert.equal(materialDepthPackingAbsent(wood), true, "wood depthPacking stays absent");
+  assert.equal(materialExtensionsAbsent(wood), true, "wood extensions stay absent");
+  assert.equal(wood.isMeshBasicMaterial, true, "wood stays MeshBasic");
+  assert.equal(brass.isMeshBasicMaterial, true, "brass stays MeshBasic");
+  assert.equal(steel.isMeshBasicMaterial, true, "steel stays MeshBasic");
+  assert.equal(wood.isShaderMaterial, undefined, "wood is not converted to ShaderMaterial");
+  assert.equal(wood.version, 0, "wood material.version stays 0");
+  assert.equal(brass.name, "", "brass material.name stays empty");
+  assert.equal(materialUserDataEmpty(steel), true, "steel material.userData stays empty");
+
+  const flags = countVisualMaterialFragmentShader(crate);
+  assert.equal(flags.absent, 3, "fragmentShader-absent count is 3");
+  assert.equal(countVisualMaterialVertexShader(crate).absent, 3, "vertexShader-absent stays 3");
+  assert.equal(flags.leftover, 0);
+  assert.equal(flags.total, 3);
+  assert.equal(countVisualMaterialUniformsGroups(crate).absent, 3, "uniformsGroups-absent stays 3");
+  assert.equal(countVisualMaterialUniformsNeedUpdate(crate).absent, 3, "uniformsNeedUpdate-absent stays 3");
+  assert.equal(countVisualMaterialUniforms(crate).absent, 3, "uniforms-absent stays 3");
+  assert.equal(countVisualMaterialDefaultAttributeValues(crate).absent, 3, "defaultAttributeValues-absent stays 3");
+  assert.equal(countVisualMaterialIndex0AttributeName(crate).absent, 3, "index0AttributeName-absent stays 3");
+  assert.equal(countVisualMaterialDepthPacking(crate).absent, 3, "depthPacking-absent stays 3");
+  assert.equal(countVisualMaterialExtensions(crate).absent, 3, "extensions-absent stays 3");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13");
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3");
+  assert.equal(countVisualMaterialName(crate).empty, 3, "material-name-empty stays 3");
+  assert.equal(countVisualMaterialUserData(crate).empty, 3, "material-userData-empty stays 3");
+  assert.equal(countVisualGeometryUserData(crate).empty, 13, "geometry-userData-empty stays 13");
+  assert.equal(countVisualGeometryName(crate).empty, 13, "geometry-name-empty stays 13");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10");
+  assert.equal(countVisualMeshName(crate).reserved, 3, "three reserved visual names stay");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(materialFragmentShaderAbsent(mesh.material), true, "packed visual fragmentShader stays absent");
+    assert.equal(materialVertexShaderAbsent(mesh.material), true, "packed visual vertexShader stays absent");
+    assert.equal(materialUniformsGroupsAbsent(mesh.material), true, "packed visual uniformsGroups stays absent");
+    assert.equal(indirectIsNull(mesh.geometry), true, "indirect stays null");
+    assert.equal(mesh.material.version, 0, "material.version stays 0");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+    assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  }
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lid = crate.getObjectByName("lidMesh");
+  const latch = crate.getObjectByName("latchMesh");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.equal(materialFragmentShaderAbsent(fastener.material), true, "fastener shares the pinned brass material");
+  assert.equal(fastener.material, brass, "fastener still shares brass");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(lid.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latch.name, "latchMesh", "latchMesh name stays");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const rootBag = crate.userData;
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(countVisualMaterialFragmentShader(crate).absent, 3, "fragmentShader-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialVertexShader(crate).absent, 3, "vertexShader-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialUniformsGroups(crate).absent, 3, "uniformsGroups-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialUniformsNeedUpdate(crate).absent, 3, "uniformsNeedUpdate-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialUniforms(crate).absent, 3, "uniforms-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialDefaultAttributeValues(crate).absent, 3, "defaultAttributeValues-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialIndex0AttributeName(crate).absent, 3, "index0AttributeName-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialDepthPacking(crate).absent, 3, "depthPacking-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialExtensions(crate).absent, 3, "extensions-absent stays 3 after L4/L5");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13 after L4/L5");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.equal(fastener.name, "fastenerMesh", "L5 keeps fastenerMesh");
+  assert.equal(lid.name, "lidMesh", "L4 keeps lidMesh");
+  assert.equal(latch.name, "latchMesh", "L4 keeps latchMesh");
+  assert.deepEqual(getToolboxLodStats(crate)[0], stats[0], "L4/L5 does not change the LOD0 envelope");
+});
+
+test("pinColorOnlyUnlitBasicMaterialFragmentShader deletes leftover fragmentShader and leaves an already-absent fragmentShader alone", () => {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  mat.version = 4;
+  mat.name = "woodStandIn";
+  mat.fog = false;
+  mat.toneMapped = false;
+  mat.flatShading = false;
+  mat.defines = { KEEP: "1" };
+  const matBag = mat.userData;
+  const extensions = { multiDraw: true };
+  mat.extensions = extensions;
+  mat.depthPacking = THREE.BasicDepthPacking;
+  mat.index0AttributeName = "position";
+  const authoredDefaults = shaderStyleDefaultAttributeValues();
+  mat.defaultAttributeValues = authoredDefaults;
+  const authoredUniforms = shaderStyleUniformMap();
+  mat.uniforms = authoredUniforms;
+  const authoredGroups = [shaderStyleUniformsGroup("stay-groups")];
+  mat.uniformsGroups = authoredGroups;
+  mat.uniformsNeedUpdate = true;
+  const authoredVertex = "void main(){ gl_FragColor = vec4(0.0); }";
+  mat.fragmentShader = authoredVertex;
+  mat.vertexShader = "void main(){gl_Position=vec4(1.0);}";
+  mat.lights = true;
+  mat.clipping = true;
+  mat.isShaderMaterial = true;
+  assert.equal(Object.hasOwn(mat, "fragmentShader"), true, "fixture stores an own fragmentShader");
+  assert.equal(mat.fragmentShader, authoredVertex);
+  const geo = groupsTestGeometry();
+  const leftoverIndirect = { label: "stay-indirect" };
+  geo.setIndirect(leftoverIndirect);
+  const position = geo.getAttribute("position");
+  const index = geo.index;
+  const positionArray = position.array;
+  function rogue() {}
+  position.onUpload(rogue);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = "lidMesh";
+  mesh.matrixAutoUpdate = true;
+  mesh.matrixWorldNeedsUpdate = false;
+  mesh.matrixWorldAutoUpdate = true;
+  mesh.frustumCulled = true;
+  mesh.visible = true;
+  const bag = mesh.userData;
+  const returned = pinColorOnlyUnlitBasicMaterialFragmentShader(mesh);
+  assert.equal(returned, mesh, "pin returns the same mesh");
+  assert.equal(mesh.material, mat, "pin does not replace the material");
+  assert.equal(mat.isMeshBasicMaterial, true, "pin does not replace MeshBasic");
+  assert.equal(materialFragmentShaderAbsent(mat), true, "leftover string is deleted");
+  assert.equal(mat.fragmentShader, undefined, "pin does not assign null, undefined, '', or a stub");
+  assert.equal(authoredVertex.includes("gl_FragColor"), true, "pin does not mutate the detached string");
+  assert.equal(mat.isShaderMaterial, true, "pin does not touch isShaderMaterial");
+  assert.equal(mat.vertexShader.includes("gl_Position"), true, "fragmentShader pin does not touch vertexShader");
+  assert.equal(mat.lights, true, "fragmentShader pin does not touch lights");
+  assert.equal(mat.clipping, true, "fragmentShader pin does not touch clipping");
+  assert.equal(mat.uniformsGroups, authoredGroups, "fragmentShader pin does not touch uniformsGroups");
+  assert.equal(mat.uniformsNeedUpdate, true, "fragmentShader pin does not touch uniformsNeedUpdate");
+  assert.equal(mat.uniforms, authoredUniforms, "fragmentShader pin does not touch uniforms");
+  assert.equal(authoredUniforms.diffuse.value.getHex(), 0x633318, "pin does not mutate the uniforms Color");
+  assert.equal(mat.defaultAttributeValues, authoredDefaults, "fragmentShader pin does not touch defaultAttributeValues");
+  assert.equal(mat.index0AttributeName, "position", "fragmentShader pin does not touch index0AttributeName");
+  assert.equal(mat.depthPacking, THREE.BasicDepthPacking, "fragmentShader pin does not touch depthPacking");
+  assert.equal(mat.extensions, extensions, "fragmentShader pin does not touch extensions");
+  assert.equal(geo.getIndirect(), leftoverIndirect, "fragmentShader pin does not touch indirect");
+  assert.equal(geo.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(geo.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not null position.array");
+  assert.equal(position.onUploadCallback, rogue, "pin does not touch position onUpload");
+  assert.equal(mesh.name, "lidMesh", "reserved lidMesh name stays");
+  assert.equal(mesh.userData, bag, "mesh.userData stays");
+  assert.equal(mesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+  assert.equal(mesh.matrixAutoUpdate, true, "matrixAutoUpdate stays live");
+  assert.equal(mesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+  assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  assert.equal(mesh.visible, true, "mesh.visible stays true");
+  assert.equal(mat.version, 4, "pin does not touch material.version");
+  assert.equal(mat.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(mat.userData, matBag, "pin does not replace material.userData");
+  assert.equal(mat.fog, false, "pin does not touch fog");
+  assert.equal(mat.toneMapped, false, "pin does not touch toneMapped");
+  assert.equal(mat.flatShading, false, "pin does not touch flatShading");
+  assert.deepEqual(mat.defines, { KEEP: "1" }, "pin does not touch defines");
+
+  const emptyStr = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  emptyStr.fragmentShader = "";
+  pinColorOnlyUnlitBasicMaterialFragmentShader(new THREE.Mesh(groupsTestGeometry(), emptyStr));
+  assert.equal(materialFragmentShaderAbsent(emptyStr), true, "own '' leftover is deleted");
+  assert.equal(emptyStr.fragmentShader, undefined, "'' is not left assigned");
+
+  const nulled = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  nulled.fragmentShader = null;
+  pinColorOnlyUnlitBasicMaterialFragmentShader(new THREE.Mesh(groupsTestGeometry(), nulled));
+  assert.equal(materialFragmentShaderAbsent(nulled), true, "own null is deleted back to constructor absence");
+
+  const ownUndef = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  ownUndef.fragmentShader = undefined;
+  pinColorOnlyUnlitBasicMaterialFragmentShader(new THREE.Mesh(groupsTestGeometry(), ownUndef));
+  assert.equal(materialFragmentShaderAbsent(ownUndef), true, "own undefined is deleted back to constructor absence");
+
+  const absent = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(materialFragmentShaderAbsent(absent), true, "fresh MeshBasic fragmentShader is already absent");
+  const absentMesh = new THREE.Mesh(groupsTestGeometry(), absent);
+  absentMesh.name = "fastenerMesh";
+  pinColorOnlyUnlitBasicMaterialFragmentShader(absentMesh);
+  assert.equal(materialFragmentShaderAbsent(absent), true, "already-absent fragmentShader stays absent");
+  assert.equal(absent.fragmentShader, undefined, "already-absent pin does not assign a stub");
+  assert.equal(absentMesh.name, "fastenerMesh", "reserved fastenerMesh name stays");
+
+  const bleed = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  bleed.fragmentShader = "void main(){ /* bleed */ }";
+  pinColorOnlyUnlitBasicMaterialUniformsGroups(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.fragmentShader.includes("bleed"), true, "uniformsGroups pin does not delete fragmentShader");
+  pinColorOnlyUnlitBasicMaterialVertexShader(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.fragmentShader.includes("bleed"), true, "vertexShader pin does not delete fragmentShader");
+  pinColorOnlyUnlitBasicMaterialUniformsNeedUpdate(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(Object.hasOwn(bleed, "fragmentShader"), true, "uniformsNeedUpdate pin does not delete fragmentShader");
+  pinColorOnlyUnlitBasicMaterialUniforms(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.fragmentShader.includes("bleed"), true, "uniforms pin does not delete fragmentShader");
+  pinColorOnlyUnlitBasicMaterialDefaultAttributeValues(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(Object.hasOwn(bleed, "fragmentShader"), true, "defaultAttributeValues pin does not delete fragmentShader");
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.fragmentShader.includes("bleed"), true, "index0AttributeName pin does not delete fragmentShader");
+  pinColorOnlyUnlitBasicMaterialDepthPacking(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(Object.hasOwn(bleed, "fragmentShader"), true, "depthPacking pin does not delete fragmentShader");
+  pinColorOnlyUnlitBasicMaterialExtensions(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.fragmentShader.includes("bleed"), true, "extensions pin does not delete fragmentShader");
+  pinColorOnlyUnlitBasicIndirect(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(Object.hasOwn(bleed, "fragmentShader"), true, "indirect pin does not delete fragmentShader");
+  bleed.uniformsGroups = [shaderStyleUniformsGroup("stay")];
+  pinColorOnlyUnlitBasicMaterialFragmentShader(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(materialFragmentShaderAbsent(bleed), true, "ShaderMaterial-style string bleed on MeshBasic is deleted");
+  assert.equal(bleed.uniformsGroups[0].name, "stay", "fragmentShader pin leaves uniformsGroups authored");
+
+  const shared = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  shared.fragmentShader = "";
+  const first = new THREE.Mesh(groupsTestGeometry(), shared);
+  const second = new THREE.Mesh(groupsTestGeometry(), shared);
+  const sharedRoot = new THREE.Group();
+  const rootBag = sharedRoot.userData;
+  sharedRoot.add(first, second);
+  pinColorOnlyVisualMaterialFragmentShader(sharedRoot);
+  assert.equal(first.material, shared, "first mesh keeps the shared material");
+  assert.equal(second.material, shared, "second mesh keeps the shared material");
+  assert.equal(materialFragmentShaderAbsent(shared), true, "shared material fragmentShader is deleted once");
+  assert.equal(sharedRoot.userData, rootBag, "entity helper does not replace entity userData");
+  pinColorOnlyUnlitBasicMaterialFragmentShader(second);
+  assert.equal(materialFragmentShaderAbsent(shared), true, "a second sight of an already-absent shared material does not assign");
+  assert.equal(shared.isMeshBasicMaterial, true, "shared material stays MeshBasic");
+});
+
+test("pinColorOnlyUnlitBasicMaterialFragmentShader / pinColorOnlyVisualMaterialFragmentShader skip mapped, lit, interleaved, colliders, and shared blocked", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const colorVertex = "void main(){ /* color */ }";
+  colorMat.fragmentShader = colorVertex;
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  colorOnly.name = "lidMesh";
+  pinColorOnlyUnlitBasicMaterialFragmentShader(colorOnly);
+  assert.equal(materialFragmentShaderAbsent(colorOnly.material), true, "color-only leftover fragmentShader is deleted");
+  assert.equal(colorVertex.includes("color"), true, "detached string stays");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin keeps lidMesh");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  const mappedVertex = "void main(){ /* mapped */ }";
+  mappedMat.fragmentShader = mappedVertex;
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  pinColorOnlyUnlitBasicMaterialFragmentShader(mapped);
+  assert.equal(mapped.material.fragmentShader, mappedVertex, "mapped MeshBasic keeps authored fragmentShader");
+
+  const std = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  const stdVertex = "void main(){ /* standard */ }";
+  std.material.fragmentShader = stdVertex;
+  pinColorOnlyUnlitBasicMaterialFragmentShader(std);
+  assert.equal(std.material.fragmentShader, stdVertex, "MeshStandard keeps authored fragmentShader");
+  assert.equal(Object.hasOwn(std.material, "fragmentShader"), true, "MeshStandard own property stays");
+
+  const shader = new THREE.ShaderMaterial();
+  const constructorVertex = shader.fragmentShader;
+  assert.match(constructorVertex, /gl_FragColor/, "ShaderMaterial starts at default_fragment");
+  assert.equal(Object.hasOwn(shader, "fragmentShader"), true, "ShaderMaterial starts with an own fragmentShader");
+  const shaderMesh = new THREE.Mesh(groupsTestGeometry(), shader);
+  pinColorOnlyUnlitBasicMaterialFragmentShader(shaderMesh);
+  assert.equal(shader.fragmentShader, constructorVertex, "ShaderMaterial keeps its constructor fragmentShader");
+  const authoredShader = "void main(){ /* shader */ }";
+  shader.fragmentShader = authoredShader;
+  pinColorOnlyUnlitBasicMaterialFragmentShader(shaderMesh);
+  assert.equal(shader.fragmentShader, authoredShader, "ShaderMaterial keeps an authored fragmentShader string");
+  assert.equal(shader.isShaderMaterial, true, "ShaderMaterial isShaderMaterial stays");
+
+  const raw = new THREE.RawShaderMaterial();
+  const rawConstructor = raw.fragmentShader;
+  const rawMesh = new THREE.Mesh(groupsTestGeometry(), raw);
+  pinColorOnlyUnlitBasicMaterialFragmentShader(rawMesh);
+  assert.equal(raw.fragmentShader, rawConstructor, "RawShaderMaterial keeps its constructor fragmentShader");
+  const authoredRaw = "void main(){ /* raw */ }";
+  raw.fragmentShader = authoredRaw;
+  pinColorOnlyUnlitBasicMaterialFragmentShader(rawMesh);
+  assert.equal(raw.fragmentShader, authoredRaw, "RawShaderMaterial keeps an authored fragmentShader string");
+  assert.equal(raw.isRawShaderMaterial, true, "RawShaderMaterial flag stays");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  const interleavedVertex = "";
+  interleavedMat.fragmentShader = interleavedVertex;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicMaterialFragmentShader(interleaved);
+  assert.equal(interleavedMat.fragmentShader, interleavedVertex, "interleaved fragmentShader stays authored");
+  assert.equal(Object.hasOwn(interleavedMat, "fragmentShader"), true, "interleaved '' stays an own property");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  const colliderVertex = "void main(){ /* collider */ }";
+  collider.material.fragmentShader = colliderVertex;
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicMaterialFragmentShader(collider);
+  assert.equal(collider.material.fragmentShader, colliderVertex, "collider fragmentShader stays");
+  assert.equal(Object.hasOwn(collider.material, "fragmentShader"), true, "collider own fragmentShader stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorMesh.name = "dccLatch";
+  colorMesh.material.version = 9;
+  colorMesh.material.fragmentShader = "void main(){ /* entity */ }";
+  colorMesh.material.vertexShader = "void main(){gl_Position=vec4(1.0);}";
+  colorMesh.material.lights = true;
+  colorMesh.material.clipping = true;
+  colorMesh.material.uniformsGroups = [shaderStyleUniformsGroup("entity")];
+  colorMesh.material.uniformsNeedUpdate = true;
+  colorMesh.material.uniforms = shaderStyleUniformMap();
+  colorMesh.material.defaultAttributeValues = shaderStyleDefaultAttributeValues();
+  colorMesh.material.index0AttributeName = "color";
+  colorMesh.material.depthPacking = THREE.BasicDepthPacking;
+  colorMesh.material.extensions = { clipCullDistance: true };
+  const colorIndirect = { label: "entity-indirect" };
+  colorMesh.geometry.setIndirect(colorIndirect);
+  colorMesh.matrixWorldNeedsUpdate = false;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  const sharedBlockedVertex = "";
+  sharedBlocked.fragmentShader = sharedBlockedVertex;
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  const sharedGeoVertex = "void main(){ /* shared-geo */ }";
+  sharedGeoMat.fragmentShader = sharedGeoVertex;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.userData.fastener = true;
+  root.add(tool, colorMesh, mapped, mappedMesh, std, shaderMesh, rawMesh, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualMaterialFragmentShader(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(materialFragmentShaderAbsent(colorMesh.material), true, "entity helper deletes color-only fragmentShader");
+  assert.match(colorMesh.material.vertexShader, /gl_Position/, "entity helper does not touch vertexShader");
+  assert.equal(colorMesh.material.lights, true, "entity helper does not touch lights");
+  assert.equal(colorMesh.material.clipping, true, "entity helper does not touch clipping");
+  assert.equal(colorMesh.material.uniformsGroups[0].name, "entity", "entity helper does not touch uniformsGroups");
+  assert.equal(colorMesh.material.uniformsNeedUpdate, true, "entity helper does not touch uniformsNeedUpdate");
+  assert.ok(colorMesh.material.uniforms.diffuse.value.isColor, "entity helper does not touch uniforms");
+  assert.deepEqual(colorMesh.material.defaultAttributeValues, shaderStyleDefaultAttributeValues(), "entity helper does not touch defaultAttributeValues");
+  assert.equal(colorMesh.material.index0AttributeName, "color", "entity helper does not touch index0AttributeName");
+  assert.equal(colorMesh.material.depthPacking, THREE.BasicDepthPacking, "entity helper does not touch depthPacking");
+  assert.equal(colorMesh.material.extensions.clipCullDistance, true, "entity helper does not touch extensions");
+  assert.equal(colorMesh.geometry.getIndirect(), colorIndirect, "entity helper does not touch indirect");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.material.fragmentShader, mappedVertex, "mapped fragmentShader stays via entity helper");
+  assert.equal(std.material.fragmentShader, stdVertex, "MeshStandard fragmentShader stays via entity helper");
+  assert.equal(shader.fragmentShader, authoredShader, "ShaderMaterial fragmentShader stays via entity helper");
+  assert.equal(raw.fragmentShader, authoredRaw, "RawShaderMaterial fragmentShader stays via entity helper");
+  assert.equal(interleaved.material.fragmentShader, interleavedVertex, "interleaved fragmentShader stays via entity helper");
+  assert.equal(collider.material.fragmentShader, colliderVertex, "collider fragmentShader stays via entity helper");
+  assert.equal(sharedVisual.material.fragmentShader, sharedBlockedVertex, "shared collider material keeps authored fragmentShader");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.material.fragmentShader, sharedGeoVertex, "geometry shared with a mapped mesh keeps fragmentShader");
+  assert.equal(Object.hasOwn(sharedGeoMat, "fragmentShader"), true, "shared-geometry string stays an own property");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(indirectIsNull(colorMesh.geometry), false, "fragmentShader pin does not clear leftover indirect");
 });
