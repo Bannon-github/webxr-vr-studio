@@ -2711,6 +2711,74 @@
  * (the `default_vertex` chunk). Fail-soft (no lod groups) still runs
  * this pin, including the fastener. 90 Hz ship (~11.1 ms) / 72 Hz
  * fallback are **requested**, not measured. No invented headset ms.
+ *
+ * v1.19.0: after that vertexShader pin,
+ * `pinColorOnlyVisualMaterialFragmentShader` deletes leftover Material
+ * `fragmentShader` so the r170 MeshBasic absence remains
+ * (`material.fragmentShader === undefined` and
+ * `Object.hasOwn(material, 'fragmentShader') === false`) on the 3
+ * shared color-only MeshBasic materials (wood / brass / steel;
+ * measured fragmentShader-absent 3; same `isColorOnlyUnlitBasic` gate
+ * and the same collider / interleaved / mapped / lit / shared-material
+ * / shared-geometry skip rules). Prefer `delete material.fragmentShader`
+ * when the own property is present. An already-absent `fragmentShader`
+ * is left alone. Pin once per shared material instance.
+ * **Checked installed three@0.170.0:** fresh `Material` /
+ * `MeshBasicMaterial` constructors do not assign `fragmentShader`.
+ * `Material.js` does not mention `fragmentShader`; `Material.copy` and
+ * `MeshBasicMaterial.copy` do not copy it. `ShaderMaterial` assigns
+ * `this.fragmentShader = default_fragment`. `ShaderMaterial.copy` assigns
+ * `this.fragmentShader = source.fragmentShader` (the source string, not a
+ * rewritten stub). `ShaderMaterial.toJSON` writes
+ * `data.fragmentShader = this.fragmentShader`. `RawShaderMaterial` extends
+ * `ShaderMaterial` and does not assign its own `fragmentShader`, so it
+ * keeps that constructor string. `MaterialLoader.parse` assigns
+ * `material.fragmentShader = json.fragmentShader` when
+ * `json.fragmentShader !== undefined`, including onto a MeshBasic.
+ * `WebGLPrograms.getParameters` resolves shaderID from
+ * `shaderIDs[material.type]`. When shaderID is set (`MeshBasicMaterial`
+ * maps to `'basic'`), `fragmentShader` comes from
+ * `ShaderLib[shaderID].fragmentShader`, not `material.fragmentShader`.
+ * The custom path (`fragmentShader = material.fragmentShader` and
+ * `WebGLShaderCache.update`) runs only when shaderID is absent.
+ * `getProgramCacheKey` pushes `parameters.shaderID` when present, so a
+ * leftover `material.fragmentShader` is not a cache-key token for
+ * MeshBasic. `WebGLProgram` compiles `parameters.fragmentShader`, which
+ * for MeshBasic is the ShaderLib basic shader. `getUniforms` still
+ * resolves shaderID from `shaderIDs[material.type]`. MeshBasic stays
+ * shaderID `'basic'` and clones `ShaderLib` uniforms, so a leftover
+ * `fragmentShader` string does not invent a custom shader path and does
+ * not change draws, tris, or attrBytes. Assigning `null`, `undefined`,
+ * `''`, or a stub GLSL string stores an own property, which is not the
+ * r170 MeshBasic absence. `delete material.fragmentShader` restores the
+ * r170 absence. Do **not** assign `null`, `undefined`, `''`, or a stub
+ * GLSL string. Do **not** invent a custom shader path. Do **not**
+ * convert MeshBasic to ShaderMaterial. Do **not** clear `fragmentShader`
+ * on real ShaderMaterial / RawShaderMaterial. Do **not** touch
+ * `vertexShader` (v1.18.0 vertexShader-absent stays). Do **not** touch `uniformsGroups` (v1.17.0 uniformsGroups-absent stays). Do **not**
+ * touch `uniformsNeedUpdate` (v1.16.0 uniformsNeedUpdate-absent stays).
+ * Do **not** touch `uniforms` (v1.15.0 uniforms-absent stays). Do
+ * **not** touch `defaultAttributeValues` (v1.14.0
+ * defaultAttributeValues-absent stays). Do **not** touch
+ * `index0AttributeName` (v1.13.0 index0AttributeName-absent stays). Do
+ * **not** touch `depthPacking` (v1.12.0 depthPacking-absent stays). Do
+ * **not** touch `extensions` (v1.11.0 extensions-absent stays). Do
+ * **not** touch `indirect` (v1.10.0 indirect-null stays). Do **not**
+ * re-run the unused-channel strip (v1.9.0 unusedAttributes-absent
+ * stays). Do **not** touch `onUpload` / `onUploadCallback` (v1.8.0
+ * onUpload-release stays). Do **not** delete `color` (v1.7.0
+ * colorAttribute-absent stays). Do **not** touch
+ * `matrixWorldNeedsUpdate` (v1.6.0 stays). Do **not** change
+ * `matrixAutoUpdate` or `matrixWorldAutoUpdate`. Do **not** touch
+ * Material `version` / `name` / `userData`, Mesh `name` / `userData`,
+ * BufferGeometry `name` / `userData`, BufferAttribute fields, prior
+ * Material program-cache / flag pins, `lights`, `clipping`, `isShaderMaterial`, bounds, morphs, animations, shadows,
+ * `frustumCulled`, or `mesh.visible`. Mapped / lit / interleaved keep
+ * authored `fragmentShader`. Collider meshes stay untouched.
+ * ShaderMaterial / RawShaderMaterial keep constructor `fragmentShader`
+ * (the `default_fragment` chunk). Fail-soft (no lod groups) still runs
+ * this pin, including the fastener. 90 Hz ship (~11.1 ms) / 72 Hz
+ * fallback are **requested**, not measured. No invented headset ms.
  */
 
 import {
@@ -2766,6 +2834,7 @@ import {
   pinColorOnlyVisualMaterialUniformsNeedUpdate,
   pinColorOnlyVisualMaterialUniformsGroups,
   pinColorOnlyVisualMaterialVertexShader,
+  pinColorOnlyVisualMaterialFragmentShader,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2972,6 +3041,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialUniformsNeedUpdate(root);
   pinColorOnlyVisualMaterialUniformsGroups(root);
   pinColorOnlyVisualMaterialVertexShader(root);
+  pinColorOnlyVisualMaterialFragmentShader(root);
   return root;
 }
 
