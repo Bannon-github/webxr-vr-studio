@@ -2583,6 +2583,65 @@
  * still runs this pin, including the fastener. 90 Hz ship (~11.1 ms) /
  * 72 Hz fallback are **requested**, not measured. No invented headset
  * ms.
+ *
+ * v1.17.0: after that uniformsNeedUpdate pin,
+ * `pinColorOnlyVisualMaterialUniformsGroups` deletes leftover Material
+ * `uniformsGroups` so the r170 MeshBasic absence remains
+ * (`material.uniformsGroups === undefined` and
+ * `Object.hasOwn(material, 'uniformsGroups') === false`) on the 3
+ * shared color-only MeshBasic materials (wood / brass / steel;
+ * measured uniformsGroups-absent 3; same `isColorOnlyUnlitBasic` gate
+ * and the same collider / interleaved / mapped / lit / shared-material
+ * / shared-geometry skip rules). Prefer `delete material.uniformsGroups`
+ * when the own property is present. An already-absent `uniformsGroups`
+ * is left alone. Pin once per shared material instance.
+ * **Checked installed three@0.170.0:** fresh `Material` /
+ * `MeshBasicMaterial` constructors do not assign `uniformsGroups`.
+ * `ShaderMaterial` assigns `this.uniformsGroups = []`.
+ * `ShaderMaterial.copy` assigns
+ * `this.uniformsGroups = cloneUniformsGroups(source.uniformsGroups)`,
+ * which builds a new array and calls `.clone()` on each group.
+ * `RawShaderMaterial` extends `ShaderMaterial`, so it keeps that
+ * constructor array. `WebGLPrograms` does not read `uniformsGroups`.
+ * `getUniforms` still resolves shaderID from `shaderIDs[material.type]`.
+ * MeshBasic stays shaderID `'basic'` and clones `ShaderLib` uniforms,
+ * so a leftover `uniformsGroups` array does not invent a custom shader
+ * path and does not change draws, tris, or attrBytes.
+ * `WebGLRenderer.setProgram` walks `material.uniformsGroups` and calls
+ * `WebGLUniformsGroups.update` / `bind` (UBO create/bind) only when
+ * `material.isShaderMaterial || material.isRawShaderMaterial`.
+ * MeshBasic is neither, so a leftover array is not uploaded as uniform
+ * buffer objects. Assigning `null`, `undefined`, `[]`, or `{}` stores
+ * an own property, which is not the r170 MeshBasic absence.
+ * `delete material.uniformsGroups` restores the r170 absence. Do
+ * **not** assign `null`, `undefined`, `[]`, or `{}`. Do **not** invent
+ * a custom shader path. Do **not** convert MeshBasic to ShaderMaterial.
+ * Do **not** clear `uniformsGroups` on real ShaderMaterial /
+ * RawShaderMaterial. Do **not** touch `uniformsNeedUpdate` (v1.16.0
+ * uniformsNeedUpdate-absent stays). Do **not** touch `uniforms`
+ * (v1.15.0 uniforms-absent stays). Do **not** touch
+ * `defaultAttributeValues` (v1.14.0 defaultAttributeValues-absent
+ * stays). Do **not** touch `index0AttributeName` (v1.13.0
+ * index0AttributeName-absent stays). Do **not** touch `depthPacking`
+ * (v1.12.0 depthPacking-absent stays). Do **not** touch `extensions`
+ * (v1.11.0 extensions-absent stays). Do **not** touch `indirect`
+ * (v1.10.0 indirect-null stays). Do **not** re-run the unused-channel
+ * strip (v1.9.0 unusedAttributes-absent stays). Do **not** touch
+ * `onUpload` / `onUploadCallback` (v1.8.0 onUpload-release stays). Do
+ * **not** delete `color` (v1.7.0 colorAttribute-absent stays). Do
+ * **not** touch `matrixWorldNeedsUpdate` (v1.6.0 stays). Do **not**
+ * change `matrixAutoUpdate` or `matrixWorldAutoUpdate`. Do **not**
+ * touch Material `version` / `name` / `userData`, Mesh `name` /
+ * `userData`, BufferGeometry `name` / `userData`, BufferAttribute
+ * fields, prior Material program-cache / flag pins, `vertexShader`,
+ * `fragmentShader`, `lights`, `clipping`, `isShaderMaterial`, bounds,
+ * morphs, animations, shadows, `frustumCulled`, or `mesh.visible`.
+ * Mapped / lit / interleaved keep authored `uniformsGroups`. Collider
+ * meshes stay untouched. ShaderMaterial / RawShaderMaterial keep
+ * constructor `uniformsGroups` (typically `[]`). Fail-soft (no lod
+ * groups) still runs this pin, including the fastener. 90 Hz ship
+ * (~11.1 ms) / 72 Hz fallback are **requested**, not measured. No
+ * invented headset ms.
  */
 
 import {
@@ -2636,6 +2695,7 @@ import {
   pinColorOnlyVisualMaterialDefaultAttributeValues,
   pinColorOnlyVisualMaterialUniforms,
   pinColorOnlyVisualMaterialUniformsNeedUpdate,
+  pinColorOnlyVisualMaterialUniformsGroups,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2840,6 +2900,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialDefaultAttributeValues(root);
   pinColorOnlyVisualMaterialUniforms(root);
   pinColorOnlyVisualMaterialUniformsNeedUpdate(root);
+  pinColorOnlyVisualMaterialUniformsGroups(root);
   return root;
 }
 
