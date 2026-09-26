@@ -2469,6 +2469,59 @@
  * `defaultAttributeValues`. Fail-soft (no lod groups) still runs this
  * pin, including the fastener. 90 Hz ship (~11.1 ms) / 72 Hz fallback
  * are **requested**, not measured. No invented headset ms.
+ *
+ * v1.15.0: after that defaultAttributeValues pin,
+ * `pinColorOnlyVisualMaterialUniforms` deletes leftover Material
+ * `uniforms` so the r170 MeshBasic absence remains
+ * (`material.uniforms === undefined` and
+ * `Object.hasOwn(material, 'uniforms') === false`) on the 3 shared
+ * color-only MeshBasic materials (wood / brass / steel; measured
+ * uniforms-absent 3; same `isColorOnlyUnlitBasic` gate and the same
+ * collider / interleaved / mapped / lit / shared-material /
+ * shared-geometry skip rules). Prefer `delete material.uniforms` when
+ * the own property is present. An already-absent `uniforms` is left
+ * alone. Pin once per shared material instance.
+ * **Checked installed three@0.170.0:** fresh `Material` /
+ * `MeshBasicMaterial` constructors do not assign `uniforms`.
+ * `ShaderMaterial` assigns `this.uniforms = {}` and `copy` clones
+ * uniforms via `cloneUniforms(source.uniforms)`. `RawShaderMaterial`
+ * extends `ShaderMaterial`, so it keeps that constructor `uniforms`
+ * object. `WebGLPrograms.getUniforms` uses `material.uniforms` only
+ * when `shaderIDs[material.type]` is absent (custom ShaderMaterial /
+ * RawShaderMaterial path). MeshBasic resolves shaderID `'basic'` and
+ * clones `ShaderLib` uniforms instead, so a leftover `uniforms` object
+ * is not the active upload map — but it still retains heap (Texture /
+ * Vector / Color uniform values) on Quest 3's tight memory budget and
+ * can confuse ingest/debug when DCC or mistaken ShaderMaterial
+ * assignment bleeds onto color-only MeshBasic. Assigning `null`,
+ * `undefined`, or `{}` stores an own property, which is not the r170
+ * MeshBasic absence. `delete material.uniforms` restores the r170
+ * absence. Do **not** assign `null`, `undefined`, or `{}`. Do **not**
+ * invent replacement uniforms. Do **not** convert MeshBasic to
+ * ShaderMaterial. Do **not** clear `uniforms` on real ShaderMaterial /
+ * RawShaderMaterial. Do **not** touch `defaultAttributeValues` (v1.14.0
+ * defaultAttributeValues-absent stays). Do **not** touch
+ * `index0AttributeName` (v1.13.0 index0AttributeName-absent stays). Do
+ * **not** touch `depthPacking` (v1.12.0 depthPacking-absent stays). Do
+ * **not** touch `extensions` (v1.11.0 extensions-absent stays). Do
+ * **not** touch `indirect` (v1.10.0 indirect-null stays). Do **not**
+ * re-run the unused-channel strip (v1.9.0 unusedAttributes-absent
+ * stays). Do **not** touch `onUpload` / `onUploadCallback` (v1.8.0
+ * onUpload-release stays). Do **not** delete `color` (v1.7.0
+ * colorAttribute-absent stays). Do **not** touch
+ * `matrixWorldNeedsUpdate` (v1.6.0 stays). Do **not** change
+ * `matrixAutoUpdate` or `matrixWorldAutoUpdate`. Do **not** touch
+ * Material `version` / `name` / `userData`, Mesh `name` / `userData`,
+ * BufferGeometry `name` / `userData`, BufferAttribute fields, prior
+ * Material program-cache / flag pins, `uniformsGroups`,
+ * `uniformsNeedUpdate`, `vertexShader`, `fragmentShader`, `lights`,
+ * `clipping`, `isShaderMaterial`, bounds, morphs, animations, shadows,
+ * `frustumCulled`, or `mesh.visible`. Mapped / lit / interleaved keep
+ * authored `uniforms`. Collider meshes stay untouched. ShaderMaterial /
+ * RawShaderMaterial keep constructor `uniforms`. Fail-soft (no lod
+ * groups) still runs this pin, including the fastener. 90 Hz ship
+ * (~11.1 ms) / 72 Hz fallback are **requested**, not measured. No
+ * invented headset ms.
  */
 
 import {
@@ -2520,6 +2573,7 @@ import {
   pinColorOnlyVisualMaterialDepthPacking,
   pinColorOnlyVisualMaterialIndex0AttributeName,
   pinColorOnlyVisualMaterialDefaultAttributeValues,
+  pinColorOnlyVisualMaterialUniforms,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2722,6 +2776,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialDepthPacking(root);
   pinColorOnlyVisualMaterialIndex0AttributeName(root);
   pinColorOnlyVisualMaterialDefaultAttributeValues(root);
+  pinColorOnlyVisualMaterialUniforms(root);
   return root;
 }
 
