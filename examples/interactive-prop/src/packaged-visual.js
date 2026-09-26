@@ -2416,6 +2416,59 @@
  * `index0AttributeName`. Fail-soft (no lod groups) still runs this
  * pin, including the fastener. 90 Hz ship (~11.1 ms) / 72 Hz fallback
  * are **requested**, not measured. No invented headset ms.
+ *
+ * v1.14.0: after that index0AttributeName pin,
+ * `pinColorOnlyVisualMaterialDefaultAttributeValues` deletes leftover
+ * Material `defaultAttributeValues` so the r170 MeshBasic absence
+ * remains (`material.defaultAttributeValues === undefined` and
+ * `Object.hasOwn(material, 'defaultAttributeValues') === false`) on
+ * the 3 shared color-only MeshBasic materials (wood / brass / steel;
+ * measured defaultAttributeValues-absent 3; same `isColorOnlyUnlitBasic`
+ * gate and the same collider / interleaved / mapped / lit /
+ * shared-material / shared-geometry skip rules). Prefer
+ * `delete material.defaultAttributeValues` when the own property is
+ * present. An already-absent `defaultAttributeValues` is left alone.
+ * Pin once per shared material instance.
+ * **Checked installed three@0.170.0:** fresh `Material` /
+ * `MeshBasicMaterial` constructors do not assign
+ * `defaultAttributeValues`. `ShaderMaterial` assigns
+ * `this.defaultAttributeValues = { color: [1, 1, 1], uv: [0, 0], uv1: [0, 0] }`.
+ * `ShaderMaterial.copy` does not copy `defaultAttributeValues`; the
+ * copy keeps the map its constructor assigned. `WebGLPrograms` does
+ * not read `defaultAttributeValues` (no cache-key token and no
+ * program-layer bit). `WebGLProgram` emits no `#define` for it.
+ * `WebGLBindingStates.setupVertexAttributes` reads
+ * `material.defaultAttributeValues`. When a program attribute has no
+ * geometry attribute and `materialDefaultAttributeValues !== undefined`,
+ * it looks up `materialDefaultAttributeValues[name]` and may call
+ * `gl.vertexAttrib2fv` / `gl.vertexAttrib3fv` / `gl.vertexAttrib4fv` /
+ * `gl.vertexAttrib1fv`. A leftover ShaderMaterial-style map forces
+ * those constant vertexAttrib uploads for missing channels while the
+ * program cache key stays identical to constructor absence. An empty
+ * `{}` still enters the lookup. Assigning `null` also enters it and
+ * then throws on the property lookup. `delete material.defaultAttributeValues`
+ * restores the r170 absence. Do **not** assign `null`, `undefined`, or
+ * `{}`. Do **not** invent replacement defaults. Do **not** convert
+ * MeshBasic to ShaderMaterial. Do **not** touch `index0AttributeName`
+ * (v1.13.0 index0AttributeName-absent stays). Do **not** touch
+ * `depthPacking` (v1.12.0 depthPacking-absent stays). Do **not** touch
+ * `extensions` (v1.11.0 extensions-absent stays). Do **not** touch
+ * `indirect` (v1.10.0 indirect-null stays). Do **not** re-run the
+ * unused-channel strip (v1.9.0 unusedAttributes-absent stays). Do
+ * **not** touch `onUpload` / `onUploadCallback` (v1.8.0
+ * onUpload-release stays). Do **not** delete `color` (v1.7.0
+ * colorAttribute-absent stays). Do **not** touch
+ * `matrixWorldNeedsUpdate` (v1.6.0 stays). Do **not** change
+ * `matrixAutoUpdate` or `matrixWorldAutoUpdate`. Do **not** touch
+ * Material `version` / `name` / `userData`, Mesh `name` / `userData`,
+ * BufferGeometry `name` / `userData`, BufferAttribute fields, prior
+ * Material program-cache / flag pins, bounds, morphs, animations,
+ * shadows, `frustumCulled`, or `mesh.visible`. Mapped / lit /
+ * interleaved keep authored `defaultAttributeValues`. Collider meshes
+ * stay untouched. ShaderMaterial keeps its constructor
+ * `defaultAttributeValues`. Fail-soft (no lod groups) still runs this
+ * pin, including the fastener. 90 Hz ship (~11.1 ms) / 72 Hz fallback
+ * are **requested**, not measured. No invented headset ms.
  */
 
 import {
@@ -2466,6 +2519,7 @@ import {
   pinColorOnlyVisualMaterialExtensions,
   pinColorOnlyVisualMaterialDepthPacking,
   pinColorOnlyVisualMaterialIndex0AttributeName,
+  pinColorOnlyVisualMaterialDefaultAttributeValues,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -2667,6 +2721,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialExtensions(root);
   pinColorOnlyVisualMaterialDepthPacking(root);
   pinColorOnlyVisualMaterialIndex0AttributeName(root);
+  pinColorOnlyVisualMaterialDefaultAttributeValues(root);
   return root;
 }
 
