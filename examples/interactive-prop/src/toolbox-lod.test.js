@@ -147,6 +147,8 @@ const {
   pinColorOnlyVisualMaterialIsShaderMaterial,
   pinColorOnlyUnlitBasicMaterialIsRawShaderMaterial,
   pinColorOnlyVisualMaterialIsRawShaderMaterial,
+  pinColorOnlyUnlitBasicMaterialLinewidth,
+  pinColorOnlyVisualMaterialLinewidth,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -27194,4 +27196,653 @@ test("pinColorOnlyUnlitBasicMaterialIsRawShaderMaterial / pinColorOnlyVisualMate
   assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(indirectIsNull(colorMesh.geometry), false, "isRawShaderMaterial pin does not clear leftover indirect");
+});
+
+function materialLinewidthAbsent(material) {
+  return material?.linewidth === undefined && Object.hasOwn(material, "linewidth") === false;
+}
+
+function countVisualMaterialLinewidth(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (materialLinewidthAbsent(mat)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+/**
+ * r170 WebGLRenderer reads `material.linewidth` only for `object.isLine`.
+ * A Mesh draw reads `wireframeLinewidth` when `wireframe === true`.
+ * An undefined line width falls back to 1 ("Not using Line*Material").
+ */
+function glLineWidthRead(material, kind) {
+  if (kind === "mesh") {
+    return {
+      readsLinewidth: false,
+      lineWidth: undefined,
+      wireframeLinewidth: material.wireframe === true ? material.wireframeLinewidth : undefined,
+    };
+  }
+  let lineWidth = material.linewidth;
+  if (lineWidth === undefined) lineWidth = 1;
+  return { readsLinewidth: true, lineWidth, wireframeLinewidth: undefined };
+}
+
+test("r170 MeshBasic leaves linewidth absent; ShaderMaterial and line materials keep constructor linewidth", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const freshMaterial = new THREE.Material();
+  const freshBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(freshMaterial.linewidth, undefined, "Material constructor does not assign linewidth");
+  assert.equal(Object.hasOwn(freshMaterial, "linewidth"), false, "Material linewidth is not an own property");
+  assert.equal(freshBasic.linewidth, undefined, "MeshBasicMaterial constructor does not assign linewidth");
+  assert.equal(Object.hasOwn(freshBasic, "linewidth"), false, "MeshBasic linewidth is not an own property");
+  assert.equal(freshBasic.wireframeLinewidth, 1, "MeshBasicMaterial assigns wireframeLinewidth 1");
+  assert.equal(freshBasic.wireframe, false, "MeshBasicMaterial assigns wireframe false");
+  assert.equal(freshBasic.wireframeLinecap, "round", "MeshBasicMaterial assigns wireframeLinecap round");
+  assert.equal(freshBasic.wireframeLinejoin, "round", "MeshBasicMaterial assigns wireframeLinejoin round");
+  assert.equal(freshBasic.isMeshBasicMaterial, true, "MeshBasicMaterial assigns isMeshBasicMaterial true");
+  assert.equal(materialIsRawShaderMaterialAbsent(freshBasic), true, "fresh MeshBasic isRawShaderMaterial stays absent");
+  const meshRead = glLineWidthRead(freshBasic, "mesh");
+  assert.equal(meshRead.readsLinewidth, false, "a Mesh draw does not read material.linewidth");
+  assert.equal(meshRead.wireframeLinewidth, undefined, "wireframe false does not read wireframeLinewidth");
+  const lineRead = glLineWidthRead(freshBasic, "line");
+  assert.equal(lineRead.readsLinewidth, true, "a Line draw reads material.linewidth");
+  assert.equal(lineRead.lineWidth, 1, "undefined linewidth falls back to 1");
+
+  const warned = [];
+  const origWarn = console.warn;
+  console.warn = (...args) => warned.push(args.join(" "));
+  const viaCtor = new THREE.MeshBasicMaterial({ color: 0x633318, linewidth: 4 });
+  console.warn = origWarn;
+  assert.equal(materialLinewidthAbsent(viaCtor), true, "MeshBasic constructor parameters do not store linewidth");
+  assert.match(warned.join("\n"), /linewidth/, "setValues warns that linewidth is not a MeshBasic property");
+
+  const shader = new THREE.ShaderMaterial();
+  assert.equal(shader.linewidth, 1, "ShaderMaterial assigns this.linewidth = 1");
+  assert.equal(Object.hasOwn(shader, "linewidth"), true, "ShaderMaterial linewidth is an own property");
+  assert.equal(glLineWidthRead(shader, "line").lineWidth, 1, "ShaderMaterial line width is the constructor 1");
+  const shaderWide = new THREE.ShaderMaterial();
+  shaderWide.linewidth = 4;
+  const copiedShader = new THREE.ShaderMaterial().copy(shaderWide);
+  assert.equal(copiedShader.linewidth, 1, "ShaderMaterial.copy does not copy linewidth");
+  assert.equal(shaderWide.linewidth, 4, "copy source linewidth stays on the source");
+  assert.equal(Object.hasOwn(shader.toJSON(), "linewidth"), false, "constructor linewidth 1 is omitted from toJSON");
+  assert.equal(shaderWide.toJSON().linewidth, 4, "Material.toJSON writes a non-1 linewidth");
+
+  const lineBasic = new THREE.LineBasicMaterial();
+  assert.equal(lineBasic.linewidth, 1, "LineBasicMaterial assigns this.linewidth = 1");
+  assert.equal(Object.hasOwn(lineBasic, "linewidth"), true, "LineBasicMaterial linewidth is an own property");
+  lineBasic.linewidth = 3;
+  const copiedLine = new THREE.LineBasicMaterial().copy(lineBasic);
+  assert.equal(copiedLine.linewidth, 3, "LineBasicMaterial.copy copies source.linewidth");
+  const dashed = new THREE.LineDashedMaterial();
+  assert.equal(dashed.linewidth, 1, "LineDashedMaterial keeps LineBasicMaterial constructor linewidth 1");
+  dashed.linewidth = 5;
+  const copiedDashed = new THREE.LineDashedMaterial().copy(dashed);
+  assert.equal(copiedDashed.linewidth, 5, "LineDashedMaterial.copy keeps source.linewidth via super.copy");
+
+  const copiedBasic = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  const bleedSource = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  bleedSource.linewidth = 7;
+  bleedSource.wireframeLinewidth = 2;
+  copiedBasic.copy(bleedSource);
+  assert.equal(materialLinewidthAbsent(copiedBasic), true, "MeshBasicMaterial.copy does not copy linewidth");
+  assert.equal(copiedBasic.wireframeLinewidth, 2, "MeshBasicMaterial.copy copies wireframeLinewidth");
+  assert.equal(bleedSource.linewidth, 7, "copy source linewidth stays on the source");
+
+  const materialCopy = new THREE.Material();
+  const materialSource = new THREE.Material();
+  materialSource.linewidth = 9;
+  materialCopy.copy(materialSource);
+  assert.equal(materialLinewidthAbsent(materialCopy), true, "Material.copy does not copy linewidth");
+
+  const leftover = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  leftover.linewidth = 2;
+  assert.equal(Object.hasOwn(leftover, "linewidth"), true, "assigning 2 stores an own property");
+  assert.equal(leftover.linewidth, 2, "2 is not constructor absence");
+  assert.equal(leftover.toJSON().linewidth, 2, "a non-1 leftover is written by Material.toJSON");
+  assert.equal(glLineWidthRead(leftover, "mesh").readsLinewidth, false, "leftover linewidth is not read on a Mesh draw");
+  assert.equal(glLineWidthRead(leftover, "line").lineWidth, 2, "a Line draw would pass the leftover width");
+  assert.equal(materialIsRawShaderMaterialAbsent(leftover), true, "leftover linewidth does not set isRawShaderMaterial");
+
+  const one = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  one.linewidth = 1;
+  assert.equal(Object.hasOwn(one, "linewidth"), true, "assigning 1 stores an own property");
+  assert.equal(one.linewidth, 1, "own 1 is not constructor absence");
+  assert.equal(Object.hasOwn(one.toJSON(), "linewidth"), false, "toJSON omits linewidth when the value is 1");
+
+  const zero = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  zero.linewidth = 0;
+  assert.equal(Object.hasOwn(zero, "linewidth"), true, "assigning 0 stores an own property");
+  assert.equal(zero.linewidth, 0, "0 is not constructor absence");
+
+  const nulled = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  nulled.linewidth = null;
+  assert.equal(Object.hasOwn(nulled, "linewidth"), true, "assigning null stores an own property");
+  assert.equal(nulled.linewidth, null, "null is not constructor absence");
+  assert.equal(glLineWidthRead(nulled, "line").lineWidth, null, "own null does not fall back to 1");
+
+  const ownUndef = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  ownUndef.linewidth = undefined;
+  assert.equal(Object.hasOwn(ownUndef, "linewidth"), true, "assigning undefined stores an own property");
+  assert.equal(ownUndef.linewidth, undefined, "own undefined is not constructor absence");
+  assert.equal(glLineWidthRead(ownUndef, "line").lineWidth, 1, "own undefined still falls back to 1 on a Line draw");
+
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const material = readFileSync(require.resolve("three/src/materials/Material.js"), "utf8");
+  const meshBasic = readFileSync(require.resolve("three/src/materials/MeshBasicMaterial.js"), "utf8");
+  const shaderSource = readFileSync(require.resolve("three/src/materials/ShaderMaterial.js"), "utf8");
+  const lineBasicSource = readFileSync(require.resolve("three/src/materials/LineBasicMaterial.js"), "utf8");
+  const lineDashedSource = readFileSync(require.resolve("three/src/materials/LineDashedMaterial.js"), "utf8");
+  const loader = readFileSync(require.resolve("three/src/loaders/MaterialLoader.js"), "utf8");
+  const ctor = material.slice(material.indexOf("constructor()"), material.indexOf("get alphaTest"));
+  assert.equal(ctor.includes("linewidth"), false, "Material constructor does not mention linewidth");
+  assert.match(material, /if \( this\.linewidth !== undefined && this\.linewidth !== 1 \) data\.linewidth = this\.linewidth;/);
+  const materialCopySource = material.slice(material.indexOf("copy( source )"), material.length);
+  assert.equal(materialCopySource.includes("linewidth"), false, "Material.copy does not mention linewidth");
+  assert.match(meshBasic, /this\.wireframeLinewidth = 1;/);
+  assert.equal(meshBasic.includes("linewidth"), false, "MeshBasicMaterial.js does not mention linewidth");
+  assert.match(shaderSource, /this\.linewidth = 1;/);
+  const shaderCopy = shaderSource.slice(shaderSource.indexOf("copy( source )"), shaderSource.indexOf("toJSON"));
+  assert.equal(shaderCopy.includes("linewidth"), false, "ShaderMaterial.copy does not copy linewidth");
+  assert.match(shaderCopy, /this\.wireframeLinewidth = source\.wireframeLinewidth;/);
+  assert.match(lineBasicSource, /this\.linewidth = 1;/);
+  assert.match(lineBasicSource, /this\.linewidth = source\.linewidth;/);
+  assert.match(lineDashedSource, /class LineDashedMaterial extends LineBasicMaterial/);
+  assert.match(lineDashedSource, /super\.copy\( source \);/);
+  assert.equal(lineDashedSource.includes("this.linewidth"), false, "LineDashedMaterial does not assign linewidth itself");
+  assert.match(loader, /if \( json\.linewidth !== undefined \) material\.linewidth = json\.linewidth;/);
+  const renderer = readFileSync(require.resolve("three/src/renderers/WebGLRenderer.js"), "utf8");
+  assert.match(renderer, /let lineWidth = material\.linewidth;/);
+  assert.match(renderer, /if \( lineWidth === undefined \) lineWidth = 1; \/\/ Not using Line\*Material/);
+  assert.match(renderer, /state\.setLineWidth\( lineWidth \* getTargetPixelRatio\(\) \);/);
+  assert.match(renderer, /state\.setLineWidth\( material\.wireframeLinewidth \* getTargetPixelRatio\(\) \);/);
+  const state = readFileSync(require.resolve("three/src/renderers/webgl/WebGLState.js"), "utf8");
+  assert.match(state, /lineWidthAvailable = \( version >= 1\.0 \);/);
+  assert.match(state, /if \( lineWidthAvailable \) gl\.lineWidth\( width \);/);
+  assert.match(state, /gl\.lineWidth\( 1 \);/);
+  const shadow = readFileSync(require.resolve("three/src/renderers/webgl/WebGLShadowMap.js"), "utf8");
+  assert.match(shadow, /result\.linewidth = material\.linewidth;/);
+});
+
+test("v1.24.0 clears leftover Material linewidth on packed color-only MeshBasics; envelope stays v1.23.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.24\.0 pins leftover Material linewidth/);
+  assert.match(crate.userData.l2.note, /linewidth-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.23\.0 pins leftover Material isRawShaderMaterial/);
+  assert.match(crate.userData.l2.note, /isRawShaderMaterial-absent 3/);
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(materialLinewidthAbsent(wood), true, "wood linewidth is absent");
+  assert.equal(materialLinewidthAbsent(brass), true, "brass linewidth is absent");
+  assert.equal(materialLinewidthAbsent(steel), true, "steel linewidth is absent");
+  assert.equal(wood.wireframe, false, "wood wireframe stays false");
+  assert.equal(wood.wireframeLinewidth, 1, "wood wireframeLinewidth stays 1");
+  assert.equal(wood.wireframeLinecap, "round", "wood wireframeLinecap stays round");
+  assert.equal(wood.wireframeLinejoin, "round", "wood wireframeLinejoin stays round");
+  assert.equal(brass.wireframeLinewidth, 1, "brass wireframeLinewidth stays 1");
+  assert.equal(steel.wireframeLinewidth, 1, "steel wireframeLinewidth stays 1");
+  assert.equal(materialIsRawShaderMaterialAbsent(wood), true, "wood isRawShaderMaterial stays absent");
+  assert.equal(materialIsRawShaderMaterialAbsent(brass), true, "brass isRawShaderMaterial stays absent");
+  assert.equal(materialIsRawShaderMaterialAbsent(steel), true, "steel isRawShaderMaterial stays absent");
+  assert.equal(materialIsShaderMaterialAbsent(wood), true, "wood isShaderMaterial stays absent");
+  assert.equal(materialClippingAbsent(wood), true, "wood clipping stays absent");
+  assert.equal(materialLightsAbsent(wood), true, "wood lights stays absent");
+  assert.equal(wood.clippingPlanes, null, "wood clippingPlanes stays null");
+  assert.equal(wood.clipIntersection, false, "wood clipIntersection stays false");
+  assert.equal(wood.clipShadows, false, "wood clipShadows stays false");
+  assert.equal(materialFragmentShaderAbsent(wood), true, "wood fragmentShader stays absent");
+  assert.equal(materialVertexShaderAbsent(wood), true, "wood vertexShader stays absent");
+  assert.equal(wood.isMeshBasicMaterial, true, "wood stays MeshBasic");
+  assert.equal(brass.isMeshBasicMaterial, true, "brass stays MeshBasic");
+  assert.equal(steel.isMeshBasicMaterial, true, "steel stays MeshBasic");
+  assert.equal(wood.type, "MeshBasicMaterial", "wood type stays MeshBasicMaterial");
+  assert.equal(wood.version, 0, "wood material.version stays 0");
+  assert.equal(brass.name, "", "brass material.name stays empty");
+  assert.equal(materialUserDataEmpty(steel), true, "steel material.userData stays empty");
+
+  const flags = countVisualMaterialLinewidth(crate);
+  assert.equal(flags.absent, 3, "linewidth-absent count is 3");
+  assert.equal(flags.leftover, 0);
+  assert.equal(flags.total, 3);
+  assert.equal(countVisualMaterialIsRawShaderMaterial(crate).absent, 3, "isRawShaderMaterial-absent stays 3");
+  assert.equal(countVisualMaterialIsShaderMaterial(crate).absent, 3, "isShaderMaterial-absent stays 3");
+  assert.equal(countVisualMaterialClipping(crate).absent, 3, "clipping-absent stays 3");
+  assert.equal(countVisualMaterialLights(crate).absent, 3, "lights-absent stays 3");
+  assert.equal(countVisualMaterialFragmentShader(crate).absent, 3, "fragmentShader-absent stays 3");
+  assert.equal(countVisualMaterialVertexShader(crate).absent, 3, "vertexShader-absent stays 3");
+  assert.equal(countVisualMaterialUniformsGroups(crate).absent, 3, "uniformsGroups-absent stays 3");
+  assert.equal(countVisualMaterialUniformsNeedUpdate(crate).absent, 3, "uniformsNeedUpdate-absent stays 3");
+  assert.equal(countVisualMaterialUniforms(crate).absent, 3, "uniforms-absent stays 3");
+  assert.equal(countVisualMaterialDefaultAttributeValues(crate).absent, 3, "defaultAttributeValues-absent stays 3");
+  assert.equal(countVisualMaterialIndex0AttributeName(crate).absent, 3, "index0AttributeName-absent stays 3");
+  assert.equal(countVisualMaterialDepthPacking(crate).absent, 3, "depthPacking-absent stays 3");
+  assert.equal(countVisualMaterialExtensions(crate).absent, 3, "extensions-absent stays 3");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13");
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3");
+  assert.equal(countVisualMaterialName(crate).empty, 3, "material-name-empty stays 3");
+  assert.equal(countVisualMaterialUserData(crate).empty, 3, "material-userData-empty stays 3");
+  assert.equal(countVisualGeometryUserData(crate).empty, 13, "geometry-userData-empty stays 13");
+  assert.equal(countVisualGeometryName(crate).empty, 13, "geometry-name-empty stays 13");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10");
+  assert.equal(countVisualMeshName(crate).reserved, 3, "three reserved visual names stay");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(materialLinewidthAbsent(mesh.material), true, "packed visual linewidth stays absent");
+    assert.equal(materialIsRawShaderMaterialAbsent(mesh.material), true, "packed visual isRawShaderMaterial stays absent");
+    assert.equal(mesh.material.isMeshBasicMaterial, true, "visual stays MeshBasic");
+    assert.equal(mesh.material.wireframeLinewidth, 1, "visual wireframeLinewidth stays 1");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+    assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  }
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lid = crate.getObjectByName("lidMesh");
+  const latch = crate.getObjectByName("latchMesh");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.equal(materialLinewidthAbsent(fastener.material), true, "fastener shares the pinned brass material");
+  assert.equal(fastener.material, brass, "fastener still shares brass");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(lid.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latch.name, "latchMesh", "latchMesh name stays");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const rootBag = crate.userData;
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(countVisualMaterialLinewidth(crate).absent, 3, "linewidth-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialIsRawShaderMaterial(crate).absent, 3, "isRawShaderMaterial-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialIsShaderMaterial(crate).absent, 3, "isShaderMaterial-absent stays 3 after L4/L5");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.equal(fastener.name, "fastenerMesh", "L5 keeps fastenerMesh");
+  assert.equal(lid.name, "lidMesh", "L4 keeps lidMesh");
+  assert.equal(latch.name, "latchMesh", "L4 keeps latchMesh");
+  assert.deepEqual(getToolboxLodStats(crate)[0], stats[0], "L4/L5 does not change the LOD0 envelope");
+});
+
+test("pinColorOnlyUnlitBasicMaterialLinewidth deletes leftover linewidth and leaves an already-absent linewidth alone", () => {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  mat.version = 4;
+  mat.name = "woodStandIn";
+  mat.fog = false;
+  mat.toneMapped = false;
+  mat.flatShading = false;
+  mat.defines = { KEEP: "1" };
+  const matBag = mat.userData;
+  const extensions = { multiDraw: true };
+  mat.extensions = extensions;
+  mat.depthPacking = THREE.BasicDepthPacking;
+  mat.index0AttributeName = "position";
+  const authoredDefaults = shaderStyleDefaultAttributeValues();
+  mat.defaultAttributeValues = authoredDefaults;
+  const authoredUniforms = shaderStyleUniformMap();
+  mat.uniforms = authoredUniforms;
+  const authoredGroups = [shaderStyleUniformsGroup("stay-groups")];
+  mat.uniformsGroups = authoredGroups;
+  mat.uniformsNeedUpdate = true;
+  const authoredFragment = "void main(){ gl_FragColor = vec4(0.0); }";
+  mat.fragmentShader = authoredFragment;
+  mat.vertexShader = "void main(){gl_Position=vec4(1.0);}";
+  mat.isShaderMaterial = true;
+  mat.isRawShaderMaterial = true;
+  mat.clipping = true;
+  mat.lights = true;
+  mat.linewidth = 2;
+  mat.wireframe = false;
+  mat.wireframeLinewidth = 3;
+  mat.wireframeLinecap = "butt";
+  mat.wireframeLinejoin = "bevel";
+  const authoredPlanes = [new THREE.Plane()];
+  mat.clippingPlanes = authoredPlanes;
+  mat.clipIntersection = true;
+  mat.clipShadows = true;
+  assert.equal(Object.hasOwn(mat, "linewidth"), true, "fixture stores an own linewidth");
+  const geo = groupsTestGeometry();
+  const leftoverIndirect = { label: "stay-indirect" };
+  geo.setIndirect(leftoverIndirect);
+  const position = geo.getAttribute("position");
+  const index = geo.index;
+  const positionArray = position.array;
+  function rogue() {}
+  position.onUpload(rogue);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = "lidMesh";
+  mesh.matrixAutoUpdate = true;
+  mesh.matrixWorldNeedsUpdate = false;
+  mesh.matrixWorldAutoUpdate = true;
+  mesh.frustumCulled = true;
+  mesh.visible = true;
+  const bag = mesh.userData;
+  const returned = pinColorOnlyUnlitBasicMaterialLinewidth(mesh);
+  assert.equal(returned, mesh, "pin returns the same mesh");
+  assert.equal(mesh.material, mat, "pin does not replace the material");
+  assert.equal(mat.isMeshBasicMaterial, true, "pin does not replace MeshBasic");
+  assert.equal(mat.type, "MeshBasicMaterial", "pin does not rewrite type");
+  assert.equal(materialLinewidthAbsent(mat), true, "leftover numeric linewidth is deleted");
+  assert.equal(mat.linewidth, undefined, "pin does not assign null, undefined, 0, or 1");
+  assert.equal(mat.wireframe, false, "linewidth pin does not touch wireframe");
+  assert.equal(mat.wireframeLinewidth, 3, "linewidth pin does not touch wireframeLinewidth");
+  assert.equal(mat.wireframeLinecap, "butt", "linewidth pin does not touch wireframeLinecap");
+  assert.equal(mat.wireframeLinejoin, "bevel", "linewidth pin does not touch wireframeLinejoin");
+  assert.equal(mat.isRawShaderMaterial, true, "linewidth pin does not touch isRawShaderMaterial");
+  assert.equal(mat.isShaderMaterial, true, "linewidth pin does not touch isShaderMaterial");
+  assert.equal(mat.clipping, true, "linewidth pin does not touch clipping");
+  assert.equal(mat.clippingPlanes, authoredPlanes, "linewidth pin does not touch clippingPlanes");
+  assert.equal(mat.clipIntersection, true, "linewidth pin does not touch clipIntersection");
+  assert.equal(mat.clipShadows, true, "linewidth pin does not touch clipShadows");
+  assert.equal(mat.lights, true, "linewidth pin does not touch lights");
+  assert.equal(mat.fragmentShader, authoredFragment, "linewidth pin does not touch fragmentShader");
+  assert.equal(mat.vertexShader.includes("gl_Position"), true, "linewidth pin does not touch vertexShader");
+  assert.equal(mat.uniformsGroups, authoredGroups, "linewidth pin does not touch uniformsGroups");
+  assert.equal(mat.uniformsNeedUpdate, true, "linewidth pin does not touch uniformsNeedUpdate");
+  assert.equal(mat.uniforms, authoredUniforms, "linewidth pin does not touch uniforms");
+  assert.equal(authoredUniforms.diffuse.value.getHex(), 0x633318, "pin does not mutate the uniforms Color");
+  assert.equal(mat.defaultAttributeValues, authoredDefaults, "linewidth pin does not touch defaultAttributeValues");
+  assert.equal(mat.index0AttributeName, "position", "linewidth pin does not touch index0AttributeName");
+  assert.equal(mat.depthPacking, THREE.BasicDepthPacking, "linewidth pin does not touch depthPacking");
+  assert.equal(mat.extensions, extensions, "linewidth pin does not touch extensions");
+  assert.equal(geo.getIndirect(), leftoverIndirect, "linewidth pin does not touch indirect");
+  assert.equal(geo.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(geo.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not null position.array");
+  assert.equal(position.onUploadCallback, rogue, "pin does not touch position onUpload");
+  assert.equal(mesh.name, "lidMesh", "reserved lidMesh name stays");
+  assert.equal(mesh.userData, bag, "mesh.userData stays");
+  assert.equal(mesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+  assert.equal(mesh.matrixAutoUpdate, true, "matrixAutoUpdate stays live");
+  assert.equal(mesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+  assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  assert.equal(mesh.visible, true, "mesh.visible stays true");
+  assert.equal(mat.version, 4, "pin does not touch material.version");
+  assert.equal(mat.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(mat.userData, matBag, "pin does not replace material.userData");
+  assert.equal(mat.fog, false, "pin does not touch fog");
+  assert.equal(mat.toneMapped, false, "pin does not touch toneMapped");
+  assert.equal(mat.flatShading, false, "pin does not touch flatShading");
+  assert.deepEqual(mat.defines, { KEEP: "1" }, "pin does not touch defines");
+
+  const zero = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  zero.linewidth = 0;
+  pinColorOnlyUnlitBasicMaterialLinewidth(new THREE.Mesh(groupsTestGeometry(), zero));
+  assert.equal(materialLinewidthAbsent(zero), true, "own 0 leftover is deleted");
+
+  const one = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  one.linewidth = 1;
+  pinColorOnlyUnlitBasicMaterialLinewidth(new THREE.Mesh(groupsTestGeometry(), one));
+  assert.equal(materialLinewidthAbsent(one), true, "own 1 leftover is deleted back to constructor absence");
+
+  const nulled = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  nulled.linewidth = null;
+  pinColorOnlyUnlitBasicMaterialLinewidth(new THREE.Mesh(groupsTestGeometry(), nulled));
+  assert.equal(materialLinewidthAbsent(nulled), true, "own null is deleted back to constructor absence");
+
+  const ownUndef = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  ownUndef.linewidth = undefined;
+  pinColorOnlyUnlitBasicMaterialLinewidth(new THREE.Mesh(groupsTestGeometry(), ownUndef));
+  assert.equal(materialLinewidthAbsent(ownUndef), true, "own undefined is deleted back to constructor absence");
+
+  const absent = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  absent.wireframeLinewidth = 4;
+  assert.equal(materialLinewidthAbsent(absent), true, "fresh MeshBasic linewidth is already absent");
+  const absentMesh = new THREE.Mesh(groupsTestGeometry(), absent);
+  absentMesh.name = "fastenerMesh";
+  pinColorOnlyUnlitBasicMaterialLinewidth(absentMesh);
+  assert.equal(materialLinewidthAbsent(absent), true, "already-absent linewidth stays absent");
+  assert.equal(absent.linewidth, undefined, "already-absent pin does not assign 1");
+  assert.equal(absent.wireframeLinewidth, 4, "already-absent pin does not touch wireframeLinewidth");
+  assert.equal(absentMesh.name, "fastenerMesh", "reserved fastenerMesh name stays");
+
+  const bleed = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  bleed.linewidth = 6;
+  bleed.isRawShaderMaterial = true;
+  bleed.isShaderMaterial = true;
+  pinColorOnlyUnlitBasicMaterialIsRawShaderMaterial(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.linewidth, 6, "isRawShaderMaterial pin does not delete linewidth");
+  assert.equal(materialIsRawShaderMaterialAbsent(bleed), true, "isRawShaderMaterial pin still deletes leftover isRawShaderMaterial");
+  bleed.isRawShaderMaterial = true;
+  pinColorOnlyUnlitBasicMaterialIsShaderMaterial(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.linewidth, 6, "isShaderMaterial pin does not delete linewidth");
+  pinColorOnlyUnlitBasicMaterialClipping(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.linewidth, 6, "clipping pin does not delete linewidth");
+  pinColorOnlyUnlitBasicMaterialLights(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.linewidth, 6, "lights pin does not delete linewidth");
+  pinColorOnlyUnlitBasicMaterialFragmentShader(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.linewidth, 6, "fragmentShader pin does not delete linewidth");
+  pinColorOnlyUnlitBasicMaterialVertexShader(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(Object.hasOwn(bleed, "linewidth"), true, "vertexShader pin does not delete linewidth");
+  pinColorOnlyUnlitBasicMaterialLinewidth(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(materialLinewidthAbsent(bleed), true, "numeric linewidth bleed on MeshBasic is deleted");
+  assert.equal(bleed.isRawShaderMaterial, true, "linewidth pin leaves isRawShaderMaterial authored");
+
+  const shared = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  shared.linewidth = 4;
+  const first = new THREE.Mesh(groupsTestGeometry(), shared);
+  const second = new THREE.Mesh(groupsTestGeometry(), shared);
+  const sharedRoot = new THREE.Group();
+  const rootBag = sharedRoot.userData;
+  sharedRoot.add(first, second);
+  pinColorOnlyVisualMaterialLinewidth(sharedRoot);
+  assert.equal(first.material, shared, "first mesh keeps the shared material");
+  assert.equal(second.material, shared, "second mesh keeps the shared material");
+  assert.equal(materialLinewidthAbsent(shared), true, "shared material linewidth is deleted once");
+  assert.equal(sharedRoot.userData, rootBag, "entity helper does not replace entity userData");
+  pinColorOnlyUnlitBasicMaterialLinewidth(second);
+  assert.equal(materialLinewidthAbsent(shared), true, "a second sight of an already-absent shared material does not assign");
+  assert.equal(shared.isMeshBasicMaterial, true, "shared material stays MeshBasic");
+  assert.equal(shared.wireframeLinewidth, 1, "shared wireframeLinewidth stays the constructor 1");
+});
+
+test("pinColorOnlyUnlitBasicMaterialLinewidth / pinColorOnlyVisualMaterialLinewidth skip mapped, lit, interleaved, colliders, line materials, and shared blocked", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  colorMat.linewidth = 2;
+  colorMat.isRawShaderMaterial = true;
+  colorMat.wireframeLinewidth = 2;
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  colorOnly.name = "lidMesh";
+  pinColorOnlyUnlitBasicMaterialLinewidth(colorOnly);
+  assert.equal(materialLinewidthAbsent(colorOnly.material), true, "color-only leftover linewidth is deleted");
+  assert.equal(colorOnly.material.isRawShaderMaterial, true, "color-only isRawShaderMaterial stays");
+  assert.equal(colorOnly.material.wireframeLinewidth, 2, "color-only wireframeLinewidth stays");
+  assert.equal(colorOnly.material.isMeshBasicMaterial, true, "color-only stays MeshBasic");
+  assert.equal(colorOnly.material.type, "MeshBasicMaterial", "color-only type stays");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin keeps lidMesh");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  mappedMat.linewidth = 2;
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  pinColorOnlyUnlitBasicMaterialLinewidth(mapped);
+  assert.equal(mapped.material.linewidth, 2, "mapped MeshBasic keeps authored linewidth");
+
+  const std = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  std.material.linewidth = 2;
+  pinColorOnlyUnlitBasicMaterialLinewidth(std);
+  assert.equal(std.material.linewidth, 2, "MeshStandard keeps authored linewidth");
+
+  const shader = new THREE.ShaderMaterial();
+  assert.equal(shader.linewidth, 1, "ShaderMaterial starts at constructor 1");
+  shader.linewidth = 6;
+  const shaderMesh = new THREE.Mesh(groupsTestGeometry(), shader);
+  pinColorOnlyUnlitBasicMaterialLinewidth(shaderMesh);
+  assert.equal(shader.linewidth, 6, "ShaderMaterial authored linewidth stays");
+  assert.equal(Object.hasOwn(shader, "linewidth"), true, "ShaderMaterial own linewidth stays");
+  assert.equal(shader.type, "ShaderMaterial", "ShaderMaterial type stays");
+
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x633318 });
+  assert.equal(lineMat.linewidth, 1, "LineBasicMaterial starts at constructor 1");
+  lineMat.linewidth = 4;
+  const lineMesh = new THREE.Mesh(groupsTestGeometry(), lineMat);
+  pinColorOnlyUnlitBasicMaterialLinewidth(lineMesh);
+  assert.equal(lineMat.linewidth, 4, "LineBasicMaterial authored linewidth stays");
+  assert.equal(lineMat.type, "LineBasicMaterial", "LineBasicMaterial type stays");
+
+  const dashedMat = new THREE.LineDashedMaterial({ color: 0x633318 });
+  assert.equal(dashedMat.linewidth, 1, "LineDashedMaterial starts at constructor 1");
+  dashedMat.linewidth = 5;
+  const dashedMesh = new THREE.Mesh(groupsTestGeometry(), dashedMat);
+  pinColorOnlyUnlitBasicMaterialLinewidth(dashedMesh);
+  assert.equal(dashedMat.linewidth, 5, "LineDashedMaterial authored linewidth stays");
+  assert.equal(dashedMat.type, "LineDashedMaterial", "LineDashedMaterial type stays");
+
+  const raw = new THREE.RawShaderMaterial();
+  assert.equal(raw.linewidth, 1, "RawShaderMaterial keeps ShaderMaterial constructor linewidth");
+  const rawMesh = new THREE.Mesh(groupsTestGeometry(), raw);
+  pinColorOnlyUnlitBasicMaterialLinewidth(rawMesh);
+  assert.equal(raw.linewidth, 1, "RawShaderMaterial constructor linewidth stays");
+  raw.linewidth = 8;
+  pinColorOnlyUnlitBasicMaterialLinewidth(rawMesh);
+  assert.equal(raw.linewidth, 8, "pin does not rewrite an authored RawShaderMaterial linewidth");
+
+  const line = new THREE.Line(groupsTestGeometry(), new THREE.LineBasicMaterial());
+  line.material.linewidth = 9;
+  pinColorOnlyUnlitBasicMaterialLinewidth(line);
+  assert.equal(line.material.linewidth, 9, "a Line is not a Mesh and is left alone");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  interleavedMat.linewidth = 0;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicMaterialLinewidth(interleaved);
+  assert.equal(interleavedMat.linewidth, 0, "interleaved linewidth stays authored");
+  assert.equal(Object.hasOwn(interleavedMat, "linewidth"), true, "interleaved 0 stays an own property");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.material.linewidth = 1;
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicMaterialLinewidth(collider);
+  assert.equal(collider.material.linewidth, 1, "collider linewidth stays");
+  assert.equal(Object.hasOwn(collider.material, "linewidth"), true, "collider own linewidth stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorMesh.name = "dccLatch";
+  colorMesh.material.version = 9;
+  colorMesh.material.linewidth = 2;
+  colorMesh.material.isRawShaderMaterial = true;
+  colorMesh.material.isShaderMaterial = true;
+  colorMesh.material.clipping = true;
+  colorMesh.material.wireframeLinewidth = 2;
+  colorMesh.material.fragmentShader = "void main(){gl_FragColor=vec4(1.0);}";
+  colorMesh.material.vertexShader = "void main(){gl_Position=vec4(1.0);}";
+  colorMesh.material.lights = true;
+  const entityPlanes = [new THREE.Plane()];
+  colorMesh.material.clippingPlanes = entityPlanes;
+  colorMesh.material.clipIntersection = true;
+  colorMesh.material.clipShadows = true;
+  colorMesh.material.uniformsGroups = [shaderStyleUniformsGroup("entity")];
+  colorMesh.material.uniformsNeedUpdate = true;
+  colorMesh.material.uniforms = shaderStyleUniformMap();
+  colorMesh.material.defaultAttributeValues = shaderStyleDefaultAttributeValues();
+  colorMesh.material.index0AttributeName = "color";
+  colorMesh.material.depthPacking = THREE.BasicDepthPacking;
+  colorMesh.material.extensions = { clipCullDistance: true };
+  const colorIndirect = { label: "entity-indirect" };
+  colorMesh.geometry.setIndirect(colorIndirect);
+  colorMesh.matrixWorldNeedsUpdate = false;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.linewidth = 0;
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  sharedGeoMat.linewidth = 1;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.userData.fastener = true;
+  root.add(tool, colorMesh, mapped, mappedMesh, std, shaderMesh, lineMesh, dashedMesh, rawMesh, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualMaterialLinewidth(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(materialLinewidthAbsent(colorMesh.material), true, "entity helper deletes color-only linewidth");
+  assert.equal(colorMesh.material.isRawShaderMaterial, true, "entity helper does not touch isRawShaderMaterial");
+  assert.equal(colorMesh.material.wireframeLinewidth, 2, "entity helper does not touch wireframeLinewidth");
+  assert.equal(colorMesh.material.isMeshBasicMaterial, true, "entity helper does not clear isMeshBasicMaterial");
+  assert.equal(colorMesh.material.type, "MeshBasicMaterial", "entity helper does not rewrite type");
+  assert.equal(colorMesh.material.clipping, true, "entity helper does not touch clipping");
+  assert.match(colorMesh.material.fragmentShader, /gl_FragColor/, "entity helper does not touch fragmentShader");
+  assert.match(colorMesh.material.vertexShader, /gl_Position/, "entity helper does not touch vertexShader");
+  assert.equal(colorMesh.material.lights, true, "entity helper does not touch lights");
+  assert.equal(colorMesh.material.clippingPlanes, entityPlanes, "entity helper does not touch clippingPlanes");
+  assert.equal(colorMesh.material.clipIntersection, true, "entity helper does not touch clipIntersection");
+  assert.equal(colorMesh.material.clipShadows, true, "entity helper does not touch clipShadows");
+  assert.equal(colorMesh.material.uniformsGroups[0].name, "entity", "entity helper does not touch uniformsGroups");
+  assert.equal(colorMesh.material.uniformsNeedUpdate, true, "entity helper does not touch uniformsNeedUpdate");
+  assert.ok(colorMesh.material.uniforms.diffuse.value.isColor, "entity helper does not touch uniforms");
+  assert.deepEqual(colorMesh.material.defaultAttributeValues, shaderStyleDefaultAttributeValues(), "entity helper does not touch defaultAttributeValues");
+  assert.equal(colorMesh.material.index0AttributeName, "color", "entity helper does not touch index0AttributeName");
+  assert.equal(colorMesh.material.depthPacking, THREE.BasicDepthPacking, "entity helper does not touch depthPacking");
+  assert.equal(colorMesh.material.extensions.clipCullDistance, true, "entity helper does not touch extensions");
+  assert.equal(colorMesh.geometry.getIndirect(), colorIndirect, "entity helper does not touch indirect");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.material.linewidth, 2, "mapped linewidth stays via entity helper");
+  assert.equal(std.material.linewidth, 2, "MeshStandard linewidth stays via entity helper");
+  assert.equal(shader.linewidth, 6, "ShaderMaterial authored linewidth stays via entity helper");
+  assert.equal(lineMat.linewidth, 4, "LineBasicMaterial authored linewidth stays via entity helper");
+  assert.equal(dashedMat.linewidth, 5, "LineDashedMaterial authored linewidth stays via entity helper");
+  assert.equal(raw.linewidth, 8, "RawShaderMaterial authored linewidth stays via entity helper");
+  assert.equal(interleaved.material.linewidth, 0, "interleaved linewidth stays via entity helper");
+  assert.equal(collider.material.linewidth, 1, "collider linewidth stays via entity helper");
+  assert.equal(sharedVisual.material.linewidth, 0, "shared collider material keeps authored linewidth");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.material.linewidth, 1, "geometry shared with a mapped mesh keeps linewidth");
+  assert.equal(Object.hasOwn(sharedGeoMat, "linewidth"), true, "shared-geometry 1 stays an own property");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(indirectIsNull(colorMesh.geometry), false, "linewidth pin does not clear leftover indirect");
 });
