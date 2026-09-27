@@ -141,6 +141,8 @@ const {
   pinColorOnlyVisualMaterialFragmentShader,
   pinColorOnlyUnlitBasicMaterialLights,
   pinColorOnlyVisualMaterialLights,
+  pinColorOnlyUnlitBasicMaterialClipping,
+  pinColorOnlyVisualMaterialClipping,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -25389,4 +25391,582 @@ test("pinColorOnlyUnlitBasicMaterialLights / pinColorOnlyVisualMaterialLights sk
   assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(indirectIsNull(colorMesh.geometry), false, "lights pin does not clear leftover indirect");
+});
+
+function materialClippingAbsent(material) {
+  return material?.clipping === undefined && Object.hasOwn(material, "clipping") === false;
+}
+
+function countVisualMaterialClipping(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (materialClippingAbsent(mat)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+/** r170 WebGLRenderer.setProgram wires clippingPlanes unless the material is a shader material with clipping !== true. */
+function setProgramWiresClippingPlanesUniform(material) {
+  return (!material.isShaderMaterial && !material.isRawShaderMaterial) || material.clipping === true;
+}
+
+test("r170 MeshBasic leaves clipping absent; a leftover boolean does not invent a custom shader path", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const freshMaterial = new THREE.Material();
+  const freshBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(freshMaterial.clipping, undefined, "Material constructor does not assign clipping");
+  assert.equal(Object.hasOwn(freshMaterial, "clipping"), false, "Material clipping is not an own property");
+  assert.equal(freshBasic.clipping, undefined, "MeshBasicMaterial constructor does not assign clipping");
+  assert.equal(Object.hasOwn(freshBasic, "clipping"), false, "MeshBasic clipping is not an own property");
+  assert.equal(freshBasic.clippingPlanes, null, "MeshBasic clippingPlanes default stays null");
+  assert.equal(freshBasic.clipIntersection, false, "MeshBasic clipIntersection default stays false");
+  assert.equal(freshBasic.clipShadows, false, "MeshBasic clipShadows default stays false");
+  assert.equal(setProgramWiresClippingPlanesUniform(freshBasic), true, "built-in MeshBasic wires clippingPlanes without reading material.clipping");
+  const absentProgram = resolvedProgramFragmentShader(freshBasic);
+  assert.equal(absentProgram.shaderID, "basic", "MeshBasic still resolves shaderID basic");
+  assert.equal(absentProgram.source, "shaderlib", "MeshBasic program still comes from ShaderLib");
+  const absentUpload = resolvedUploadUniforms(freshBasic);
+  assert.equal(absentUpload.shaderID, "basic", "MeshBasic still resolves shaderID basic for uniforms");
+  assert.equal(absentUpload.usesMaterialUniforms, false, "MeshBasic still clones ShaderLib uniforms");
+
+  const shader = new THREE.ShaderMaterial();
+  assert.equal(shader.clipping, false, "ShaderMaterial assigns this.clipping = false");
+  assert.equal(Object.hasOwn(shader, "clipping"), true, "ShaderMaterial clipping is an own property");
+  assert.equal(setProgramWiresClippingPlanesUniform(shader), false, "constructor clipping false does not wire clippingPlanes on ShaderMaterial");
+  assert.equal(resolvedProgramFragmentShader(shader).shaderID, undefined, "ShaderMaterial is not in shaderIDs");
+  assert.equal(resolvedProgramFragmentShader(shader).source, "material", "ShaderMaterial stays on the custom shader path");
+  shader.clipping = true;
+  assert.equal(setProgramWiresClippingPlanesUniform(shader), true, "ShaderMaterial clipping true is the setProgram clipping path");
+  const copiedShader = new THREE.ShaderMaterial().copy(shader);
+  assert.equal(copiedShader.clipping, true, "ShaderMaterial.copy assigns source.clipping");
+  assert.equal(Object.hasOwn(copiedShader, "clipping"), true, "copy stores an own clipping property");
+  const json = shader.toJSON();
+  assert.equal(json.clipping, true, "ShaderMaterial.toJSON writes data.clipping");
+
+  const raw = new THREE.RawShaderMaterial();
+  assert.equal(raw.clipping, false, "RawShaderMaterial keeps the ShaderMaterial constructor false");
+  assert.equal(Object.hasOwn(raw, "clipping"), true, "RawShaderMaterial clipping is an own property");
+  assert.equal(raw.isRawShaderMaterial, true, "RawShaderMaterial flag stays");
+  assert.equal(setProgramWiresClippingPlanesUniform(raw), false, "RawShaderMaterial constructor clipping false does not wire clippingPlanes");
+  assert.equal(resolvedProgramFragmentShader(raw).shaderID, undefined, "RawShaderMaterial is not in shaderIDs");
+  raw.clipping = true;
+  assert.equal(setProgramWiresClippingPlanesUniform(raw), true, "RawShaderMaterial clipping true wires clippingPlanes");
+
+  const copiedBasic = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  const bleedSource = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  bleedSource.clipping = true;
+  copiedBasic.copy(bleedSource);
+  assert.equal(materialClippingAbsent(copiedBasic), true, "MeshBasicMaterial.copy does not copy clipping");
+  assert.equal(bleedSource.clipping, true, "copy source boolean stays on the source");
+
+  const leftover = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  leftover.clipping = true;
+  assert.equal(Object.hasOwn(leftover, "clipping"), true, "assigning true stores an own property");
+  assert.equal(leftover.clipping, true, "true is not constructor absence");
+  assert.equal(leftover.isShaderMaterial, undefined, "leftover true does not set isShaderMaterial");
+  assert.equal(setProgramWiresClippingPlanesUniform(leftover), true, "leftover true on MeshBasic does not change the built-in wiring clause");
+  assert.equal(setProgramWiresClippingPlanesUniform(freshBasic), setProgramWiresClippingPlanesUniform(leftover), "leftover true matches a fresh MeshBasic wiring decision");
+  const leftoverProgram = resolvedProgramFragmentShader(leftover);
+  assert.equal(leftoverProgram.shaderID, "basic", "leftover true still resolves shaderID basic");
+  assert.equal(leftoverProgram.source, "shaderlib", "leftover true does not switch to a custom shader");
+
+  const falsy = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  falsy.clipping = false;
+  assert.equal(Object.hasOwn(falsy, "clipping"), true, "assigning false stores an own property");
+  assert.equal(falsy.clipping, false, "false is not constructor absence");
+  assert.equal(setProgramWiresClippingPlanesUniform(falsy), true, "own false on MeshBasic does not suppress clippingPlanes wiring");
+
+  const nulled = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  nulled.clipping = null;
+  assert.equal(Object.hasOwn(nulled, "clipping"), true, "assigning null stores an own property");
+  assert.equal(nulled.clipping, null, "null is not constructor absence");
+  assert.equal(setProgramWiresClippingPlanesUniform(nulled), true, "own null on MeshBasic still takes the built-in clause");
+
+  const ownUndef = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  ownUndef.clipping = undefined;
+  assert.equal(Object.hasOwn(ownUndef, "clipping"), true, "assigning undefined stores an own property");
+  assert.equal(ownUndef.clipping, undefined, "own undefined is not constructor absence");
+
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const material = readFileSync(require.resolve("three/src/materials/Material.js"), "utf8");
+  const meshBasic = readFileSync(require.resolve("three/src/materials/MeshBasicMaterial.js"), "utf8");
+  const shaderSource = readFileSync(require.resolve("three/src/materials/ShaderMaterial.js"), "utf8");
+  const rawSource = readFileSync(require.resolve("three/src/materials/RawShaderMaterial.js"), "utf8");
+  const loader = readFileSync(require.resolve("three/src/loaders/MaterialLoader.js"), "utf8");
+  assert.equal(/this\.clipping\s*=/.test(material), false, "Material.js does not assign this.clipping");
+  assert.match(material, /this\.clippingPlanes = null/);
+  assert.equal(meshBasic.includes("clipping"), false, "MeshBasicMaterial.js does not mention clipping");
+  assert.match(shaderSource, /this\.clipping = false;/);
+  assert.match(shaderSource, /this\.clipping = source\.clipping;/);
+  assert.match(shaderSource, /data\.clipping = this\.clipping;/);
+  assert.match(rawSource, /class RawShaderMaterial extends ShaderMaterial/);
+  assert.equal(rawSource.includes("clipping"), false, "RawShaderMaterial does not assign its own clipping");
+  assert.match(loader, /if \( json\.clipping !== undefined \) material\.clipping = json\.clipping;/);
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.equal(/material\.clipping(?!Planes)/.test(programs), false, "WebGLPrograms does not read material.clipping");
+  assert.match(programs, /numClippingPlanes: clipping\.numPlanes/);
+  assert.match(programs, /numClipIntersection: clipping\.numIntersection/);
+  assert.match(programs, /array\.push\( parameters\.numClippingPlanes \);/);
+  assert.match(programs, /array\.push\( parameters\.numClipIntersection \);/);
+  assert.match(programs, /const shaderID = shaderIDs\[ material\.type \];/);
+  assert.match(programs, /if \( shaderID \) \{/);
+  assert.match(programs, /_customShaders\.update\( material \);/);
+  assert.match(programs, /array\.push\( parameters\.shaderID \);/);
+  assert.match(programs, /MeshBasicMaterial: 'basic'/);
+  const renderer = readFileSync(require.resolve("three/src/renderers/WebGLRenderer.js"), "utf8");
+  assert.match(renderer, /\( ! material\.isShaderMaterial && ! material\.isRawShaderMaterial \) \|\| material\.clipping === true/);
+  assert.match(renderer, /uniforms\.clippingPlanes = clipping\.uniform;/);
+  const clippingSrc = readFileSync(require.resolve("three/src/renderers/webgl/WebGLClipping.js"), "utf8");
+  assert.equal(/material\.clipping(?!Planes)/.test(clippingSrc), false, "WebGLClipping does not read material.clipping");
+  assert.match(clippingSrc, /const planes = material\.clippingPlanes/);
+  assert.match(clippingSrc, /clipIntersection = material\.clipIntersection/);
+  assert.match(clippingSrc, /clipShadows = material\.clipShadows/);
+});
+
+
+test("v1.21.0 clears leftover Material clipping on packed color-only MeshBasics; envelope stays v1.20.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.21\.0 pins leftover Material clipping/);
+  assert.match(crate.userData.l2.note, /clipping-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.20\.0 pins leftover Material lights/);
+  assert.match(crate.userData.l2.note, /lights-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.19\.0 pins leftover Material fragmentShader/);
+  assert.match(crate.userData.l2.note, /fragmentShader-absent 3/);
+  assert.match(crate.userData.l2.note, /vertexShader-absent 3/);
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(materialClippingAbsent(wood), true, "wood clipping is absent");
+  assert.equal(materialClippingAbsent(brass), true, "brass clipping is absent");
+  assert.equal(materialClippingAbsent(steel), true, "steel clipping is absent");
+  assert.equal(materialLightsAbsent(wood), true, "wood lights stays absent");
+  assert.equal(materialLightsAbsent(brass), true, "brass lights stays absent");
+  assert.equal(materialLightsAbsent(steel), true, "steel lights stays absent");
+  assert.equal(wood.clippingPlanes, null, "wood clippingPlanes stays null");
+  assert.equal(wood.clipIntersection, false, "wood clipIntersection stays false");
+  assert.equal(wood.clipShadows, false, "wood clipShadows stays false");
+  assert.equal(materialFragmentShaderAbsent(wood), true, "wood fragmentShader stays absent");
+  assert.equal(materialFragmentShaderAbsent(brass), true, "brass fragmentShader stays absent");
+  assert.equal(materialFragmentShaderAbsent(steel), true, "steel fragmentShader stays absent");
+  assert.equal(materialVertexShaderAbsent(wood), true, "wood vertexShader stays absent");
+  assert.equal(materialUniformsGroupsAbsent(wood), true, "wood uniformsGroups stays absent");
+  assert.equal(materialUniformsNeedUpdateAbsent(wood), true, "wood uniformsNeedUpdate stays absent");
+  assert.equal(materialUniformsAbsent(wood), true, "wood uniforms stays absent");
+  assert.equal(materialDefaultAttributeValuesAbsent(wood), true, "wood defaultAttributeValues stays absent");
+  assert.equal(materialIndex0AttributeNameAbsent(wood), true, "wood index0AttributeName stays absent");
+  assert.equal(materialDepthPackingAbsent(wood), true, "wood depthPacking stays absent");
+  assert.equal(materialExtensionsAbsent(wood), true, "wood extensions stay absent");
+  assert.equal(wood.isMeshBasicMaterial, true, "wood stays MeshBasic");
+  assert.equal(brass.isMeshBasicMaterial, true, "brass stays MeshBasic");
+  assert.equal(steel.isMeshBasicMaterial, true, "steel stays MeshBasic");
+  assert.equal(wood.isShaderMaterial, undefined, "wood is not converted to ShaderMaterial");
+  assert.equal(wood.version, 0, "wood material.version stays 0");
+  assert.equal(brass.name, "", "brass material.name stays empty");
+  assert.equal(materialUserDataEmpty(steel), true, "steel material.userData stays empty");
+
+  const flags = countVisualMaterialClipping(crate);
+  assert.equal(flags.absent, 3, "clipping-absent count is 3");
+  assert.equal(countVisualMaterialLights(crate).absent, 3, "lights-absent stays 3");
+  assert.equal(countVisualMaterialFragmentShader(crate).absent, 3, "fragmentShader-absent stays 3");
+  assert.equal(countVisualMaterialVertexShader(crate).absent, 3, "vertexShader-absent stays 3");
+  assert.equal(flags.leftover, 0);
+  assert.equal(flags.total, 3);
+  assert.equal(countVisualMaterialUniformsGroups(crate).absent, 3, "uniformsGroups-absent stays 3");
+  assert.equal(countVisualMaterialUniformsNeedUpdate(crate).absent, 3, "uniformsNeedUpdate-absent stays 3");
+  assert.equal(countVisualMaterialUniforms(crate).absent, 3, "uniforms-absent stays 3");
+  assert.equal(countVisualMaterialDefaultAttributeValues(crate).absent, 3, "defaultAttributeValues-absent stays 3");
+  assert.equal(countVisualMaterialIndex0AttributeName(crate).absent, 3, "index0AttributeName-absent stays 3");
+  assert.equal(countVisualMaterialDepthPacking(crate).absent, 3, "depthPacking-absent stays 3");
+  assert.equal(countVisualMaterialExtensions(crate).absent, 3, "extensions-absent stays 3");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13");
+  assert.equal(countVisualOnUploadRelease(crate).release, 13, "onUpload-release stays 13");
+  assert.equal(countVisualColorAttribute(crate).absent, 13, "colorAttribute-absent stays 13");
+  assert.equal(countVisualMatrixWorldNeedsUpdate(crate).cleared, 13, "matrixWorldNeedsUpdate-false stays 13");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3");
+  assert.equal(countVisualMaterialName(crate).empty, 3, "material-name-empty stays 3");
+  assert.equal(countVisualMaterialUserData(crate).empty, 3, "material-userData-empty stays 3");
+  assert.equal(countVisualGeometryUserData(crate).empty, 13, "geometry-userData-empty stays 13");
+  assert.equal(countVisualGeometryName(crate).empty, 13, "geometry-name-empty stays 13");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10");
+  assert.equal(countVisualMeshName(crate).reserved, 3, "three reserved visual names stay");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(materialClippingAbsent(mesh.material), true, "packed visual clipping stays absent");
+    assert.equal(materialFragmentShaderAbsent(mesh.material), true, "packed visual fragmentShader stays absent");
+    assert.equal(materialVertexShaderAbsent(mesh.material), true, "packed visual vertexShader stays absent");
+    assert.equal(indirectIsNull(mesh.geometry), true, "indirect stays null");
+    assert.equal(mesh.material.version, 0, "material.version stays 0");
+    assert.equal(mesh.visible, true, "mesh.visible is not pinned");
+    assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  }
+
+  const fastener = crate.getObjectByName("fastenerMesh");
+  const lid = crate.getObjectByName("lidMesh");
+  const latch = crate.getObjectByName("latchMesh");
+  assert.equal(cpuAttrBytes(fastener.geometry), 216, "fastener attrBytes stay 216");
+  assert.equal(materialClippingAbsent(fastener.material), true, "fastener shares the pinned brass material");
+  assert.equal(fastener.material, brass, "fastener still shares brass");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh name stays");
+  assert.equal(lid.name, "lidMesh", "lidMesh name stays");
+  assert.equal(latch.name, "latchMesh", "latchMesh name stays");
+  assert.equal(fastener.matrixAutoUpdate, true, "fastener matrixAutoUpdate stays live");
+
+  const { lidPivot, latchPivot } = crate.userData.parts;
+  const rootBag = crate.userData;
+  const tool = crate.userData.parts.tool;
+  const toolBag = tool.userData;
+  assert.equal(tryUse(crate, "collider_lid").ok, false);
+  assert.equal(tryUse(crate, "collider_latch").to, "unlatched");
+  applyActivityVisual(crate, 1);
+  assert.ok(latchPivot.rotation.x < -1);
+  assert.equal(tryUse(crate, "collider_lid").to, "open");
+  applyActivityVisual(crate, 1);
+  assert.ok(lidPivot.rotation.x < -2);
+  const drive = tryDriveFastener(crate);
+  assert.equal(drive.ok, true);
+  assert.ok(Math.abs(fastener.rotation.z - Math.PI / 2) < 1e-6);
+  assert.equal(countVisualMaterialClipping(crate).absent, 3, "clipping-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialLights(crate).absent, 3, "lights-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialFragmentShader(crate).absent, 3, "fragmentShader-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialVertexShader(crate).absent, 3, "vertexShader-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialUniformsGroups(crate).absent, 3, "uniformsGroups-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialUniformsNeedUpdate(crate).absent, 3, "uniformsNeedUpdate-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialUniforms(crate).absent, 3, "uniforms-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialDefaultAttributeValues(crate).absent, 3, "defaultAttributeValues-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialIndex0AttributeName(crate).absent, 3, "index0AttributeName-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialDepthPacking(crate).absent, 3, "depthPacking-absent stays 3 after L4/L5");
+  assert.equal(countVisualMaterialExtensions(crate).absent, 3, "extensions-absent stays 3 after L4/L5");
+  assert.equal(countVisualIndirect(crate).indirectNull, 13, "indirect-null stays 13 after L4/L5");
+  assert.equal(countVisualUnusedAttributes(crate).absent, 13, "unusedAttributes-absent stays 13 after L4/L5");
+  assert.equal(countVisualMaterialVersion(crate).zero, 3, "material-version-zero stays 3 after L4/L5");
+  assert.equal(countVisualMeshUserData(crate).empty, 13, "mesh-userData-empty stays 13 after L4/L5");
+  assert.equal(countVisualMeshName(crate).empty, 10, "mesh-name-empty stays 10 after L4/L5");
+  assert.equal(crate.userData, rootBag, "L4/L5 does not replace root userData");
+  assert.equal(tool.userData, toolBag, "L4/L5 does not replace tool Group userData");
+  assert.equal(fastener.name, "fastenerMesh", "L5 keeps fastenerMesh");
+  assert.equal(lid.name, "lidMesh", "L4 keeps lidMesh");
+  assert.equal(latch.name, "latchMesh", "L4 keeps latchMesh");
+  assert.deepEqual(getToolboxLodStats(crate)[0], stats[0], "L4/L5 does not change the LOD0 envelope");
+});
+
+test("pinColorOnlyUnlitBasicMaterialClipping deletes leftover clipping and leaves an already-absent clipping alone", () => {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  mat.version = 4;
+  mat.name = "woodStandIn";
+  mat.fog = false;
+  mat.toneMapped = false;
+  mat.flatShading = false;
+  mat.defines = { KEEP: "1" };
+  const matBag = mat.userData;
+  const extensions = { multiDraw: true };
+  mat.extensions = extensions;
+  mat.depthPacking = THREE.BasicDepthPacking;
+  mat.index0AttributeName = "position";
+  const authoredDefaults = shaderStyleDefaultAttributeValues();
+  mat.defaultAttributeValues = authoredDefaults;
+  const authoredUniforms = shaderStyleUniformMap();
+  mat.uniforms = authoredUniforms;
+  const authoredGroups = [shaderStyleUniformsGroup("stay-groups")];
+  mat.uniformsGroups = authoredGroups;
+  mat.uniformsNeedUpdate = true;
+  const authoredFragment = "void main(){ gl_FragColor = vec4(0.0); }";
+  mat.fragmentShader = authoredFragment;
+  mat.vertexShader = "void main(){gl_Position=vec4(1.0);}";
+  mat.clipping = true;
+  mat.lights = true;
+  mat.isShaderMaterial = true;
+  const authoredPlanes = [new THREE.Plane()];
+  mat.clippingPlanes = authoredPlanes;
+  mat.clipIntersection = true;
+  mat.clipShadows = true;
+  assert.equal(Object.hasOwn(mat, "clipping"), true, "fixture stores an own clipping");
+  assert.equal(mat.clipping, true);
+  const geo = groupsTestGeometry();
+  const leftoverIndirect = { label: "stay-indirect" };
+  geo.setIndirect(leftoverIndirect);
+  const position = geo.getAttribute("position");
+  const index = geo.index;
+  const positionArray = position.array;
+  function rogue() {}
+  position.onUpload(rogue);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = "lidMesh";
+  mesh.matrixAutoUpdate = true;
+  mesh.matrixWorldNeedsUpdate = false;
+  mesh.matrixWorldAutoUpdate = true;
+  mesh.frustumCulled = true;
+  mesh.visible = true;
+  const bag = mesh.userData;
+  const returned = pinColorOnlyUnlitBasicMaterialClipping(mesh);
+  assert.equal(returned, mesh, "pin returns the same mesh");
+  assert.equal(mesh.material, mat, "pin does not replace the material");
+  assert.equal(mat.isMeshBasicMaterial, true, "pin does not replace MeshBasic");
+  assert.equal(materialClippingAbsent(mat), true, "leftover true is deleted");
+  assert.equal(mat.clipping, undefined, "pin does not assign null, undefined, false, or true");
+  assert.equal(mat.isShaderMaterial, true, "pin does not touch isShaderMaterial");
+  assert.equal(mat.clippingPlanes, authoredPlanes, "clipping pin does not touch clippingPlanes");
+  assert.equal(mat.clipIntersection, true, "clipping pin does not touch clipIntersection");
+  assert.equal(mat.clipShadows, true, "clipping pin does not touch clipShadows");
+  assert.equal(mat.lights, true, "clipping pin does not touch lights");
+  assert.equal(mat.fragmentShader, authoredFragment, "clipping pin does not touch fragmentShader");
+  assert.equal(mat.vertexShader.includes("gl_Position"), true, "clipping pin does not touch vertexShader");
+  assert.equal(mat.uniformsGroups, authoredGroups, "clipping pin does not touch uniformsGroups");
+  assert.equal(mat.uniformsNeedUpdate, true, "clipping pin does not touch uniformsNeedUpdate");
+  assert.equal(mat.uniforms, authoredUniforms, "clipping pin does not touch uniforms");
+  assert.equal(authoredUniforms.diffuse.value.getHex(), 0x633318, "pin does not mutate the uniforms Color");
+  assert.equal(mat.defaultAttributeValues, authoredDefaults, "clipping pin does not touch defaultAttributeValues");
+  assert.equal(mat.index0AttributeName, "position", "clipping pin does not touch index0AttributeName");
+  assert.equal(mat.depthPacking, THREE.BasicDepthPacking, "clipping pin does not touch depthPacking");
+  assert.equal(mat.extensions, extensions, "clipping pin does not touch extensions");
+  assert.equal(geo.getIndirect(), leftoverIndirect, "clipping pin does not touch indirect");
+  assert.equal(geo.getAttribute("position"), position, "pin does not replace position");
+  assert.equal(geo.index, index, "pin does not replace the index");
+  assert.equal(position.array, positionArray, "pin does not null position.array");
+  assert.equal(position.onUploadCallback, rogue, "pin does not touch position onUpload");
+  assert.equal(mesh.name, "lidMesh", "reserved lidMesh name stays");
+  assert.equal(mesh.userData, bag, "mesh.userData stays");
+  assert.equal(mesh.matrixWorldNeedsUpdate, false, "matrixWorldNeedsUpdate stays false");
+  assert.equal(mesh.matrixAutoUpdate, true, "matrixAutoUpdate stays live");
+  assert.equal(mesh.matrixWorldAutoUpdate, true, "matrixWorldAutoUpdate stays true");
+  assert.equal(mesh.frustumCulled, true, "frustumCulled stays true");
+  assert.equal(mesh.visible, true, "mesh.visible stays true");
+  assert.equal(mat.version, 4, "pin does not touch material.version");
+  assert.equal(mat.name, "woodStandIn", "pin does not touch material.name");
+  assert.equal(mat.userData, matBag, "pin does not replace material.userData");
+  assert.equal(mat.fog, false, "pin does not touch fog");
+  assert.equal(mat.toneMapped, false, "pin does not touch toneMapped");
+  assert.equal(mat.flatShading, false, "pin does not touch flatShading");
+  assert.deepEqual(mat.defines, { KEEP: "1" }, "pin does not touch defines");
+
+  const falsy = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  falsy.clipping = false;
+  pinColorOnlyUnlitBasicMaterialClipping(new THREE.Mesh(groupsTestGeometry(), falsy));
+  assert.equal(materialClippingAbsent(falsy), true, "own false leftover is deleted");
+  assert.equal(falsy.clipping, undefined, "false is not left assigned");
+
+  const nulled = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  nulled.clipping = null;
+  pinColorOnlyUnlitBasicMaterialClipping(new THREE.Mesh(groupsTestGeometry(), nulled));
+  assert.equal(materialClippingAbsent(nulled), true, "own null is deleted back to constructor absence");
+
+  const ownUndef = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  ownUndef.clipping = undefined;
+  pinColorOnlyUnlitBasicMaterialClipping(new THREE.Mesh(groupsTestGeometry(), ownUndef));
+  assert.equal(materialClippingAbsent(ownUndef), true, "own undefined is deleted back to constructor absence");
+
+  const absent = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(materialClippingAbsent(absent), true, "fresh MeshBasic clipping is already absent");
+  const absentMesh = new THREE.Mesh(groupsTestGeometry(), absent);
+  absentMesh.name = "fastenerMesh";
+  pinColorOnlyUnlitBasicMaterialClipping(absentMesh);
+  assert.equal(materialClippingAbsent(absent), true, "already-absent clipping stays absent");
+  assert.equal(absent.clipping, undefined, "already-absent pin does not assign false");
+  assert.equal(absentMesh.name, "fastenerMesh", "reserved fastenerMesh name stays");
+
+  const bleed = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  bleed.clipping = true;
+  pinColorOnlyUnlitBasicMaterialFragmentShader(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.clipping, true, "fragmentShader pin does not delete clipping");
+  pinColorOnlyUnlitBasicMaterialVertexShader(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.clipping, true, "vertexShader pin does not delete clipping");
+  pinColorOnlyUnlitBasicMaterialUniformsGroups(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(Object.hasOwn(bleed, "clipping"), true, "uniformsGroups pin does not delete clipping");
+  pinColorOnlyUnlitBasicMaterialUniformsNeedUpdate(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.clipping, true, "uniformsNeedUpdate pin does not delete clipping");
+  pinColorOnlyUnlitBasicMaterialUniforms(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.clipping, true, "uniforms pin does not delete clipping");
+  pinColorOnlyUnlitBasicMaterialDefaultAttributeValues(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(Object.hasOwn(bleed, "clipping"), true, "defaultAttributeValues pin does not delete clipping");
+  pinColorOnlyUnlitBasicMaterialIndex0AttributeName(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.clipping, true, "index0AttributeName pin does not delete clipping");
+  pinColorOnlyUnlitBasicMaterialDepthPacking(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(Object.hasOwn(bleed, "clipping"), true, "depthPacking pin does not delete clipping");
+  pinColorOnlyUnlitBasicMaterialExtensions(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(bleed.clipping, true, "extensions pin does not delete clipping");
+  pinColorOnlyUnlitBasicIndirect(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(Object.hasOwn(bleed, "clipping"), true, "indirect pin does not delete clipping");
+  bleed.fragmentShader = "void main(){ /* stay */ }";
+  pinColorOnlyUnlitBasicMaterialClipping(new THREE.Mesh(groupsTestGeometry(), bleed));
+  assert.equal(materialClippingAbsent(bleed), true, "ShaderMaterial-style boolean bleed on MeshBasic is deleted");
+  assert.equal(bleed.fragmentShader.includes("stay"), true, "clipping pin leaves fragmentShader authored");
+
+  const shared = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  shared.clipping = false;
+  const first = new THREE.Mesh(groupsTestGeometry(), shared);
+  const second = new THREE.Mesh(groupsTestGeometry(), shared);
+  const sharedRoot = new THREE.Group();
+  const rootBag = sharedRoot.userData;
+  sharedRoot.add(first, second);
+  pinColorOnlyVisualMaterialClipping(sharedRoot);
+  assert.equal(first.material, shared, "first mesh keeps the shared material");
+  assert.equal(second.material, shared, "second mesh keeps the shared material");
+  assert.equal(materialClippingAbsent(shared), true, "shared material clipping is deleted once");
+  assert.equal(sharedRoot.userData, rootBag, "entity helper does not replace entity userData");
+  pinColorOnlyUnlitBasicMaterialClipping(second);
+  assert.equal(materialClippingAbsent(shared), true, "a second sight of an already-absent shared material does not assign");
+  assert.equal(shared.isMeshBasicMaterial, true, "shared material stays MeshBasic");
+});
+
+test("pinColorOnlyUnlitBasicMaterialClipping / pinColorOnlyVisualMaterialClipping skip mapped, lit, interleaved, colliders, and shared blocked", () => {
+  const colorMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  colorMat.clipping = true;
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), colorMat);
+  colorOnly.name = "lidMesh";
+  pinColorOnlyUnlitBasicMaterialClipping(colorOnly);
+  assert.equal(materialClippingAbsent(colorOnly.material), true, "color-only leftover clipping is deleted");
+  assert.equal(colorOnly.name, "lidMesh", "per-mesh pin keeps lidMesh");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  mappedMat.clipping = true;
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  pinColorOnlyUnlitBasicMaterialClipping(mapped);
+  assert.equal(mapped.material.clipping, true, "mapped MeshBasic keeps authored clipping");
+
+  const std = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  std.material.clipping = true;
+  pinColorOnlyUnlitBasicMaterialClipping(std);
+  assert.equal(std.material.clipping, true, "MeshStandard keeps authored clipping");
+  assert.equal(Object.hasOwn(std.material, "clipping"), true, "MeshStandard own property stays");
+
+  const shader = new THREE.ShaderMaterial();
+  assert.equal(shader.clipping, false, "ShaderMaterial starts at constructor false");
+  assert.equal(Object.hasOwn(shader, "clipping"), true, "ShaderMaterial starts with an own clipping");
+  const shaderMesh = new THREE.Mesh(groupsTestGeometry(), shader);
+  pinColorOnlyUnlitBasicMaterialClipping(shaderMesh);
+  assert.equal(shader.clipping, false, "ShaderMaterial keeps its constructor clipping");
+  assert.equal(Object.hasOwn(shader, "clipping"), true, "ShaderMaterial own clipping stays");
+  shader.clipping = true;
+  pinColorOnlyUnlitBasicMaterialClipping(shaderMesh);
+  assert.equal(shader.clipping, true, "ShaderMaterial keeps an authored clipping true");
+  assert.equal(shader.isShaderMaterial, true, "ShaderMaterial isShaderMaterial stays");
+
+  const raw = new THREE.RawShaderMaterial();
+  assert.equal(raw.clipping, false, "RawShaderMaterial starts at constructor false");
+  const rawMesh = new THREE.Mesh(groupsTestGeometry(), raw);
+  pinColorOnlyUnlitBasicMaterialClipping(rawMesh);
+  assert.equal(raw.clipping, false, "RawShaderMaterial keeps its constructor clipping");
+  raw.clipping = true;
+  pinColorOnlyUnlitBasicMaterialClipping(rawMesh);
+  assert.equal(raw.clipping, true, "RawShaderMaterial keeps an authored clipping true");
+  assert.equal(raw.isRawShaderMaterial, true, "RawShaderMaterial flag stays");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  interleavedMat.clipping = false;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicMaterialClipping(interleaved);
+  assert.equal(interleavedMat.clipping, false, "interleaved clipping stays authored");
+  assert.equal(Object.hasOwn(interleavedMat, "clipping"), true, "interleaved false stays an own property");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.material.clipping = true;
+  const colliderBag = collider.userData;
+  pinColorOnlyUnlitBasicMaterialClipping(collider);
+  assert.equal(collider.material.clipping, true, "collider clipping stays");
+  assert.equal(Object.hasOwn(collider.material, "clipping"), true, "collider own clipping stays");
+  assert.equal(collider.userData, colliderBag, "collider mesh userData stays");
+  assert.equal(collider.name, "collider_grab", "collider name stays");
+
+  const root = new THREE.Group();
+  root.userData.studio = { objectId: "crate-toolbox" };
+  const rootBag = root.userData;
+  const tool = new THREE.Group();
+  tool.name = "tool";
+  tool.userData.feedbackEntity = root;
+  const toolBag = tool.userData;
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorMesh.name = "dccLatch";
+  colorMesh.material.version = 9;
+  colorMesh.material.clipping = true;
+  colorMesh.material.fragmentShader = "void main(){gl_FragColor=vec4(1.0);}";
+  colorMesh.material.vertexShader = "void main(){gl_Position=vec4(1.0);}";
+  colorMesh.material.lights = true;
+  colorMesh.material.isShaderMaterial = true;
+  const entityPlanes = [new THREE.Plane()];
+  colorMesh.material.clippingPlanes = entityPlanes;
+  colorMesh.material.clipIntersection = true;
+  colorMesh.material.clipShadows = true;
+  colorMesh.material.uniformsGroups = [shaderStyleUniformsGroup("entity")];
+  colorMesh.material.uniformsNeedUpdate = true;
+  colorMesh.material.uniforms = shaderStyleUniformMap();
+  colorMesh.material.defaultAttributeValues = shaderStyleDefaultAttributeValues();
+  colorMesh.material.index0AttributeName = "color";
+  colorMesh.material.depthPacking = THREE.BasicDepthPacking;
+  colorMesh.material.extensions = { clipCullDistance: true };
+  const colorIndirect = { label: "entity-indirect" };
+  colorMesh.geometry.setIndirect(colorIndirect);
+  colorMesh.matrixWorldNeedsUpdate = false;
+  const colorEntityExtras = { part: "latch" };
+  colorMesh.userData = colorEntityExtras;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.clipping = false;
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const mappedMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.version = 12;
+  sharedGeoMat.clipping = true;
+  const sharedGeoVisual = new THREE.Mesh(mappedMesh.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  sharedGeoVisual.userData.fastener = true;
+  root.add(tool, colorMesh, mapped, mappedMesh, std, shaderMesh, rawMesh, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual);
+  pinColorOnlyVisualMaterialClipping(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(tool.userData, toolBag, "tool Group userData stays");
+  assert.equal(materialClippingAbsent(colorMesh.material), true, "entity helper deletes color-only clipping");
+  assert.match(colorMesh.material.fragmentShader, /gl_FragColor/, "entity helper does not touch fragmentShader");
+  assert.match(colorMesh.material.vertexShader, /gl_Position/, "entity helper does not touch vertexShader");
+  assert.equal(colorMesh.material.lights, true, "entity helper does not touch lights");
+  assert.equal(colorMesh.material.isShaderMaterial, true, "entity helper does not touch isShaderMaterial");
+  assert.equal(colorMesh.material.clippingPlanes, entityPlanes, "entity helper does not touch clippingPlanes");
+  assert.equal(colorMesh.material.clipIntersection, true, "entity helper does not touch clipIntersection");
+  assert.equal(colorMesh.material.clipShadows, true, "entity helper does not touch clipShadows");
+  assert.equal(colorMesh.material.uniformsGroups[0].name, "entity", "entity helper does not touch uniformsGroups");
+  assert.equal(colorMesh.material.uniformsNeedUpdate, true, "entity helper does not touch uniformsNeedUpdate");
+  assert.ok(colorMesh.material.uniforms.diffuse.value.isColor, "entity helper does not touch uniforms");
+  assert.deepEqual(colorMesh.material.defaultAttributeValues, shaderStyleDefaultAttributeValues(), "entity helper does not touch defaultAttributeValues");
+  assert.equal(colorMesh.material.index0AttributeName, "color", "entity helper does not touch index0AttributeName");
+  assert.equal(colorMesh.material.depthPacking, THREE.BasicDepthPacking, "entity helper does not touch depthPacking");
+  assert.equal(colorMesh.material.extensions.clipCullDistance, true, "entity helper does not touch extensions");
+  assert.equal(colorMesh.geometry.getIndirect(), colorIndirect, "entity helper does not touch indirect");
+  assert.equal(colorMesh.matrixWorldNeedsUpdate, false, "entity helper does not touch matrixWorldNeedsUpdate");
+  assert.equal(colorMesh.material.version, 9, "entity helper does not touch material.version");
+  assert.equal(colorMesh.userData, colorEntityExtras, "entity helper does not replace mesh.userData");
+  assert.equal(colorMesh.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.material.clipping, true, "mapped clipping stays via entity helper");
+  assert.equal(std.material.clipping, true, "MeshStandard clipping stays via entity helper");
+  assert.equal(shader.clipping, true, "ShaderMaterial clipping stays via entity helper");
+  assert.equal(raw.clipping, true, "RawShaderMaterial clipping stays via entity helper");
+  assert.equal(interleaved.material.clipping, false, "interleaved clipping stays via entity helper");
+  assert.equal(collider.material.clipping, true, "collider clipping stays via entity helper");
+  assert.equal(sharedVisual.material.clipping, false, "shared collider material keeps authored clipping");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.material.clipping, true, "geometry shared with a mapped mesh keeps clipping");
+  assert.equal(Object.hasOwn(sharedGeoMat, "clipping"), true, "shared-geometry true stays an own property");
+  assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
+  assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(indirectIsNull(colorMesh.geometry), false, "clipping pin does not clear leftover indirect");
 });
