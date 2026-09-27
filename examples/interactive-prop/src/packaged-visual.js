@@ -2860,6 +2860,68 @@
  * vs v1.19.0. lights-absent 3 is the new count. Quest 3 90 Hz (~11.1 ms) / 72
  * Hz fallback are requested, not measured. No invented headset ms. Headset ms
  * / FFR still TODO. Do not require 207/240 Hz.
+ *
+ * v1.21.0 pins leftover Material clipping (the ShaderMaterial boolean, not Material clippingPlanes
+ * / clipIntersection / clipShadows) to the r170 MeshBasic absence (material.clipping === undefined
+ * and Object.hasOwn(material, 'clipping') === false) on the 3 shared color-only MeshBasic materials
+ * (wood / brass / steel; measured clipping-absent 3) after the v1.20.0 lights pin.
+ * pinColorOnlyUnlitBasicMaterialClipping / pinColorOnlyVisualMaterialClipping run after
+ * pinColorOnlyVisualMaterialLights on procedural create and packaged ingest, including fail-soft
+ * (no lod groups) and the fastener. Same isColorOnlyUnlitBasic gate and the same collider /
+ * interleaved / mapped / lit / shared-material / shared-geometry skip rules. Prefer delete
+ * material.clipping when the own property is present. Do not assign null, undefined, false, or
+ * true. An already-absent clipping is left alone. Pin once per shared material instance. Do not
+ * invent a custom shader path. Do not convert MeshBasic to ShaderMaterial. Do not clear clipping on
+ * real ShaderMaterial / RawShaderMaterial. Do not touch lights (v1.20.0 lights-absent 3 stays). Do
+ * not touch fragmentShader (v1.19.0 fragmentShader-absent 3 stays). Do not touch vertexShader
+ * (v1.18.0 vertexShader-absent 3 stays). Do not touch uniformsGroups (v1.17.0 uniformsGroups-absent
+ * 3 stays). Do not touch uniformsNeedUpdate (v1.16.0 uniformsNeedUpdate-absent 3 stays). Do not
+ * touch uniforms (v1.15.0 uniforms-absent 3 stays). Do not touch defaultAttributeValues (v1.14.0
+ * defaultAttributeValues-absent 3 stays). Do not touch index0AttributeName (v1.13.0
+ * index0AttributeName-absent 3 stays). Do not touch depthPacking (v1.12.0 depthPacking-absent 3
+ * stays). Do not touch extensions (v1.11.0 extensions-absent 3 stays). Do not touch indirect
+ * (v1.10.0 indirect-null 13 stays). Do not re-run the unused-channel strip (v1.9.0
+ * unusedAttributes-absent 13 stays). Do not touch onUpload / onUploadCallback (v1.8.0
+ * onUpload-release 13 stays). Do not touch color (v1.7.0 colorAttribute-absent 13 stays). Do not
+ * touch matrixWorldNeedsUpdate (v1.6.0 matrixWorldNeedsUpdate-false 13 stays). Do not change
+ * matrixAutoUpdate or matrixWorldAutoUpdate. Do not touch Material version / name / userData, Mesh
+ * / Object3D name / userData (reserved lidMesh / latchMesh / fastenerMesh / collider_* stay),
+ * BufferGeometry name / userData, BufferAttribute fields, prior Material program-cache / flag pins,
+ * clippingPlanes, clipIntersection, clipShadows, isShaderMaterial, bounds, morphs, animations,
+ * shadows, frustumCulled, or mesh.visible. Mapped / lit / interleaved keep authored clipping.
+ * Collider meshes stay untouched. ShaderMaterial / RawShaderMaterial keep constructor clipping
+ * (typically false). Checked installed three@0.170.0: fresh Material / MeshBasicMaterial
+ * constructors do not assign clipping (clipping === undefined and Object.hasOwn is false).
+ * Material.js assigns clippingPlanes, not this.clipping; MeshBasicMaterial.js does not mention
+ * clipping; Material.copy and MeshBasicMaterial.copy do not copy the ShaderMaterial clipping
+ * boolean. ShaderMaterial assigns this.clipping = false. ShaderMaterial.copy assigns this.clipping
+ * = source.clipping. ShaderMaterial.toJSON writes data.clipping = this.clipping. RawShaderMaterial
+ * extends ShaderMaterial and does not assign its own clipping, so it keeps that constructor false.
+ * MaterialLoader.parse assigns material.clipping = json.clipping when json.clipping !== undefined,
+ * including onto a MeshBasic. WebGLPrograms.getParameters does not read material.clipping.
+ * numClippingPlanes and numClipIntersection come from the WebGLClipping state (clippingPlanes /
+ * clipIntersection), and getProgramCacheKey pushes those counts, not material.clipping. shaderID
+ * still comes from shaderIDs[material.type]. When shaderID is set (MeshBasicMaterial maps to
+ * 'basic'), the program comes from ShaderLib, not a custom shader. The custom path (vertexShader =
+ * material.vertexShader, fragmentShader = material.fragmentShader, and WebGLShaderCache.update)
+ * runs only when shaderID is absent. WebGLRenderer.setProgram wires uniforms.clippingPlanes when
+ * (!material.isShaderMaterial && !material.isRawShaderMaterial) || material.clipping === true.
+ * MeshBasic takes the first clause, so a leftover clipping boolean is not consulted, does not
+ * invent a custom shader path, and does not change draws, tris, or attrBytes.
+ * WebGLClipping.setState reads clippingPlanes, clipIntersection, and clipShadows, not
+ * material.clipping. Those plane flags stay on the v0.54 pin. Assigning null, undefined, false, or
+ * true stores an own property, which is not the r170 MeshBasic absence. delete material.clipping
+ * removes the own property so the r170 absence remains. Clean procedural pre-upload draws 6 / 4 /
+ * 2, tris 240 / 96 / 24, attrBytes 2820 / 1176 / 432 + fastener 216, unique MeshBasic 3,
+ * lights-absent 3, fragmentShader-absent 3, vertexShader-absent 3, uniformsGroups-absent 3,
+ * uniformsNeedUpdate-absent 3, uniforms-absent 3, defaultAttributeValues-absent 3,
+ * index0AttributeName-absent 3, depthPacking-absent 3, extensions-absent 3, indirect-null 13,
+ * unusedAttributes-absent 13, onUpload-release 13, colorAttribute-absent 13,
+ * matrixWorldNeedsUpdate-false 13, material-version-zero 3, material-name-empty 3,
+ * material-userData-empty 3, geometry-userData-empty 13, geometry-name-empty 13, mesh-name-empty
+ * 10, mesh-userData-empty 13 stay vs v1.20.0. clipping-absent 3 is the new count. Quest 3 90 Hz
+ * (~11.1 ms) / 72 Hz fallback are requested, not measured. No invented headset ms. Headset ms / FFR
+ * still TODO. Do not require 207/240 Hz.
  */
 
 import {
@@ -2917,6 +2979,7 @@ import {
   pinColorOnlyVisualMaterialVertexShader,
   pinColorOnlyVisualMaterialFragmentShader,
   pinColorOnlyVisualMaterialLights,
+  pinColorOnlyVisualMaterialClipping,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -3125,6 +3188,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialVertexShader(root);
   pinColorOnlyVisualMaterialFragmentShader(root);
   pinColorOnlyVisualMaterialLights(root);
+  pinColorOnlyVisualMaterialClipping(root);
   return root;
 }
 
