@@ -3249,6 +3249,83 @@
  * isMeshStandardMaterial-absent 3 is the new count. Quest 3 90 Hz (~11.1 ms) / 72 Hz
  * fallback are requested, not measured. No invented headset ms. Headset ms / FFR still
  * TODO. Do not require 207/240 Hz.
+ * v1.26.0 pins leftover Material isMeshLambertMaterial to the r170 MeshBasic absence
+ * (material.isMeshLambertMaterial === undefined and Object.hasOwn(material,
+ * 'isMeshLambertMaterial') === false) on the 3 shared color-only MeshBasic materials (wood / brass
+ * / steel; measured isMeshLambertMaterial-absent 3) after the v1.25.0 isMeshStandardMaterial pin.
+ * pinColorOnlyUnlitBasicMaterialIsMeshLambertMaterial /
+ * pinColorOnlyVisualMaterialIsMeshLambertMaterial run after
+ * pinColorOnlyVisualMaterialIsMeshStandardMaterial on procedural create and packaged ingest,
+ * including fail-soft (no lod groups) and the fastener. Same isColorOnlyUnlitBasic gate and the
+ * same collider / interleaved / mapped / lit / shared-material / shared-geometry skip rules. Prefer
+ * delete material.isMeshLambertMaterial when the own property is present. Do not assign null,
+ * undefined, false, or true. An already-absent isMeshLambertMaterial is left alone. Pin once per
+ * shared material instance. Do not convert MeshBasic to MeshLambertMaterial. Do not invent maps or
+ * lights. Do not clear isMeshLambertMaterial on real MeshLambertMaterial (it keeps constructor
+ * true). Do not touch isMeshStandardMaterial (v1.25.0 isMeshStandardMaterial-absent 3 stays). Do
+ * not touch linewidth (v1.24.0 linewidth-absent 3 stays). Do not touch isRawShaderMaterial (v1.23.0
+ * isRawShaderMaterial-absent 3 stays). Do not touch isShaderMaterial (v1.22.0
+ * isShaderMaterial-absent 3 stays). Do not touch clipping (v1.21.0 clipping-absent 3 stays). Do not
+ * touch lights (v1.20.0 lights-absent 3 stays). Do not touch fragmentShader (v1.19.0
+ * fragmentShader-absent 3 stays). Do not touch vertexShader (v1.18.0 vertexShader-absent 3 stays).
+ * Do not touch uniformsGroups (v1.17.0 uniformsGroups-absent 3 stays). Do not touch
+ * uniformsNeedUpdate (v1.16.0 uniformsNeedUpdate-absent 3 stays). Do not touch uniforms (v1.15.0
+ * uniforms-absent 3 stays). Do not touch defaultAttributeValues (v1.14.0
+ * defaultAttributeValues-absent 3 stays). Do not touch index0AttributeName (v1.13.0
+ * index0AttributeName-absent 3 stays). Do not touch depthPacking (v1.12.0 depthPacking-absent 3
+ * stays). Do not touch extensions (v1.11.0 extensions-absent 3 stays). Do not touch indirect
+ * (v1.10.0 indirect-null 13 stays). Do not re-run the unused-channel strip (v1.9.0
+ * unusedAttributes-absent 13 stays). Do not touch onUpload / onUploadCallback (v1.8.0
+ * onUpload-release 13 stays). Do not touch color (v1.7.0 colorAttribute-absent 13 stays). Do not
+ * touch matrixWorldNeedsUpdate (v1.6.0 matrixWorldNeedsUpdate-false 13 stays). Do not change
+ * matrixAutoUpdate or matrixWorldAutoUpdate. Do not touch Material version / name / userData, Mesh
+ * / Object3D name / userData (reserved lidMesh / latchMesh / fastenerMesh / collider_* stay),
+ * BufferGeometry name / userData, BufferAttribute fields, prior Material program-cache / flag pins,
+ * clippingPlanes, clipIntersection, clipShadows, isMeshBasicMaterial, type, isMeshPhysicalMaterial,
+ * wireframe, wireframeLinewidth, wireframeLinecap, wireframeLinejoin, bounds, morphs, animations,
+ * shadows, frustumCulled, or mesh.visible. Mapped / lit / interleaved keep authored
+ * isMeshLambertMaterial. Collider meshes stay untouched. MeshLambertMaterial keeps constructor
+ * isMeshLambertMaterial (true). Checked installed three@0.170.0: fresh Material / MeshBasicMaterial
+ * constructors do not assign isMeshLambertMaterial (isMeshLambertMaterial === undefined and
+ * Object.hasOwn is false). MeshBasicMaterial assigns this.isMeshBasicMaterial = true only.
+ * Material.js does not mention isMeshLambertMaterial. Material.copy and MeshBasicMaterial.copy do
+ * not copy it. Material.setValues skips a key when this[key] === undefined, so new
+ * MeshBasicMaterial({ isMeshLambertMaterial: true }) warns and does not store
+ * isMeshLambertMaterial. MeshLambertMaterial assigns this.isMeshLambertMaterial = true.
+ * MeshLambertMaterial.copy does not assign isMeshLambertMaterial (the constructor already set
+ * true). MeshLambertMaterial has no toJSON override. Material.toJSON does not write
+ * isMeshLambertMaterial. MaterialLoader does not parse isMeshLambertMaterial. shaderID still comes
+ * from shaderIDs[material.type]. MeshBasicMaterial maps to 'basic'. MeshLambertMaterial maps to
+ * 'lambert'. When shaderID is set, vertexShader and fragmentShader still come from ShaderLib, not a
+ * MeshLambert program, so a leftover isMeshLambertMaterial does not switch MeshBasic off 'basic'.
+ * WebGLRenderer.materialNeedsLights returns material.isMeshLambertMaterial ||
+ * material.isMeshToonMaterial || material.isMeshPhongMaterial || material.isMeshStandardMaterial ||
+ * material.isShadowMaterial || (material.isShaderMaterial && material.lights === true). A leftover
+ * own isMeshLambertMaterial === true on a color-only MeshBasic makes needsLights true and
+ * getProgram wires lighting uniforms (uniforms.ambientLightColor, uniforms.lightProbe,
+ * uniforms.directionalLights, and the rest) on a program whose shaderID stays 'basic'. setProgram
+ * calls markUniformsLightsNeedsUpdate when materialProperties.needsLights. ShaderLib.basic does not
+ * include UniformsLib.lights, so those slots are absent on a MeshBasic program (source reading, not
+ * a measured Quest crash). ShaderLib.lambert does include UniformsLib.lights.
+ * WebGLMaterials.refreshMaterialUniforms checks isMeshBasicMaterial before isMeshLambertMaterial,
+ * so refresh still calls refreshUniformsCommon and does not take the Lambert else-if when
+ * isMeshBasicMaterial stays true. Those lights forks are independent of the refresh branch.
+ * Assigning null, undefined, false, or true stores an own property, which is not the r170 MeshBasic
+ * absence. delete material.isMeshLambertMaterial removes the own property so the r170 absence
+ * remains. Clean procedural pre-upload draws 6 / 4 / 2, tris 240 / 96 / 24, unique verts 230 / 100
+ * / 48, attrBytes 2820 / 1176 / 432 + fastener 216 (fastener draws 1, tris 12, unique verts 24),
+ * unique MeshBasic 3, isMeshStandardMaterial-absent 3, linewidth-absent 3,
+ * isRawShaderMaterial-absent 3, isShaderMaterial-absent 3, clipping-absent 3, lights-absent 3,
+ * fragmentShader-absent 3, vertexShader-absent 3, uniformsGroups-absent 3,
+ * uniformsNeedUpdate-absent 3, uniforms-absent 3, defaultAttributeValues-absent 3,
+ * index0AttributeName-absent 3, depthPacking-absent 3, extensions-absent 3, indirect-null 13,
+ * unusedAttributes-absent 13, onUpload-release 13, colorAttribute-absent 13,
+ * matrixWorldNeedsUpdate-false 13, material-version-zero 3, material-name-empty 3,
+ * material-userData-empty 3, geometry-userData-empty 13, geometry-name-empty 13, mesh-name-empty
+ * 10, mesh-userData-empty 13 stay vs v1.25.0. drawCallsEstimate stays 7.
+ * isMeshLambertMaterial-absent 3 is the new count. Quest 3 90 Hz (~11.1 ms) / 72 Hz fallback are
+ * requested, not measured. No invented headset ms. Headset ms / FFR still TODO. Do not require
+ * 207/240 Hz.
  */
 
 import {
@@ -3311,6 +3388,7 @@ import {
   pinColorOnlyVisualMaterialIsRawShaderMaterial,
   pinColorOnlyVisualMaterialLinewidth,
   pinColorOnlyVisualMaterialIsMeshStandardMaterial,
+  pinColorOnlyVisualMaterialIsMeshLambertMaterial,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -3524,6 +3602,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialIsRawShaderMaterial(root);
   pinColorOnlyVisualMaterialLinewidth(root);
   pinColorOnlyVisualMaterialIsMeshStandardMaterial(root);
+  pinColorOnlyVisualMaterialIsMeshLambertMaterial(root);
   return root;
 }
 
