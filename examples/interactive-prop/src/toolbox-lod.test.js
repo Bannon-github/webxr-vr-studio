@@ -34195,7 +34195,7 @@ test("v1.34.0 clears leftover Material isMeshNormalMaterial on packed color-only
   assert.equal(wood.envMap, null, "wood envMap stays the MeshBasic null");
   assert.equal(wood.bumpMap, undefined, "wood does not gain bumpMap");
   assert.equal(wood.normalMap, undefined, "wood does not gain normalMap");
-  assert.equal(wood.flatShading, undefined, "wood does not gain flatShading");
+  assert.equal(wood.flatShading, false, "wood flatShading stays the v0.82 false pin");
   assert.equal(brass.map, null, "brass map stays null");
   assert.equal(steel.map, null, "steel map stays null");
   assert.equal(materialLinewidthAbsent(wood), true, "wood linewidth stays absent");
