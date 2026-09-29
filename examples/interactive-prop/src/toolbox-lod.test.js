@@ -181,6 +181,8 @@ const {
   pinColorOnlyVisualMaterialBumpMap,
   pinColorOnlyUnlitBasicMaterialNormalMap,
   pinColorOnlyVisualMaterialNormalMap,
+  pinColorOnlyUnlitBasicMaterialDisplacementMap,
+  pinColorOnlyVisualMaterialDisplacementMap,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -38255,6 +38257,391 @@ test("pinColorOnlyUnlitBasicMaterialNormalMap / pinColorOnlyVisualMaterialNormal
   assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
   assert.equal(sharedGeoVisual.material.normalMap, stub, "geometry shared with a mapped mesh keeps normalMap");
   assert.equal(Object.hasOwn(sharedGeoMat, "normalMap"), true, "shared-geometry normalMap stays an own property");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(points.material.size, 1, "entity helper does not touch PointsMaterial size");
+});
+
+function materialDisplacementMapAbsent(material) {
+  return material?.displacementMap === undefined && Object.hasOwn(material, "displacementMap") === false;
+}
+
+function countVisualMaterialDisplacementMap(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (materialDisplacementMapAbsent(mat)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+function displacementTextureStub(uuid = "displacement-tex-uuid") {
+  return {
+    isTexture: true,
+    uuid,
+    channel: 0,
+    toJSON() {
+      return { uuid: this.uuid };
+    },
+  };
+}
+
+test("r170 MeshBasic leaves displacementMap absent; displacementScale and displacementBias are no-ops once that map is absent; MaterialLoader round-trip can store displacementMap; refreshUniformsCommon reads it while isMeshBasicMaterial is true", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const freshMaterial = new THREE.Material();
+  const freshBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(freshMaterial.displacementMap, undefined, "Material constructor does not assign displacementMap");
+  assert.equal(Object.hasOwn(freshMaterial, "displacementMap"), false, "Material displacementMap is not an own property");
+  assert.equal(freshBasic.displacementMap, undefined, "MeshBasicMaterial constructor does not assign displacementMap");
+  assert.equal(Object.hasOwn(freshBasic, "displacementMap"), false, "MeshBasic displacementMap is not an own property");
+  assert.equal(freshBasic.displacementScale, undefined, "MeshBasic does not assign displacementScale");
+  assert.equal(freshBasic.displacementBias, undefined, "MeshBasic does not assign displacementBias");
+  assert.equal(freshBasic.emissiveMap, undefined, "MeshBasic does not assign emissiveMap");
+  assert.equal(materialNormalMapAbsent(freshBasic), true, "fresh MeshBasic normalMap stays absent");
+  assert.equal(materialBumpMapAbsent(freshBasic), true, "fresh MeshBasic bumpMap stays absent");
+  assert.equal(freshBasic.isMeshBasicMaterial, true, "MeshBasicMaterial assigns isMeshBasicMaterial true");
+
+  const stub = displacementTextureStub();
+  const warned = [];
+  const origWarn = console.warn;
+  console.warn = (...args) => warned.push(args.join(" "));
+  const viaCtor = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    displacementMap: stub,
+    displacementScale: 2,
+    displacementBias: 0.25,
+  });
+  console.warn = origWarn;
+  assert.equal(materialDisplacementMapAbsent(viaCtor), true, "MeshBasic constructor parameters do not store displacementMap");
+  assert.equal(Object.hasOwn(viaCtor, "displacementScale"), false, "setValues does not store displacementScale");
+  assert.equal(Object.hasOwn(viaCtor, "displacementBias"), false, "setValues does not store displacementBias");
+  assert.match(warned.join("\n"), /displacementMap/, "setValues warns that displacementMap is not a MeshBasic property");
+
+  const src = new THREE.MeshBasicMaterial({ color: 0x112233 });
+  src.displacementMap = stub;
+  src.displacementScale = 2;
+  src.displacementBias = 0.25;
+  const copied = new THREE.MeshBasicMaterial({ color: 0xbe7e31 }).copy(src);
+  assert.equal(Object.hasOwn(src, "displacementMap"), true, "assigned displacementMap is an own property on the source");
+  assert.equal(materialDisplacementMapAbsent(copied), true, "MeshBasicMaterial.copy does not copy displacementMap");
+  assert.equal(Object.hasOwn(copied, "displacementScale"), false, "MeshBasicMaterial.copy does not copy displacementScale");
+  assert.equal(Object.hasOwn(copied, "displacementBias"), false, "MeshBasicMaterial.copy does not copy displacementBias");
+  assert.equal(src.displacementMap, stub, "copy leaves the source displacementMap");
+
+  const json = src.toJSON();
+  assert.equal(json.displacementMap, stub.uuid, "Material.toJSON writes displacementMap when it is a texture");
+  assert.equal(json.displacementScale, 2, "Material.toJSON writes displacementScale with the displacement texture");
+  assert.equal(json.displacementBias, 0.25, "Material.toJSON writes displacementBias with the displacement texture");
+  const loader = new THREE.MaterialLoader();
+  loader.setTextures({ [stub.uuid]: stub });
+  const round = loader.parse(json);
+  assert.equal(round.type, "MeshBasicMaterial", "round-trip stays MeshBasicMaterial");
+  assert.equal(Object.hasOwn(round, "displacementMap"), true, "MaterialLoader stores displacementMap as an own key");
+  assert.equal(round.displacementMap, stub, "MaterialLoader restores the displacement texture");
+  assert.equal(Object.hasOwn(round, "displacementScale"), true, "MaterialLoader stores displacementScale as an own key");
+  assert.equal(round.displacementScale, 2, "MaterialLoader restores displacementScale");
+  assert.equal(Object.hasOwn(round, "displacementBias"), true, "MaterialLoader stores displacementBias as an own key");
+  assert.equal(round.displacementBias, 0.25, "MaterialLoader restores displacementBias");
+
+  const scaleOnly = new THREE.MaterialLoader().parse({
+    metadata: { version: 4.6, type: "Material", generator: "probe" },
+    uuid: "33333333-3333-3333-3333-333333333333",
+    type: "MeshBasicMaterial",
+    color: 0x633318,
+    displacementScale: 4,
+    displacementBias: -0.5,
+  });
+  assert.equal(materialDisplacementMapAbsent(scaleOnly), true, "scale JSON does not invent displacementMap");
+  assert.equal(Object.hasOwn(scaleOnly, "displacementScale"), true, "MaterialLoader can store displacementScale without displacementMap");
+  assert.equal(scaleOnly.displacementScale, 4, "MaterialLoader restores a lone displacementScale");
+  assert.equal(Object.hasOwn(scaleOnly, "displacementBias"), true, "MaterialLoader can store displacementBias without displacementMap");
+  assert.equal(scaleOnly.displacementBias, -0.5, "MaterialLoader restores a lone displacementBias");
+
+  const owners = [
+    new THREE.MeshLambertMaterial(),
+    new THREE.MeshPhongMaterial(),
+    new THREE.MeshToonMaterial(),
+    new THREE.MeshStandardMaterial(),
+    new THREE.MeshPhysicalMaterial(),
+    new THREE.MeshMatcapMaterial(),
+    new THREE.MeshNormalMaterial(),
+    new THREE.MeshDepthMaterial(),
+    new THREE.MeshDistanceMaterial(),
+  ];
+  for (const mat of owners) {
+    assert.equal(mat.displacementMap, null, `${mat.type} constructor assigns displacementMap null`);
+    assert.equal(Object.hasOwn(mat, "displacementMap"), true, `${mat.type} owns displacementMap`);
+  }
+  const copiedLambert = new THREE.MeshLambertMaterial().copy(owners[0]);
+  assert.equal(copiedLambert.displacementMap, null, "MeshLambertMaterial.copy copies displacementMap");
+  assert.equal(Object.hasOwn(copiedLambert, "displacementMap"), true, "copied Lambert displacementMap stays own");
+
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const meshBasic = readFileSync(require.resolve("three/src/materials/MeshBasicMaterial.js"), "utf8");
+  const meshLambert = readFileSync(require.resolve("three/src/materials/MeshLambertMaterial.js"), "utf8");
+  const loaderSrc = readFileSync(require.resolve("three/src/loaders/MaterialLoader.js"), "utf8");
+  const materialSrc = readFileSync(require.resolve("three/src/materials/Material.js"), "utf8");
+  const shaderLib = readFileSync(require.resolve("three/src/renderers/shaders/ShaderLib.js"), "utf8");
+  assert.equal(meshBasic.includes("displacementMap"), false, "MeshBasicMaterial.js does not mention displacementMap");
+  assert.equal(meshBasic.includes("emissiveMap"), false, "MeshBasicMaterial.js does not mention emissiveMap");
+  assert.match(meshLambert, /this\.displacementMap = null;/);
+  assert.match(meshLambert, /this\.displacementMap = source\.displacementMap;/);
+  assert.match(loaderSrc, /if \( json\.displacementMap !== undefined \) material\.displacementMap = getTexture\( json\.displacementMap \);/);
+  assert.match(loaderSrc, /if \( json\.displacementScale !== undefined \) material\.displacementScale = json\.displacementScale;/);
+  assert.match(loaderSrc, /if \( json\.displacementBias !== undefined \) material\.displacementBias = json\.displacementBias;/);
+  assert.match(loaderSrc, /if \( json\.emissiveMap !== undefined \) material\.emissiveMap = getTexture\( json\.emissiveMap \);/);
+  assert.match(
+    materialSrc,
+    /if \( this\.displacementMap && this\.displacementMap\.isTexture \) \{\s*data\.displacementMap = this\.displacementMap\.toJSON\( meta \)\.uuid;\s*data\.displacementScale = this\.displacementScale;\s*data\.displacementBias = this\.displacementBias;/s,
+  );
+  const materials = readFileSync(require.resolve("three/src/renderers/webgl/WebGLMaterials.js"), "utf8");
+  const refresh = materials.slice(materials.indexOf("function refreshMaterialUniforms"), materials.indexOf("function refreshUniformsCommon"));
+  assert.match(refresh, /if \( material\.isMeshBasicMaterial \) \{\s*refreshUniformsCommon\( uniforms, material \);/s);
+  const common = materials.slice(materials.indexOf("function refreshUniformsCommon"), materials.indexOf("function refreshUniformsLine"));
+  const normalIf = common.indexOf("if ( material.normalMap )");
+  const displacementIf = common.indexOf("if ( material.displacementMap )");
+  const emissiveMapIf = common.indexOf("if ( material.emissiveMap )");
+  const scaleAt = common.indexOf("material.displacementScale");
+  const biasAt = common.indexOf("material.displacementBias");
+  assert.ok(normalIf >= 0 && normalIf < displacementIf, "displacementMap is read after normalMap");
+  assert.ok(displacementIf < scaleAt && scaleAt < biasAt && biasAt < emissiveMapIf, "displacementScale and displacementBias are read only inside the displacementMap branch");
+  assert.equal(common.slice(emissiveMapIf).includes("material.displacementScale"), false, "refreshUniformsCommon does not read displacementScale after displacementMap");
+  assert.equal(common.slice(emissiveMapIf).includes("material.displacementBias"), false, "refreshUniformsCommon does not read displacementBias after displacementMap");
+  assert.match(common, /if \( material\.displacementMap \) \{\s*uniforms\.displacementMap\.value = material\.displacementMap;/s);
+  assert.match(common, /uniforms\.displacementScale\.value = material\.displacementScale;/);
+  assert.match(common, /uniforms\.displacementBias\.value = material\.displacementBias;/);
+  assert.match(common, /if \( material\.emissiveMap \) \{\s*uniforms\.emissiveMap\.value = material\.emissiveMap;/s);
+  const basicShader = shaderLib.slice(shaderLib.indexOf("\tbasic: {"), shaderLib.indexOf("\tlambert: {"));
+  assert.equal(basicShader.includes("UniformsLib.displacementmap"), false, "ShaderLib.basic does not merge displacementmap uniforms");
+  assert.equal(basicShader.includes("UniformsLib.emissivemap"), false, "ShaderLib.basic does not merge emissivemap uniforms");
+  assert.match(shaderLib.slice(shaderLib.indexOf("\tlambert: {"), shaderLib.indexOf("\tphong: {")), /UniformsLib\.displacementmap/);
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.equal(programs.includes("displacementScale"), false, "WebGLPrograms does not read displacementScale");
+  assert.equal(programs.includes("displacementBias"), false, "WebGLPrograms does not read displacementBias");
+  assert.match(programs, /const HAS_DISPLACEMENTMAP = !! material\.displacementMap;/);
+  assert.match(programs, /displacementMap: SUPPORTS_VERTEX_TEXTURES && HAS_DISPLACEMENTMAP,/);
+  assert.match(programs, /displacementMapUv: HAS_DISPLACEMENTMAP && getChannel\( material\.displacementMap\.channel \),/);
+  assert.match(programs, /array\.push\( parameters\.displacementMapUv \);/);
+  assert.match(programs, /const HAS_EMISSIVEMAP = !! material\.emissiveMap;/);
+  assert.match(programs, /emissiveMapUv: HAS_EMISSIVEMAP && getChannel\( material\.emissiveMap\.channel \),/);
+  assert.match(programs, /array\.push\( parameters\.emissiveMapUv \);/);
+  const program = readFileSync(require.resolve("three/src/renderers/webgl/WebGLProgram.js"), "utf8");
+  assert.match(program, /parameters\.displacementMap \? '#define USE_DISPLACEMENTMAP' : ''/);
+  assert.match(program, /parameters\.emissiveMap \? '#define USE_EMISSIVEMAP' : ''/);
+  const toolboxSrc = readFileSync(new URL("./toolbox.js", import.meta.url), "utf8");
+  const packagedSrc = readFileSync(new URL("./packaged-visual.js", import.meta.url), "utf8");
+  const normalCall = "pinColorOnlyVisualMaterialNormalMap(root);";
+  const displacementCall = "pinColorOnlyVisualMaterialDisplacementMap(root);";
+  assert.ok(toolboxSrc.indexOf(normalCall) < toolboxSrc.indexOf(displacementCall), "procedural create runs the displacementMap pin after the normalMap pin");
+  assert.ok(packagedSrc.indexOf(normalCall) < packagedSrc.indexOf(displacementCall), "packaged ingest runs the displacementMap pin after the normalMap pin");
+  const displacementFn = toolboxSrc.slice(
+    toolboxSrc.indexOf("function pinColorOnlyMeshBasicMaterialDisplacementMap"),
+    toolboxSrc.indexOf("export function pinColorOnlyUnlitBasicMaterialDisplacementMap"),
+  );
+  assert.match(displacementFn, /delete material\.displacementMap;/);
+  assert.equal(displacementFn.includes("delete material.normalMap"), false, "displacementMap pin does not clear normalMap");
+  assert.equal(displacementFn.includes("delete material.bumpMap"), false, "displacementMap pin does not clear bumpMap");
+  assert.equal(displacementFn.includes("delete material.displacementScale"), false, "displacementMap pin does not clear displacementScale");
+  assert.equal(displacementFn.includes("delete material.displacementBias"), false, "displacementMap pin does not clear displacementBias");
+  assert.equal(displacementFn.includes("delete material.emissiveMap"), false, "displacementMap pin does not clear emissiveMap");
+  assert.equal(displacementFn.includes("delete material.normalScale"), false, "displacementMap pin does not clear normalScale");
+  assert.equal(displacementFn.includes("delete material.isSpriteMaterial"), false, "displacementMap pin does not clear isSpriteMaterial");
+  assert.equal(displacementFn.includes("delete material.size"), false, "displacementMap pin does not clear size");
+});
+
+test("v1.41.0 clears leftover Material displacementMap on packed color-only MeshBasics; envelope stays v1.40.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.41\.0 pins leftover Material displacementMap/);
+  assert.match(crate.userData.l2.note, /displacementMap-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.40\.0 pins leftover Material normalMap/);
+  assert.match(crate.userData.l2.note, /normalMap-absent 3/);
+  assert.match(crate.userData.l2.note, /bumpMap-absent 3/);
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(materialDisplacementMapAbsent(wood), true, "wood displacementMap is absent");
+  assert.equal(materialDisplacementMapAbsent(brass), true, "brass displacementMap is absent");
+  assert.equal(materialDisplacementMapAbsent(steel), true, "steel displacementMap is absent");
+  assert.equal(materialNormalMapAbsent(wood), true, "wood normalMap stays absent");
+  assert.equal(materialNormalMapAbsent(brass), true, "brass normalMap stays absent");
+  assert.equal(materialNormalMapAbsent(steel), true, "steel normalMap stays absent");
+  assert.equal(materialBumpMapAbsent(wood), true, "wood bumpMap stays absent");
+  assert.equal(materialBumpMapAbsent(brass), true, "brass bumpMap stays absent");
+  assert.equal(materialBumpMapAbsent(steel), true, "steel bumpMap stays absent");
+  assert.equal(materialIsSpriteMaterialAbsentSafe(wood), true, "wood isSpriteMaterial stays absent");
+  assert.equal(materialIsPointsMaterialAbsent(wood), true, "wood isPointsMaterial stays absent");
+  assert.equal(wood.size, undefined, "wood does not gain size");
+  assert.equal(Object.hasOwn(wood, "size"), false, "wood size is not an own property");
+  assert.equal(wood.displacementScale, undefined, "wood does not gain displacementScale");
+  assert.equal(wood.displacementBias, undefined, "wood does not gain displacementBias");
+  assert.equal(wood.emissiveMap, undefined, "wood does not gain emissiveMap");
+  assert.equal(wood.normalScale, undefined, "wood does not gain normalScale");
+  assert.equal(wood.isMeshBasicMaterial, true, "wood stays MeshBasic");
+  assert.equal(brass.isMeshBasicMaterial, true, "brass stays MeshBasic");
+  assert.equal(steel.isMeshBasicMaterial, true, "steel stays MeshBasic");
+  assert.equal(wood.type, "MeshBasicMaterial", "wood type stays MeshBasicMaterial");
+  assert.equal(wood.map, null, "wood map stays null");
+  assert.equal(wood.flatShading, false, "wood flatShading stays the v0.82 false pin");
+
+  const flags = countVisualMaterialDisplacementMap(crate);
+  assert.equal(flags.absent, 3, "displacementMap-absent count is 3");
+  assert.equal(flags.leftover, 0);
+  assert.equal(flags.total, 3);
+  assert.equal(countVisualMaterialNormalMap(crate).absent, 3, "normalMap-absent stays 3");
+  assert.equal(countVisualMaterialBumpMap(crate).absent, 3, "bumpMap-absent stays 3");
+  assert.equal(countVisualMaterialIsSpriteMaterial(crate).absent, 3, "isSpriteMaterial-absent stays 3");
+  assert.equal(countVisualMaterialIsPointsMaterial(crate).absent, 3, "isPointsMaterial-absent stays 3");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(mesh.isMesh, true, "visual stays a Mesh");
+    assert.equal(materialDisplacementMapAbsent(mesh.material), true, "packed visual displacementMap stays absent");
+    assert.equal(materialNormalMapAbsent(mesh.material), true, "packed visual normalMap stays absent");
+    assert.equal(mesh.material.isMeshBasicMaterial, true, "visual stays MeshBasic");
+  }
+});
+
+test("pinColorOnlyUnlitBasicMaterialDisplacementMap / pinColorOnlyVisualMaterialDisplacementMap delete leftover displacementMap and skip mapped, lit, interleaved, colliders, and shared blocked", () => {
+  const stub = displacementTextureStub("pin-displacement");
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  colorMesh.material.displacementMap = stub;
+  colorMesh.material.displacementScale = 2;
+  colorMesh.material.displacementBias = 0.5;
+  colorMesh.material.normalMap = stub;
+  colorMesh.material.normalScale = new THREE.Vector2(2, 3);
+  colorMesh.material.bumpMap = stub;
+  colorMesh.material.bumpScale = 4;
+  colorMesh.material.emissiveMap = stub;
+  colorMesh.material.isSpriteMaterial = true;
+  colorMesh.material.size = 9;
+  colorMesh.material.version = 9;
+  pinColorOnlyUnlitBasicMaterialDisplacementMap(colorMesh);
+  assert.equal(materialDisplacementMapAbsent(colorMesh.material), true, "color-only displacementMap is deleted");
+  assert.equal(colorMesh.material.displacementScale, 2, "displacementScale stays authored");
+  assert.equal(colorMesh.material.displacementBias, 0.5, "displacementBias stays authored");
+  assert.equal(colorMesh.material.normalMap, stub, "normalMap stays authored");
+  assert.equal(colorMesh.material.normalScale.x, 2, "normalScale stays authored");
+  assert.equal(colorMesh.material.bumpMap, stub, "bumpMap stays authored");
+  assert.equal(colorMesh.material.bumpScale, 4, "bumpScale stays authored");
+  assert.equal(colorMesh.material.emissiveMap, stub, "emissiveMap stays authored");
+  assert.equal(colorMesh.material.isSpriteMaterial, true, "isSpriteMaterial stays authored");
+  assert.equal(colorMesh.material.size, 9, "authored size stays");
+  assert.equal(colorMesh.material.version, 9, "material.version stays");
+  assert.equal(colorMesh.material.isMeshBasicMaterial, true, "isMeshBasicMaterial stays");
+  assert.equal(colorMesh.material.type, "MeshBasicMaterial", "type stays MeshBasicMaterial");
+  assert.equal(colorMesh.material.map, null, "map stays null");
+
+  const already = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  pinColorOnlyUnlitBasicMaterialDisplacementMap(already);
+  assert.equal(materialDisplacementMapAbsent(already.material), true, "already-absent displacementMap stays absent");
+
+  const nulled = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  nulled.material.displacementMap = null;
+  pinColorOnlyUnlitBasicMaterialDisplacementMap(nulled);
+  assert.equal(materialDisplacementMapAbsent(nulled.material), true, "own null displacementMap is deleted");
+
+  const ownUndef = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  ownUndef.material.displacementMap = undefined;
+  assert.equal(Object.hasOwn(ownUndef.material, "displacementMap"), true, "assigned undefined is an own property");
+  pinColorOnlyUnlitBasicMaterialDisplacementMap(ownUndef);
+  assert.equal(materialDisplacementMapAbsent(ownUndef.material), true, "own undefined displacementMap is deleted");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  mappedMat.displacementMap = stub;
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  pinColorOnlyUnlitBasicMaterialDisplacementMap(mapped);
+  assert.equal(mapped.material.displacementMap, stub, "mapped displacementMap stays authored");
+
+  const litCtors = [
+    THREE.MeshLambertMaterial,
+    THREE.MeshPhongMaterial,
+    THREE.MeshToonMaterial,
+    THREE.MeshStandardMaterial,
+    THREE.MeshPhysicalMaterial,
+    THREE.MeshMatcapMaterial,
+    THREE.MeshNormalMaterial,
+    THREE.MeshDepthMaterial,
+    THREE.MeshDistanceMaterial,
+  ];
+  const litMeshes = litCtors.map((Ctor) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new Ctor());
+    pinColorOnlyUnlitBasicMaterialDisplacementMap(mesh);
+    assert.equal(mesh.material.displacementMap, null, `${mesh.material.type} displacementMap stays null`);
+    assert.equal(Object.hasOwn(mesh.material, "displacementMap"), true, `${mesh.material.type} own displacementMap stays`);
+    return mesh;
+  });
+  const lambert = litMeshes[0];
+  const standard = litMeshes[3];
+
+  const points = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial());
+  assert.equal(points.material.size, 1, "PointsMaterial size starts at 1");
+  pinColorOnlyUnlitBasicMaterialDisplacementMap(points);
+  assert.equal(points.material.size, 1, "PointsMaterial size stays 1");
+  assert.equal(Object.hasOwn(points.material, "size"), true, "PointsMaterial size stays own");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  interleavedMat.displacementMap = stub;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicMaterialDisplacementMap(interleaved);
+  assert.equal(interleavedMat.displacementMap, stub, "interleaved displacementMap stays authored");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.material.displacementMap = stub;
+  pinColorOnlyUnlitBasicMaterialDisplacementMap(collider);
+  assert.equal(collider.material.displacementMap, stub, "collider displacementMap stays");
+
+  const root = new THREE.Group();
+  const rootBag = root.userData;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.displacementMap = stub;
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.displacementMap = stub;
+  sharedGeoMat.version = 12;
+  const sharedGeoVisual = new THREE.Mesh(mapped.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorOnly.material.displacementMap = null;
+  colorOnly.material.displacementScale = 3;
+  colorOnly.material.displacementBias = 1;
+  colorOnly.material.normalMap = stub;
+  colorOnly.name = "dccLatch";
+  root.add(colorOnly, mapped, lambert, standard, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual, points);
+  pinColorOnlyVisualMaterialDisplacementMap(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(materialDisplacementMapAbsent(colorOnly.material), true, "entity helper deletes color-only displacementMap");
+  assert.equal(colorOnly.material.displacementScale, 3, "entity helper does not touch displacementScale");
+  assert.equal(colorOnly.material.displacementBias, 1, "entity helper does not touch displacementBias");
+  assert.equal(colorOnly.material.normalMap, stub, "entity helper does not touch normalMap");
+  assert.equal(colorOnly.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.material.displacementMap, stub, "mapped displacementMap stays via entity helper");
+  assert.equal(lambert.material.displacementMap, null, "Lambert displacementMap stays via entity helper");
+  assert.equal(Object.hasOwn(standard.material, "displacementMap"), true, "Standard displacementMap stays via entity helper");
+  assert.equal(interleaved.material.displacementMap, stub, "interleaved displacementMap stays via entity helper");
+  assert.equal(collider.material.displacementMap, stub, "collider displacementMap stays via entity helper");
+  assert.equal(sharedVisual.material.displacementMap, stub, "shared collider material keeps authored displacementMap");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.material.displacementMap, stub, "geometry shared with a mapped mesh keeps displacementMap");
+  assert.equal(Object.hasOwn(sharedGeoMat, "displacementMap"), true, "shared-geometry displacementMap stays an own property");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(points.material.size, 1, "entity helper does not touch PointsMaterial size");
 });
