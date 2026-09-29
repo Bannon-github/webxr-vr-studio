@@ -177,6 +177,8 @@ const {
   pinColorOnlyVisualMaterialIsPointsMaterial,
   pinColorOnlyUnlitBasicMaterialIsSpriteMaterial,
   pinColorOnlyVisualMaterialIsSpriteMaterial,
+  pinColorOnlyUnlitBasicMaterialBumpMap,
+  pinColorOnlyVisualMaterialBumpMap,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -37584,4 +37586,304 @@ test("pinColorOnlyUnlitBasicMaterialIsSpriteMaterial / pinColorOnlyVisualMateria
   assert.equal(sharedGeoVisual.name, "fastenerMesh", "shared-geometry visual mesh name stays");
   assert.equal(sharedGeoVisual.userData.fastener, true, "shared-geometry mesh userData stays");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+});
+
+function materialBumpMapAbsent(material) {
+  return material?.bumpMap === undefined && Object.hasOwn(material, "bumpMap") === false;
+}
+
+function countVisualMaterialBumpMap(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (materialBumpMapAbsent(mat)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+function bumpTextureStub(uuid = "bump-tex-uuid") {
+  return {
+    isTexture: true,
+    uuid,
+    toJSON() {
+      return { uuid: this.uuid };
+    },
+  };
+}
+
+test("r170 MeshBasic leaves bumpMap absent; MaterialLoader round-trip can store it; refreshUniformsCommon reads it while isMeshBasicMaterial is true", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const freshMaterial = new THREE.Material();
+  const freshBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(freshMaterial.bumpMap, undefined, "Material constructor does not assign bumpMap");
+  assert.equal(Object.hasOwn(freshMaterial, "bumpMap"), false, "Material bumpMap is not an own property");
+  assert.equal(freshBasic.bumpMap, undefined, "MeshBasicMaterial constructor does not assign bumpMap");
+  assert.equal(Object.hasOwn(freshBasic, "bumpMap"), false, "MeshBasic bumpMap is not an own property");
+  assert.equal(freshBasic.bumpScale, undefined, "MeshBasic does not assign bumpScale");
+  assert.equal(freshBasic.normalMap, undefined, "MeshBasic does not assign normalMap");
+  assert.equal(freshBasic.emissive, undefined, "MeshBasic does not assign emissive");
+  assert.equal(freshBasic.size, undefined, "MeshBasic does not assign size");
+  assert.equal(materialIsSpriteMaterialAbsentSafe(freshBasic), true, "fresh MeshBasic isSpriteMaterial stays absent");
+  assert.equal(freshBasic.isMeshBasicMaterial, true, "MeshBasicMaterial assigns isMeshBasicMaterial true");
+
+  const stub = bumpTextureStub();
+  const warned = [];
+  const origWarn = console.warn;
+  console.warn = (...args) => warned.push(args.join(" "));
+  const viaCtor = new THREE.MeshBasicMaterial({ color: 0x633318, bumpMap: stub, bumpScale: 2 });
+  console.warn = origWarn;
+  assert.equal(materialBumpMapAbsent(viaCtor), true, "MeshBasic constructor parameters do not store bumpMap");
+  assert.equal(Object.hasOwn(viaCtor, "bumpScale"), false, "setValues does not store bumpScale");
+  assert.match(warned.join("\n"), /bumpMap/, "setValues warns that bumpMap is not a MeshBasic property");
+
+  const src = new THREE.MeshBasicMaterial({ color: 0x112233 });
+  src.bumpMap = stub;
+  src.bumpScale = 3;
+  const copied = new THREE.MeshBasicMaterial({ color: 0xbe7e31 }).copy(src);
+  assert.equal(Object.hasOwn(src, "bumpMap"), true, "assigned bumpMap is an own property on the source");
+  assert.equal(materialBumpMapAbsent(copied), true, "MeshBasicMaterial.copy does not copy bumpMap");
+  assert.equal(Object.hasOwn(copied, "bumpScale"), false, "MeshBasicMaterial.copy does not copy bumpScale");
+  assert.equal(src.bumpMap, stub, "copy leaves the source bumpMap");
+
+  const json = src.toJSON();
+  assert.equal(json.bumpMap, stub.uuid, "Material.toJSON writes bumpMap when it is a texture");
+  assert.equal(json.bumpScale, 3, "Material.toJSON writes bumpScale with the bump texture");
+  const loader = new THREE.MaterialLoader();
+  loader.setTextures({ [stub.uuid]: stub });
+  const round = loader.parse(json);
+  assert.equal(round.type, "MeshBasicMaterial", "round-trip stays MeshBasicMaterial");
+  assert.equal(Object.hasOwn(round, "bumpMap"), true, "MaterialLoader stores bumpMap as an own key");
+  assert.equal(round.bumpMap, stub, "MaterialLoader restores the bump texture");
+  assert.equal(Object.hasOwn(round, "bumpScale"), true, "MaterialLoader stores bumpScale as an own key");
+  assert.equal(round.bumpScale, 3, "MaterialLoader restores bumpScale");
+
+  const emissiveLoader = new THREE.MaterialLoader();
+  const parsedEmissive = emissiveLoader.parse({
+    metadata: { version: 4.6, type: "Material", generator: "probe" },
+    uuid: "11111111-1111-1111-1111-111111111111",
+    type: "MeshBasicMaterial",
+    color: 0x633318,
+    emissive: 0xff0000,
+    emissiveIntensity: 2,
+  });
+  assert.equal(Object.hasOwn(parsedEmissive, "emissive"), false, "MaterialLoader does not create emissive on MeshBasic");
+  assert.equal(parsedEmissive.emissiveIntensity, 2, "MaterialLoader can store emissiveIntensity");
+  assert.equal(Object.hasOwn(parsedEmissive, "emissiveIntensity"), true, "emissiveIntensity becomes own without emissive");
+
+  const lambert = new THREE.MeshLambertMaterial();
+  assert.equal(lambert.bumpMap, null, "MeshLambertMaterial constructor assigns bumpMap null");
+  assert.equal(Object.hasOwn(lambert, "bumpMap"), true, "MeshLambert bumpMap is an own property");
+  assert.equal(lambert.bumpScale, 1, "MeshLambertMaterial constructor assigns bumpScale 1");
+  const phong = new THREE.MeshPhongMaterial();
+  const standard = new THREE.MeshStandardMaterial();
+  assert.equal(Object.hasOwn(phong, "bumpMap"), true, "MeshPhongMaterial owns bumpMap");
+  assert.equal(Object.hasOwn(standard, "bumpMap"), true, "MeshStandardMaterial owns bumpMap");
+  const copiedLambert = new THREE.MeshLambertMaterial().copy(lambert);
+  assert.equal(copiedLambert.bumpMap, null, "MeshLambertMaterial.copy copies bumpMap");
+  assert.equal(Object.hasOwn(copiedLambert, "bumpMap"), true, "copied Lambert bumpMap stays own");
+
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const meshBasic = readFileSync(require.resolve("three/src/materials/MeshBasicMaterial.js"), "utf8");
+  const meshLambert = readFileSync(require.resolve("three/src/materials/MeshLambertMaterial.js"), "utf8");
+  const loaderSrc = readFileSync(require.resolve("three/src/loaders/MaterialLoader.js"), "utf8");
+  const materialSrc = readFileSync(require.resolve("three/src/materials/Material.js"), "utf8");
+  assert.equal(meshBasic.includes("bumpMap"), false, "MeshBasicMaterial.js does not mention bumpMap");
+  assert.match(meshLambert, /this\.bumpMap = null;/);
+  assert.match(meshLambert, /this\.bumpMap = source\.bumpMap;/);
+  assert.match(loaderSrc, /if \( json\.bumpMap !== undefined \) material\.bumpMap = getTexture\( json\.bumpMap \);/);
+  assert.match(loaderSrc, /if \( json\.bumpScale !== undefined \) material\.bumpScale = json\.bumpScale;/);
+  assert.match(loaderSrc, /if \( json\.emissive !== undefined && material\.emissive !== undefined \) material\.emissive\.setHex\( json\.emissive \);/);
+  assert.match(materialSrc, /if \( this\.bumpMap && this\.bumpMap\.isTexture \) \{\s*data\.bumpMap = this\.bumpMap\.toJSON\( meta \)\.uuid;\s*data\.bumpScale = this\.bumpScale;/s);
+  const materials = readFileSync(require.resolve("three/src/renderers/webgl/WebGLMaterials.js"), "utf8");
+  const refresh = materials.slice(materials.indexOf("function refreshMaterialUniforms"), materials.indexOf("function refreshUniformsCommon"));
+  assert.match(refresh, /if \( material\.isMeshBasicMaterial \) \{\s*refreshUniformsCommon\( uniforms, material \);/s);
+  const common = materials.slice(materials.indexOf("function refreshUniformsCommon"), materials.indexOf("function refreshUniformsLine"));
+  assert.ok(common.indexOf("material.emissive") < common.indexOf("material.bumpMap"), "emissive is read before bumpMap");
+  assert.ok(common.indexOf("material.bumpMap") < common.indexOf("material.normalMap"), "bumpMap is read before normalMap");
+  assert.match(common, /if \( material\.bumpMap \) \{\s*uniforms\.bumpMap\.value = material\.bumpMap;/s);
+  assert.match(common, /uniforms\.bumpScale\.value = material\.bumpScale;/);
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.match(programs, /const HAS_BUMPMAP = !! material\.bumpMap;/);
+  assert.match(programs, /bumpMap: HAS_BUMPMAP,/);
+  const program = readFileSync(require.resolve("three/src/renderers/webgl/WebGLProgram.js"), "utf8");
+  assert.match(program, /parameters\.bumpMap \? '#define USE_BUMPMAP' : ''/);
+  const toolboxSrc = readFileSync(new URL("./toolbox.js", import.meta.url), "utf8");
+  const packagedSrc = readFileSync(new URL("./packaged-visual.js", import.meta.url), "utf8");
+  const spriteCall = "pinColorOnlyVisualMaterialIsSpriteMaterial(root);";
+  const bumpCall = "pinColorOnlyVisualMaterialBumpMap(root);";
+  assert.ok(toolboxSrc.indexOf(spriteCall) < toolboxSrc.indexOf(bumpCall), "procedural create runs the bumpMap pin after the sprite pin");
+  assert.ok(packagedSrc.indexOf(spriteCall) < packagedSrc.indexOf(bumpCall), "packaged ingest runs the bumpMap pin after the sprite pin");
+  const bumpFn = toolboxSrc.slice(
+    toolboxSrc.indexOf("function pinColorOnlyMeshBasicMaterialBumpMap"),
+    toolboxSrc.indexOf("export function pinColorOnlyUnlitBasicMaterialBumpMap"),
+  );
+  assert.match(bumpFn, /delete material\.bumpMap;/);
+  assert.equal(bumpFn.includes("delete material.bumpScale"), false, "bumpMap pin does not clear bumpScale");
+  assert.equal(bumpFn.includes("delete material.normalMap"), false, "bumpMap pin does not clear normalMap");
+  assert.equal(bumpFn.includes("delete material.isSpriteMaterial"), false, "bumpMap pin does not clear isSpriteMaterial");
+  assert.equal(bumpFn.includes("delete material.size"), false, "bumpMap pin does not clear size");
+});
+
+test("v1.39.0 clears leftover Material bumpMap on packed color-only MeshBasics; envelope stays v1.38.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.39\.0 pins leftover Material bumpMap/);
+  assert.match(crate.userData.l2.note, /bumpMap-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.38\.0 pins leftover Material isSpriteMaterial/);
+  assert.match(crate.userData.l2.note, /isSpriteMaterial-absent 3/);
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(materialBumpMapAbsent(wood), true, "wood bumpMap is absent");
+  assert.equal(materialBumpMapAbsent(brass), true, "brass bumpMap is absent");
+  assert.equal(materialBumpMapAbsent(steel), true, "steel bumpMap is absent");
+  assert.equal(materialIsSpriteMaterialAbsentSafe(wood), true, "wood isSpriteMaterial stays absent");
+  assert.equal(materialIsSpriteMaterialAbsentSafe(brass), true, "brass isSpriteMaterial stays absent");
+  assert.equal(materialIsSpriteMaterialAbsentSafe(steel), true, "steel isSpriteMaterial stays absent");
+  assert.equal(materialIsPointsMaterialAbsent(wood), true, "wood isPointsMaterial stays absent");
+  assert.equal(wood.size, undefined, "wood does not gain size");
+  assert.equal(Object.hasOwn(wood, "size"), false, "wood size is not an own property");
+  assert.equal(wood.bumpScale, undefined, "wood does not gain bumpScale");
+  assert.equal(wood.normalMap, undefined, "wood does not gain normalMap");
+  assert.equal(wood.isMeshBasicMaterial, true, "wood stays MeshBasic");
+  assert.equal(brass.isMeshBasicMaterial, true, "brass stays MeshBasic");
+  assert.equal(steel.isMeshBasicMaterial, true, "steel stays MeshBasic");
+  assert.equal(wood.type, "MeshBasicMaterial", "wood type stays MeshBasicMaterial");
+  assert.equal(wood.map, null, "wood map stays null");
+  assert.equal(wood.flatShading, false, "wood flatShading stays the v0.82 false pin");
+
+  const flags = countVisualMaterialBumpMap(crate);
+  assert.equal(flags.absent, 3, "bumpMap-absent count is 3");
+  assert.equal(flags.leftover, 0);
+  assert.equal(flags.total, 3);
+  assert.equal(countVisualMaterialIsSpriteMaterial(crate).absent, 3, "isSpriteMaterial-absent stays 3");
+  assert.equal(countVisualMaterialIsPointsMaterial(crate).absent, 3, "isPointsMaterial-absent stays 3");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(mesh.isMesh, true, "visual stays a Mesh");
+    assert.equal(materialBumpMapAbsent(mesh.material), true, "packed visual bumpMap stays absent");
+    assert.equal(mesh.material.isMeshBasicMaterial, true, "visual stays MeshBasic");
+  }
+});
+
+test("pinColorOnlyUnlitBasicMaterialBumpMap / pinColorOnlyVisualMaterialBumpMap delete leftover bumpMap and skip mapped, lit, interleaved, colliders, and shared blocked", () => {
+  const stub = bumpTextureStub("pin-bump");
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  colorMesh.material.bumpMap = stub;
+  colorMesh.material.bumpScale = 4;
+  colorMesh.material.normalMap = stub;
+  colorMesh.material.isSpriteMaterial = true;
+  colorMesh.material.size = 9;
+  colorMesh.material.version = 9;
+  pinColorOnlyUnlitBasicMaterialBumpMap(colorMesh);
+  assert.equal(materialBumpMapAbsent(colorMesh.material), true, "color-only bumpMap is deleted");
+  assert.equal(colorMesh.material.bumpScale, 4, "bumpScale stays authored");
+  assert.equal(colorMesh.material.normalMap, stub, "normalMap stays authored");
+  assert.equal(colorMesh.material.isSpriteMaterial, true, "isSpriteMaterial stays authored");
+  assert.equal(colorMesh.material.size, 9, "authored size stays");
+  assert.equal(colorMesh.material.version, 9, "material.version stays");
+  assert.equal(colorMesh.material.isMeshBasicMaterial, true, "isMeshBasicMaterial stays");
+  assert.equal(colorMesh.material.type, "MeshBasicMaterial", "type stays MeshBasicMaterial");
+  assert.equal(colorMesh.material.map, null, "map stays null");
+
+  const already = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  pinColorOnlyUnlitBasicMaterialBumpMap(already);
+  assert.equal(materialBumpMapAbsent(already.material), true, "already-absent bumpMap stays absent");
+
+  const nulled = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  nulled.material.bumpMap = null;
+  pinColorOnlyUnlitBasicMaterialBumpMap(nulled);
+  assert.equal(materialBumpMapAbsent(nulled.material), true, "own null bumpMap is deleted");
+
+  const ownUndef = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  ownUndef.material.bumpMap = undefined;
+  assert.equal(Object.hasOwn(ownUndef.material, "bumpMap"), true, "assigned undefined is an own property");
+  pinColorOnlyUnlitBasicMaterialBumpMap(ownUndef);
+  assert.equal(materialBumpMapAbsent(ownUndef.material), true, "own undefined bumpMap is deleted");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  mappedMat.bumpMap = stub;
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  pinColorOnlyUnlitBasicMaterialBumpMap(mapped);
+  assert.equal(mapped.material.bumpMap, stub, "mapped bumpMap stays authored");
+
+  const lambert = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshLambertMaterial());
+  pinColorOnlyUnlitBasicMaterialBumpMap(lambert);
+  assert.equal(lambert.material.bumpMap, null, "MeshLambert bumpMap stays null");
+  assert.equal(Object.hasOwn(lambert.material, "bumpMap"), true, "MeshLambert own bumpMap stays");
+
+  const standard = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  const standardBump = standard.material.bumpMap;
+  pinColorOnlyUnlitBasicMaterialBumpMap(standard);
+  assert.equal(standard.material.bumpMap, standardBump, "MeshStandard bumpMap stays");
+  assert.equal(Object.hasOwn(standard.material, "bumpMap"), true, "MeshStandard own bumpMap stays");
+
+  const points = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial());
+  assert.equal(points.material.size, 1, "PointsMaterial size starts at 1");
+  pinColorOnlyUnlitBasicMaterialBumpMap(points);
+  assert.equal(points.material.size, 1, "PointsMaterial size stays 1");
+  assert.equal(Object.hasOwn(points.material, "size"), true, "PointsMaterial size stays own");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  interleavedMat.bumpMap = stub;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicMaterialBumpMap(interleaved);
+  assert.equal(interleavedMat.bumpMap, stub, "interleaved bumpMap stays authored");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.material.bumpMap = stub;
+  pinColorOnlyUnlitBasicMaterialBumpMap(collider);
+  assert.equal(collider.material.bumpMap, stub, "collider bumpMap stays");
+
+  const root = new THREE.Group();
+  const rootBag = root.userData;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.bumpMap = stub;
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.bumpMap = stub;
+  sharedGeoMat.version = 12;
+  const sharedGeoVisual = new THREE.Mesh(mapped.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorOnly.material.bumpMap = null;
+  colorOnly.material.bumpScale = 2;
+  colorOnly.name = "dccLatch";
+  root.add(colorOnly, mapped, lambert, standard, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual, points);
+  pinColorOnlyVisualMaterialBumpMap(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(materialBumpMapAbsent(colorOnly.material), true, "entity helper deletes color-only bumpMap");
+  assert.equal(colorOnly.material.bumpScale, 2, "entity helper does not touch bumpScale");
+  assert.equal(colorOnly.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.material.bumpMap, stub, "mapped bumpMap stays via entity helper");
+  assert.equal(lambert.material.bumpMap, null, "Lambert bumpMap stays via entity helper");
+  assert.equal(Object.hasOwn(standard.material, "bumpMap"), true, "Standard bumpMap stays via entity helper");
+  assert.equal(interleaved.material.bumpMap, stub, "interleaved bumpMap stays via entity helper");
+  assert.equal(collider.material.bumpMap, stub, "collider bumpMap stays via entity helper");
+  assert.equal(sharedVisual.material.bumpMap, stub, "shared collider material keeps authored bumpMap");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.material.bumpMap, stub, "geometry shared with a mapped mesh keeps bumpMap");
+  assert.equal(Object.hasOwn(sharedGeoMat, "bumpMap"), true, "shared-geometry bumpMap stays an own property");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(points.material.size, 1, "entity helper does not touch PointsMaterial size");
 });
