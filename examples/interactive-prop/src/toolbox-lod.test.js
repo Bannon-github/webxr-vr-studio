@@ -185,6 +185,8 @@ const {
   pinColorOnlyVisualMaterialDisplacementMap,
   pinColorOnlyUnlitBasicMaterialEmissiveMap,
   pinColorOnlyVisualMaterialEmissiveMap,
+  pinColorOnlyUnlitBasicMaterialMetalnessMap,
+  pinColorOnlyVisualMaterialMetalnessMap,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -39027,6 +39029,379 @@ test("pinColorOnlyUnlitBasicMaterialEmissiveMap / pinColorOnlyVisualMaterialEmis
   assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
   assert.equal(sharedGeoVisual.material.emissiveMap, stub, "geometry shared with a mapped mesh keeps emissiveMap");
   assert.equal(Object.hasOwn(sharedGeoMat, "emissiveMap"), true, "shared-geometry emissiveMap stays an own property");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(points.material.size, 1, "entity helper does not touch PointsMaterial size");
+});
+
+function materialMetalnessMapAbsent(material) {
+  return material?.metalnessMap === undefined && Object.hasOwn(material, "metalnessMap") === false;
+}
+
+function countVisualMaterialMetalnessMap(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (materialMetalnessMapAbsent(mat)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+function metalnessTextureStub(uuid = "metalness-tex-uuid") {
+  return {
+    isTexture: true,
+    uuid,
+    channel: 0,
+    toJSON() {
+      return { uuid: this.uuid };
+    },
+  };
+}
+
+test("r170 MeshBasic leaves metalnessMap absent; MaterialLoader round-trip can store it; USE_METALNESSMAP changes the basic program; refreshUniformsCommon does not read it", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const freshMaterial = new THREE.Material();
+  const freshBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(freshMaterial.metalnessMap, undefined, "Material constructor does not assign metalnessMap");
+  assert.equal(Object.hasOwn(freshMaterial, "metalnessMap"), false, "Material metalnessMap is not an own property");
+  assert.equal(freshBasic.metalnessMap, undefined, "MeshBasicMaterial constructor does not assign metalnessMap");
+  assert.equal(Object.hasOwn(freshBasic, "metalnessMap"), false, "MeshBasic metalnessMap is not an own property");
+  assert.equal(freshBasic.roughnessMap, undefined, "MeshBasic does not assign roughnessMap");
+  assert.equal(Object.hasOwn(freshBasic, "roughnessMap"), false, "MeshBasic roughnessMap is not an own property");
+  assert.equal(freshBasic.specularMap, null, "MeshBasic constructor assigns specularMap null");
+  assert.equal(Object.hasOwn(freshBasic, "specularMap"), true, "MeshBasic owns constructor specularMap");
+  assert.equal(materialEmissiveMapAbsent(freshBasic), true, "fresh MeshBasic emissiveMap stays absent");
+  assert.equal(freshBasic.isMeshBasicMaterial, true, "MeshBasicMaterial assigns isMeshBasicMaterial true");
+
+  const stub = metalnessTextureStub();
+  const warned = [];
+  const origWarn = console.warn;
+  console.warn = (...args) => warned.push(args.join(" "));
+  const viaCtor = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    metalnessMap: stub,
+  });
+  console.warn = origWarn;
+  assert.equal(materialMetalnessMapAbsent(viaCtor), true, "MeshBasic constructor parameters do not store metalnessMap");
+  assert.match(warned.join("\n"), /metalnessMap/, "setValues warns that metalnessMap is not a MeshBasic property");
+
+  const src = new THREE.MeshBasicMaterial({ color: 0x112233 });
+  src.metalnessMap = stub;
+  const copied = new THREE.MeshBasicMaterial({ color: 0xbe7e31 }).copy(src);
+  assert.equal(Object.hasOwn(src, "metalnessMap"), true, "assigned metalnessMap is an own property on the source");
+  assert.equal(materialMetalnessMapAbsent(copied), true, "MeshBasicMaterial.copy does not copy metalnessMap");
+  assert.equal(src.metalnessMap, stub, "copy leaves the source metalnessMap");
+
+  const json = src.toJSON();
+  assert.equal(json.metalnessMap, stub.uuid, "Material.toJSON writes metalnessMap when it is a texture");
+  const loader = new THREE.MaterialLoader();
+  loader.setTextures({ [stub.uuid]: stub });
+  const round = loader.parse(json);
+  assert.equal(round.type, "MeshBasicMaterial", "round-trip stays MeshBasicMaterial");
+  assert.equal(Object.hasOwn(round, "metalnessMap"), true, "MaterialLoader stores metalnessMap as an own key");
+  assert.equal(round.metalnessMap, stub, "MaterialLoader restores the metalness texture");
+  assert.equal(round.isMeshBasicMaterial, true, "round-trip material is still MeshBasic");
+
+  const standard = new THREE.MeshStandardMaterial();
+  const physical = new THREE.MeshPhysicalMaterial();
+  assert.equal(standard.metalnessMap, null, "MeshStandardMaterial constructor assigns metalnessMap null");
+  assert.equal(Object.hasOwn(standard, "metalnessMap"), true, "MeshStandardMaterial owns metalnessMap");
+  assert.equal(physical.metalnessMap, null, "MeshPhysicalMaterial constructor assigns metalnessMap null");
+  assert.equal(Object.hasOwn(physical, "metalnessMap"), true, "MeshPhysicalMaterial owns metalnessMap");
+  const copiedStandard = new THREE.MeshStandardMaterial().copy(standard);
+  assert.equal(copiedStandard.metalnessMap, null, "MeshStandardMaterial.copy copies metalnessMap");
+  assert.equal(Object.hasOwn(copiedStandard, "metalnessMap"), true, "copied Standard metalnessMap stays own");
+  const lambert = new THREE.MeshLambertMaterial();
+  assert.equal(lambert.metalnessMap, undefined, "MeshLambertMaterial does not assign metalnessMap");
+  assert.equal(Object.hasOwn(lambert, "metalnessMap"), false, "MeshLambertMaterial does not own metalnessMap");
+
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const meshBasic = readFileSync(require.resolve("three/src/materials/MeshBasicMaterial.js"), "utf8");
+  const meshStandard = readFileSync(require.resolve("three/src/materials/MeshStandardMaterial.js"), "utf8");
+  const loaderSrc = readFileSync(require.resolve("three/src/loaders/MaterialLoader.js"), "utf8");
+  const materialSrc = readFileSync(require.resolve("three/src/materials/Material.js"), "utf8");
+  const shaderLib = readFileSync(require.resolve("three/src/renderers/shaders/ShaderLib.js"), "utf8");
+  const meshbasicGlsl = readFileSync(require.resolve("three/src/renderers/shaders/ShaderLib/meshbasic.glsl.js"), "utf8");
+  const uvPars = readFileSync(require.resolve("three/src/renderers/shaders/ShaderChunk/uv_pars_vertex.glsl.js"), "utf8");
+  assert.equal(meshBasic.includes("metalnessMap"), false, "MeshBasicMaterial.js does not mention metalnessMap");
+  assert.equal(meshBasic.includes("roughnessMap"), false, "MeshBasicMaterial.js does not mention roughnessMap");
+  assert.match(meshBasic, /this\.specularMap = null;/);
+  assert.match(meshStandard, /this\.metalnessMap = null;/);
+  assert.match(meshStandard, /this\.metalnessMap = source\.metalnessMap;/);
+  assert.match(meshStandard, /this\.roughnessMap = null;/);
+  assert.match(loaderSrc, /if \( json\.metalnessMap !== undefined \) material\.metalnessMap = getTexture\( json\.metalnessMap \);/);
+  assert.match(loaderSrc, /if \( json\.roughnessMap !== undefined \) material\.roughnessMap = getTexture\( json\.roughnessMap \);/);
+  assert.match(materialSrc, /if \( this\.metalnessMap && this\.metalnessMap\.isTexture \) data\.metalnessMap = this\.metalnessMap\.toJSON\( meta \)\.uuid;/);
+  assert.match(materialSrc, /if \( this\.roughnessMap && this\.roughnessMap\.isTexture \) data\.roughnessMap = this\.roughnessMap\.toJSON\( meta \)\.uuid;/);
+  const materials = readFileSync(require.resolve("three/src/renderers/webgl/WebGLMaterials.js"), "utf8");
+  const refresh = materials.slice(materials.indexOf("function refreshMaterialUniforms"), materials.indexOf("function refreshUniformsCommon"));
+  assert.match(refresh, /if \( material\.isMeshBasicMaterial \) \{\s*refreshUniformsCommon\( uniforms, material \);/s);
+  const standardBranch = refresh.slice(refresh.indexOf("material.isMeshStandardMaterial"), refresh.indexOf("material.isMeshMatcapMaterial"));
+  assert.match(standardBranch, /refreshUniformsStandard\( uniforms, material \);/);
+  assert.equal(refresh.slice(0, refresh.indexOf("material.isMeshStandardMaterial")).includes("refreshUniformsStandard"), false, "refreshUniformsStandard is not called on the MeshBasic branch");
+  const common = materials.slice(materials.indexOf("function refreshUniformsCommon"), materials.indexOf("function refreshUniformsLine"));
+  assert.equal(common.includes("metalnessMap"), false, "refreshUniformsCommon does not read metalnessMap");
+  assert.equal(common.includes("roughnessMap"), false, "refreshUniformsCommon does not read roughnessMap");
+  const standardFn = materials.slice(materials.indexOf("function refreshUniformsStandard"), materials.indexOf("function refreshUniformsPhysical"));
+  assert.match(standardFn, /if \( material\.metalnessMap \) \{\s*uniforms\.metalnessMap\.value = material\.metalnessMap;/s);
+  assert.match(standardFn, /if \( material\.roughnessMap \) \{\s*uniforms\.roughnessMap\.value = material\.roughnessMap;/s);
+  const basicShader = shaderLib.slice(shaderLib.indexOf("\tbasic: {"), shaderLib.indexOf("\tlambert: {"));
+  assert.equal(basicShader.includes("UniformsLib.metalnessmap"), false, "ShaderLib.basic does not merge metalnessmap uniforms");
+  assert.equal(basicShader.includes("UniformsLib.roughnessmap"), false, "ShaderLib.basic does not merge roughnessmap uniforms");
+  assert.match(shaderLib.slice(shaderLib.indexOf("\tstandard: {"), shaderLib.indexOf("\ttoon: {")), /UniformsLib\.metalnessmap/);
+  assert.match(shaderLib.slice(shaderLib.indexOf("\tstandard: {"), shaderLib.indexOf("\ttoon: {")), /UniformsLib\.roughnessmap/);
+  assert.match(meshbasicGlsl, /#include <uv_pars_vertex>/);
+  assert.match(uvPars, /#ifdef USE_METALNESSMAP[\s\S]*metalnessMapTransform[\s\S]*vMetalnessMapUv/);
+  assert.match(uvPars, /#ifdef USE_ROUGHNESSMAP[\s\S]*roughnessMapTransform[\s\S]*vRoughnessMapUv/);
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.match(programs, /const HAS_METALNESSMAP = !! material\.metalnessMap;/);
+  assert.match(programs, /metalnessMap: HAS_METALNESSMAP,/);
+  assert.match(programs, /metalnessMapUv: HAS_METALNESSMAP && getChannel\( material\.metalnessMap\.channel \),/);
+  assert.match(programs, /const HAS_ROUGHNESSMAP = !! material\.roughnessMap;/);
+  assert.match(programs, /roughnessMapUv: HAS_ROUGHNESSMAP && getChannel\( material\.roughnessMap\.channel \),/);
+  const emissiveUvPush = programs.indexOf("array.push( parameters.emissiveMapUv );");
+  const metalnessUvPush = programs.indexOf("array.push( parameters.metalnessMapUv );");
+  const roughnessUvPush = programs.indexOf("array.push( parameters.roughnessMapUv );");
+  assert.ok(emissiveUvPush >= 0 && emissiveUvPush < metalnessUvPush, "metalnessMapUv is the next program-cache UV after emissiveMapUv");
+  assert.ok(metalnessUvPush < roughnessUvPush, "roughnessMapUv is the next program-cache UV after metalnessMapUv");
+  const program = readFileSync(require.resolve("three/src/renderers/webgl/WebGLProgram.js"), "utf8");
+  assert.match(program, /parameters\.metalnessMap \? '#define USE_METALNESSMAP' : ''/);
+  assert.match(program, /parameters\.metalnessMapUv \? '#define METALNESSMAP_UV ' \+ parameters\.metalnessMapUv : ''/);
+  assert.match(program, /parameters\.roughnessMap \? '#define USE_ROUGHNESSMAP' : ''/);
+  const toolboxSrc = readFileSync(new URL("./toolbox.js", import.meta.url), "utf8");
+  const packagedSrc = readFileSync(new URL("./packaged-visual.js", import.meta.url), "utf8");
+  const emissiveCall = "pinColorOnlyVisualMaterialEmissiveMap(root);";
+  const metalnessCall = "pinColorOnlyVisualMaterialMetalnessMap(root);";
+  assert.ok(toolboxSrc.indexOf(emissiveCall) < toolboxSrc.indexOf(metalnessCall), "procedural create runs the metalnessMap pin after the emissiveMap pin");
+  assert.ok(packagedSrc.indexOf(emissiveCall) < packagedSrc.indexOf(metalnessCall), "packaged ingest runs the metalnessMap pin after the emissiveMap pin");
+  const metalnessFn = toolboxSrc.slice(
+    toolboxSrc.indexOf("function pinColorOnlyMeshBasicMaterialMetalnessMap"),
+    toolboxSrc.indexOf("export function pinColorOnlyUnlitBasicMaterialMetalnessMap"),
+  );
+  assert.match(metalnessFn, /delete material\.metalnessMap;/);
+  assert.equal(metalnessFn.includes("delete material.emissiveMap"), false, "metalnessMap pin does not clear emissiveMap");
+  assert.equal(metalnessFn.includes("delete material.roughnessMap"), false, "metalnessMap pin does not clear roughnessMap");
+  assert.equal(metalnessFn.includes("delete material.specularMap"), false, "metalnessMap pin does not clear specularMap");
+  assert.equal(metalnessFn.includes("delete material.emissiveIntensity"), false, "metalnessMap pin does not clear emissiveIntensity");
+  assert.equal(metalnessFn.includes("delete material.displacementMap"), false, "metalnessMap pin does not clear displacementMap");
+  assert.equal(metalnessFn.includes("delete material.normalMap"), false, "metalnessMap pin does not clear normalMap");
+  assert.equal(metalnessFn.includes("delete material.bumpMap"), false, "metalnessMap pin does not clear bumpMap");
+  const gate = toolboxSrc.slice(
+    toolboxSrc.indexOf("export function isColorOnlyUnlitBasic"),
+    toolboxSrc.indexOf("export const COLOR_ONLY_UNUSED_SKIN_ATTRS"),
+  );
+  assert.match(gate, /material\.specularMap/);
+  assert.equal(gate.includes("metalnessMap"), false, "isColorOnlyUnlitBasic does not treat metalnessMap as a color-only map");
+});
+
+test("v1.43.0 clears leftover Material metalnessMap on packed color-only MeshBasics; envelope stays v1.42.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  const fastenerMesh = crate.getObjectByName("fastenerMesh");
+  assert.equal(fastenerMesh.geometry.index.count / 3, 12, "fastener tris stay 12");
+  assert.equal(fastenerMesh.geometry.getAttribute("position").count, 24, "fastener unique verts stay 24");
+  assert.equal(cpuAttrBytes(fastenerMesh.geometry), 216, "fastener pre-upload attrBytes stay 216");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.43\.0 pins leftover Material metalnessMap/);
+  assert.match(crate.userData.l2.note, /metalnessMap-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.42\.0 pins leftover Material emissiveMap/);
+  assert.match(crate.userData.l2.note, /emissiveMap-absent 3/);
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(materialMetalnessMapAbsent(wood), true, "wood metalnessMap is absent");
+  assert.equal(materialMetalnessMapAbsent(brass), true, "brass metalnessMap is absent");
+  assert.equal(materialMetalnessMapAbsent(steel), true, "steel metalnessMap is absent");
+  assert.equal(materialEmissiveMapAbsent(wood), true, "wood emissiveMap stays absent");
+  assert.equal(materialEmissiveMapAbsent(brass), true, "brass emissiveMap stays absent");
+  assert.equal(materialEmissiveMapAbsent(steel), true, "steel emissiveMap stays absent");
+  assert.equal(materialDisplacementMapAbsent(wood), true, "wood displacementMap stays absent");
+  assert.equal(materialNormalMapAbsent(wood), true, "wood normalMap stays absent");
+  assert.equal(materialBumpMapAbsent(wood), true, "wood bumpMap stays absent");
+  assert.equal(materialIsSpriteMaterialAbsentSafe(wood), true, "wood isSpriteMaterial stays absent");
+  assert.equal(materialIsPointsMaterialAbsent(wood), true, "wood isPointsMaterial stays absent");
+  assert.equal(wood.roughnessMap, undefined, "wood does not gain roughnessMap");
+  assert.equal(Object.hasOwn(wood, "roughnessMap"), false, "wood roughnessMap is not an own property");
+  assert.equal(wood.specularMap, null, "wood keeps constructor specularMap null");
+  assert.equal(wood.emissiveIntensity, undefined, "wood does not gain emissiveIntensity");
+  assert.equal(wood.emissive, undefined, "wood does not gain emissive");
+  assert.equal(wood.isMeshBasicMaterial, true, "wood stays MeshBasic");
+  assert.equal(brass.isMeshBasicMaterial, true, "brass stays MeshBasic");
+  assert.equal(steel.isMeshBasicMaterial, true, "steel stays MeshBasic");
+  assert.equal(wood.type, "MeshBasicMaterial", "wood type stays MeshBasicMaterial");
+  assert.equal(wood.map, null, "wood map stays null");
+  assert.equal(wood.flatShading, false, "wood flatShading stays the v0.82 false pin");
+  assert.equal(fastenerMesh.material, brass, "fastener still shares the brass MeshBasic");
+
+  const flags = countVisualMaterialMetalnessMap(crate);
+  assert.equal(flags.absent, 3, "metalnessMap-absent count is 3");
+  assert.equal(flags.leftover, 0);
+  assert.equal(flags.total, 3);
+  assert.equal(countVisualMaterialEmissiveMap(crate).absent, 3, "emissiveMap-absent stays 3");
+  assert.equal(countVisualMaterialDisplacementMap(crate).absent, 3, "displacementMap-absent stays 3");
+  assert.equal(countVisualMaterialNormalMap(crate).absent, 3, "normalMap-absent stays 3");
+  assert.equal(countVisualMaterialBumpMap(crate).absent, 3, "bumpMap-absent stays 3");
+  assert.equal(countVisualMaterialIsSpriteMaterial(crate).absent, 3, "isSpriteMaterial-absent stays 3");
+  assert.equal(countVisualMaterialIsPointsMaterial(crate).absent, 3, "isPointsMaterial-absent stays 3");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(mesh.isMesh, true, "visual stays a Mesh");
+    assert.equal(materialMetalnessMapAbsent(mesh.material), true, "packed visual metalnessMap stays absent");
+    assert.equal(materialEmissiveMapAbsent(mesh.material), true, "packed visual emissiveMap stays absent");
+    assert.equal(mesh.material.isMeshBasicMaterial, true, "visual stays MeshBasic");
+  }
+});
+
+test("pinColorOnlyUnlitBasicMaterialMetalnessMap / pinColorOnlyVisualMaterialMetalnessMap delete leftover metalnessMap and skip mapped, lit, interleaved, colliders, and shared blocked", () => {
+  const stub = metalnessTextureStub("pin-metalness");
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  colorMesh.material.metalnessMap = stub;
+  colorMesh.material.roughnessMap = stub;
+  colorMesh.material.emissiveMap = stub;
+  colorMesh.material.emissiveIntensity = 2;
+  colorMesh.material.displacementMap = stub;
+  colorMesh.material.normalMap = stub;
+  colorMesh.material.bumpMap = stub;
+  colorMesh.material.bumpScale = 4;
+  colorMesh.material.isSpriteMaterial = true;
+  colorMesh.material.size = 9;
+  colorMesh.material.version = 9;
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(colorMesh);
+  assert.equal(materialMetalnessMapAbsent(colorMesh.material), true, "color-only metalnessMap is deleted");
+  assert.equal(colorMesh.material.roughnessMap, stub, "roughnessMap stays authored");
+  assert.equal(colorMesh.material.emissiveMap, stub, "emissiveMap stays authored");
+  assert.equal(colorMesh.material.emissiveIntensity, 2, "emissiveIntensity stays authored");
+  assert.equal(colorMesh.material.displacementMap, stub, "displacementMap stays authored");
+  assert.equal(colorMesh.material.normalMap, stub, "normalMap stays authored");
+  assert.equal(colorMesh.material.bumpMap, stub, "bumpMap stays authored");
+  assert.equal(colorMesh.material.bumpScale, 4, "bumpScale stays authored");
+  assert.equal(colorMesh.material.specularMap, null, "constructor specularMap stays null");
+  assert.equal(colorMesh.material.isSpriteMaterial, true, "isSpriteMaterial stays authored");
+  assert.equal(colorMesh.material.size, 9, "authored size stays");
+  assert.equal(colorMesh.material.version, 9, "material.version stays");
+  assert.equal(colorMesh.material.isMeshBasicMaterial, true, "isMeshBasicMaterial stays");
+  assert.equal(colorMesh.material.type, "MeshBasicMaterial", "type stays MeshBasicMaterial");
+  assert.equal(colorMesh.material.map, null, "map stays null");
+
+  const already = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(already);
+  assert.equal(materialMetalnessMapAbsent(already.material), true, "already-absent metalnessMap stays absent");
+
+  const nulled = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  nulled.material.metalnessMap = null;
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(nulled);
+  assert.equal(materialMetalnessMapAbsent(nulled.material), true, "own null metalnessMap is deleted");
+
+  const ownUndef = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  ownUndef.material.metalnessMap = undefined;
+  assert.equal(Object.hasOwn(ownUndef.material, "metalnessMap"), true, "assigned undefined is an own property");
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(ownUndef);
+  assert.equal(materialMetalnessMapAbsent(ownUndef.material), true, "own undefined metalnessMap is deleted");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  mappedMat.metalnessMap = stub;
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(mapped);
+  assert.equal(mapped.material.metalnessMap, stub, "mapped metalnessMap stays authored");
+
+  const specularMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  specularMat.specularMap = stub;
+  specularMat.metalnessMap = stub;
+  const specular = new THREE.Mesh(groupsTestGeometry(), specularMat);
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(specular);
+  assert.equal(specular.material.metalnessMap, stub, "truthy specularMap fails isColorOnlyUnlitBasic so metalnessMap stays");
+  assert.equal(specular.material.specularMap, stub, "authored specularMap stays");
+
+  const standardMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshStandardMaterial());
+  const physicalMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshPhysicalMaterial());
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(standardMesh);
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(physicalMesh);
+  assert.equal(standardMesh.material.metalnessMap, null, "MeshStandardMaterial metalnessMap stays null");
+  assert.equal(Object.hasOwn(standardMesh.material, "metalnessMap"), true, "MeshStandardMaterial own metalnessMap stays");
+  assert.equal(physicalMesh.material.metalnessMap, null, "MeshPhysicalMaterial metalnessMap stays null");
+  assert.equal(Object.hasOwn(physicalMesh.material, "metalnessMap"), true, "MeshPhysicalMaterial own metalnessMap stays");
+
+  const lambert = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshLambertMaterial());
+  lambert.material.metalnessMap = stub;
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(lambert);
+  assert.equal(lambert.material.metalnessMap, stub, "MeshLambert authored metalnessMap stays");
+
+  const matcap = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshMatcapMaterial());
+  matcap.material.metalnessMap = stub;
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(matcap);
+  assert.equal(matcap.material.metalnessMap, stub, "MeshMatcap authored metalnessMap stays");
+
+  const points = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial());
+  assert.equal(points.material.size, 1, "PointsMaterial size starts at 1");
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(points);
+  assert.equal(points.material.size, 1, "PointsMaterial size stays 1");
+  assert.equal(Object.hasOwn(points.material, "size"), true, "PointsMaterial size stays own");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  interleavedMat.metalnessMap = stub;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(interleaved);
+  assert.equal(interleavedMat.metalnessMap, stub, "interleaved metalnessMap stays authored");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.material.metalnessMap = stub;
+  pinColorOnlyUnlitBasicMaterialMetalnessMap(collider);
+  assert.equal(collider.material.metalnessMap, stub, "collider metalnessMap stays");
+
+  const root = new THREE.Group();
+  const rootBag = root.userData;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.metalnessMap = stub;
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.metalnessMap = stub;
+  sharedGeoMat.version = 12;
+  const sharedGeoVisual = new THREE.Mesh(mapped.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorOnly.material.metalnessMap = null;
+  colorOnly.material.roughnessMap = stub;
+  colorOnly.material.emissiveIntensity = 4;
+  colorOnly.material.emissiveMap = stub;
+  colorOnly.name = "dccLatch";
+  root.add(colorOnly, mapped, lambert, standardMesh, physicalMesh, matcap, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual, points, specular);
+  pinColorOnlyVisualMaterialMetalnessMap(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(materialMetalnessMapAbsent(colorOnly.material), true, "entity helper deletes color-only metalnessMap");
+  assert.equal(colorOnly.material.roughnessMap, stub, "entity helper does not touch roughnessMap");
+  assert.equal(colorOnly.material.emissiveMap, stub, "entity helper does not touch emissiveMap");
+  assert.equal(colorOnly.material.emissiveIntensity, 4, "entity helper does not touch emissiveIntensity");
+  assert.equal(colorOnly.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.material.metalnessMap, stub, "mapped metalnessMap stays via entity helper");
+  assert.equal(specular.material.metalnessMap, stub, "specular-mapped metalnessMap stays via entity helper");
+  assert.equal(lambert.material.metalnessMap, stub, "Lambert metalnessMap stays via entity helper");
+  assert.equal(standardMesh.material.metalnessMap, null, "Standard metalnessMap stays via entity helper");
+  assert.equal(Object.hasOwn(physicalMesh.material, "metalnessMap"), true, "Physical metalnessMap stays via entity helper");
+  assert.equal(matcap.material.metalnessMap, stub, "Matcap metalnessMap stays via entity helper");
+  assert.equal(interleaved.material.metalnessMap, stub, "interleaved metalnessMap stays via entity helper");
+  assert.equal(collider.material.metalnessMap, stub, "collider metalnessMap stays via entity helper");
+  assert.equal(sharedVisual.material.metalnessMap, stub, "shared collider material keeps authored metalnessMap");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.material.metalnessMap, stub, "geometry shared with a mapped mesh keeps metalnessMap");
+  assert.equal(Object.hasOwn(sharedGeoMat, "metalnessMap"), true, "shared-geometry metalnessMap stays an own property");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(points.material.size, 1, "entity helper does not touch PointsMaterial size");
 });
