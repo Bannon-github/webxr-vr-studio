@@ -183,6 +183,8 @@ const {
   pinColorOnlyVisualMaterialNormalMap,
   pinColorOnlyUnlitBasicMaterialDisplacementMap,
   pinColorOnlyVisualMaterialDisplacementMap,
+  pinColorOnlyUnlitBasicMaterialEmissiveMap,
+  pinColorOnlyVisualMaterialEmissiveMap,
   isCpuArrayReleaseOnUpload,
   COLOR_ONLY_UNUSED_ATTRS,
   COLOR_ONLY_UNUSED_COLOR_ATTRS,
@@ -38642,6 +38644,389 @@ test("pinColorOnlyUnlitBasicMaterialDisplacementMap / pinColorOnlyVisualMaterial
   assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
   assert.equal(sharedGeoVisual.material.displacementMap, stub, "geometry shared with a mapped mesh keeps displacementMap");
   assert.equal(Object.hasOwn(sharedGeoMat, "displacementMap"), true, "shared-geometry displacementMap stays an own property");
+  assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
+  assert.equal(points.material.size, 1, "entity helper does not touch PointsMaterial size");
+});
+
+function materialEmissiveMapAbsent(material) {
+  return material?.emissiveMap === undefined && Object.hasOwn(material, "emissiveMap") === false;
+}
+
+function countVisualMaterialEmissiveMap(crate) {
+  let absent = 0;
+  let leftover = 0;
+  for (const mat of collectCrateVisualMaterials(crate)) {
+    if (materialEmissiveMapAbsent(mat)) absent += 1;
+    else leftover += 1;
+  }
+  return { absent, leftover, total: absent + leftover };
+}
+
+function emissiveTextureStub(uuid = "emissive-tex-uuid") {
+  return {
+    isTexture: true,
+    uuid,
+    channel: 0,
+    toJSON() {
+      return { uuid: this.uuid };
+    },
+  };
+}
+
+test("r170 MeshBasic leaves emissiveMap absent; emissiveIntensity is a no-op without emissive; MaterialLoader round-trip can store emissiveMap; refreshUniformsCommon reads it while isMeshBasicMaterial is true", async () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const freshMaterial = new THREE.Material();
+  const freshBasic = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  assert.equal(freshMaterial.emissiveMap, undefined, "Material constructor does not assign emissiveMap");
+  assert.equal(Object.hasOwn(freshMaterial, "emissiveMap"), false, "Material emissiveMap is not an own property");
+  assert.equal(freshBasic.emissiveMap, undefined, "MeshBasicMaterial constructor does not assign emissiveMap");
+  assert.equal(Object.hasOwn(freshBasic, "emissiveMap"), false, "MeshBasic emissiveMap is not an own property");
+  assert.equal(freshBasic.emissive, undefined, "MeshBasic does not assign emissive");
+  assert.equal(freshBasic.emissiveIntensity, undefined, "MeshBasic does not assign emissiveIntensity");
+  assert.equal(freshBasic.specularMap, null, "MeshBasic constructor assigns specularMap null");
+  assert.equal(Object.hasOwn(freshBasic, "specularMap"), true, "MeshBasic owns constructor specularMap");
+  assert.equal(freshBasic.metalnessMap, undefined, "MeshBasic does not assign metalnessMap");
+  assert.equal(Object.hasOwn(freshBasic, "metalnessMap"), false, "MeshBasic metalnessMap is not an own property");
+  assert.equal(materialDisplacementMapAbsent(freshBasic), true, "fresh MeshBasic displacementMap stays absent");
+  assert.equal(materialNormalMapAbsent(freshBasic), true, "fresh MeshBasic normalMap stays absent");
+  assert.equal(freshBasic.isMeshBasicMaterial, true, "MeshBasicMaterial assigns isMeshBasicMaterial true");
+
+  const stub = emissiveTextureStub();
+  const warned = [];
+  const origWarn = console.warn;
+  console.warn = (...args) => warned.push(args.join(" "));
+  const viaCtor = new THREE.MeshBasicMaterial({
+    color: 0x633318,
+    emissiveMap: stub,
+    emissiveIntensity: 2,
+  });
+  console.warn = origWarn;
+  assert.equal(materialEmissiveMapAbsent(viaCtor), true, "MeshBasic constructor parameters do not store emissiveMap");
+  assert.equal(Object.hasOwn(viaCtor, "emissiveIntensity"), false, "setValues does not store emissiveIntensity");
+  assert.match(warned.join("\n"), /emissiveMap/, "setValues warns that emissiveMap is not a MeshBasic property");
+
+  const src = new THREE.MeshBasicMaterial({ color: 0x112233 });
+  src.emissiveMap = stub;
+  src.emissiveIntensity = 2;
+  const copied = new THREE.MeshBasicMaterial({ color: 0xbe7e31 }).copy(src);
+  assert.equal(Object.hasOwn(src, "emissiveMap"), true, "assigned emissiveMap is an own property on the source");
+  assert.equal(materialEmissiveMapAbsent(copied), true, "MeshBasicMaterial.copy does not copy emissiveMap");
+  assert.equal(Object.hasOwn(copied, "emissiveIntensity"), false, "MeshBasicMaterial.copy does not copy emissiveIntensity");
+  assert.equal(src.emissiveMap, stub, "copy leaves the source emissiveMap");
+
+  const json = src.toJSON();
+  assert.equal(json.emissiveMap, stub.uuid, "Material.toJSON writes emissiveMap when it is a texture");
+  assert.equal(json.emissiveIntensity, 2, "Material.toJSON writes emissiveIntensity when it is not 1");
+  const loader = new THREE.MaterialLoader();
+  loader.setTextures({ [stub.uuid]: stub });
+  const round = loader.parse(json);
+  assert.equal(round.type, "MeshBasicMaterial", "round-trip stays MeshBasicMaterial");
+  assert.equal(Object.hasOwn(round, "emissiveMap"), true, "MaterialLoader stores emissiveMap as an own key");
+  assert.equal(round.emissiveMap, stub, "MaterialLoader restores the emissive texture");
+  assert.equal(Object.hasOwn(round, "emissiveIntensity"), true, "MaterialLoader stores emissiveIntensity as an own key");
+  assert.equal(round.emissiveIntensity, 2, "MaterialLoader restores emissiveIntensity");
+
+  const intensityOnly = new THREE.MaterialLoader().parse({
+    metadata: { version: 4.6, type: "Material", generator: "probe" },
+    uuid: "44444444-4444-4444-4444-444444444444",
+    type: "MeshBasicMaterial",
+    color: 0x633318,
+    emissiveIntensity: 3,
+  });
+  assert.equal(materialEmissiveMapAbsent(intensityOnly), true, "intensity JSON does not invent emissiveMap");
+  assert.equal(Object.hasOwn(intensityOnly, "emissiveIntensity"), true, "MaterialLoader can store emissiveIntensity without emissiveMap");
+  assert.equal(intensityOnly.emissiveIntensity, 3, "MaterialLoader restores a lone emissiveIntensity");
+  assert.equal(intensityOnly.emissive, undefined, "lone emissiveIntensity does not invent emissive");
+
+  const owners = [
+    new THREE.MeshLambertMaterial(),
+    new THREE.MeshPhongMaterial(),
+    new THREE.MeshToonMaterial(),
+    new THREE.MeshStandardMaterial(),
+    new THREE.MeshPhysicalMaterial(),
+  ];
+  for (const mat of owners) {
+    assert.equal(mat.emissiveMap, null, `${mat.type} constructor assigns emissiveMap null`);
+    assert.equal(Object.hasOwn(mat, "emissiveMap"), true, `${mat.type} owns emissiveMap`);
+  }
+  const copiedLambert = new THREE.MeshLambertMaterial().copy(owners[0]);
+  assert.equal(copiedLambert.emissiveMap, null, "MeshLambertMaterial.copy copies emissiveMap");
+  assert.equal(Object.hasOwn(copiedLambert, "emissiveMap"), true, "copied Lambert emissiveMap stays own");
+  for (const Ctor of [THREE.MeshMatcapMaterial, THREE.MeshNormalMaterial, THREE.MeshDepthMaterial, THREE.MeshDistanceMaterial]) {
+    const mat = new Ctor();
+    assert.equal(mat.emissiveMap, undefined, `${mat.type} does not assign emissiveMap`);
+    assert.equal(Object.hasOwn(mat, "emissiveMap"), false, `${mat.type} does not own emissiveMap`);
+  }
+
+  const { readFileSync } = await import("node:fs");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const meshBasic = readFileSync(require.resolve("three/src/materials/MeshBasicMaterial.js"), "utf8");
+  const meshLambert = readFileSync(require.resolve("three/src/materials/MeshLambertMaterial.js"), "utf8");
+  const loaderSrc = readFileSync(require.resolve("three/src/loaders/MaterialLoader.js"), "utf8");
+  const materialSrc = readFileSync(require.resolve("three/src/materials/Material.js"), "utf8");
+  const shaderLib = readFileSync(require.resolve("three/src/renderers/shaders/ShaderLib.js"), "utf8");
+  const meshbasicGlsl = readFileSync(require.resolve("three/src/renderers/shaders/ShaderLib/meshbasic.glsl.js"), "utf8");
+  const uvPars = readFileSync(require.resolve("three/src/renderers/shaders/ShaderChunk/uv_pars_vertex.glsl.js"), "utf8");
+  assert.equal(meshBasic.includes("emissiveMap"), false, "MeshBasicMaterial.js does not mention emissiveMap");
+  assert.equal(meshBasic.includes("metalnessMap"), false, "MeshBasicMaterial.js does not mention metalnessMap");
+  assert.match(meshBasic, /this\.specularMap = null;/);
+  assert.match(meshLambert, /this\.emissiveMap = null;/);
+  assert.match(meshLambert, /this\.emissiveMap = source\.emissiveMap;/);
+  assert.match(loaderSrc, /if \( json\.emissiveMap !== undefined \) material\.emissiveMap = getTexture\( json\.emissiveMap \);/);
+  assert.match(loaderSrc, /if \( json\.emissiveIntensity !== undefined \) material\.emissiveIntensity = json\.emissiveIntensity;/);
+  assert.match(loaderSrc, /if \( json\.emissive !== undefined && material\.emissive !== undefined \) material\.emissive\.setHex\( json\.emissive \);/);
+  assert.match(loaderSrc, /if \( json\.metalnessMap !== undefined \) material\.metalnessMap = getTexture\( json\.metalnessMap \);/);
+  assert.match(materialSrc, /if \( this\.emissiveMap && this\.emissiveMap\.isTexture \) data\.emissiveMap = this\.emissiveMap\.toJSON\( meta \)\.uuid;/);
+  assert.match(materialSrc, /if \( this\.emissiveIntensity !== undefined && this\.emissiveIntensity !== 1 \) data\.emissiveIntensity = this\.emissiveIntensity;/);
+  const materials = readFileSync(require.resolve("three/src/renderers/webgl/WebGLMaterials.js"), "utf8");
+  const refresh = materials.slice(materials.indexOf("function refreshMaterialUniforms"), materials.indexOf("function refreshUniformsCommon"));
+  assert.match(refresh, /if \( material\.isMeshBasicMaterial \) \{\s*refreshUniformsCommon\( uniforms, material \);/s);
+  const common = materials.slice(materials.indexOf("function refreshUniformsCommon"), materials.indexOf("function refreshUniformsLine"));
+  const emissiveIf = common.indexOf("if ( material.emissive )");
+  const intensityAt = common.indexOf("material.emissiveIntensity");
+  const displacementIf = common.indexOf("if ( material.displacementMap )");
+  const emissiveMapIf = common.indexOf("if ( material.emissiveMap )");
+  const specularIf = common.indexOf("if ( material.specularMap )");
+  assert.ok(emissiveIf >= 0 && emissiveIf < intensityAt && intensityAt < displacementIf, "emissiveIntensity is read only inside the emissive branch");
+  assert.ok(displacementIf < emissiveMapIf && emissiveMapIf < specularIf, "emissiveMap is read after displacementMap and before specularMap");
+  assert.equal(common.slice(emissiveMapIf).includes("material.emissiveIntensity"), false, "refreshUniformsCommon does not read emissiveIntensity inside emissiveMap");
+  assert.equal(common.includes("metalnessMap"), false, "refreshUniformsCommon does not read metalnessMap");
+  assert.match(common, /if \( material\.emissiveMap \) \{\s*uniforms\.emissiveMap\.value = material\.emissiveMap;/s);
+  const basicShader = shaderLib.slice(shaderLib.indexOf("\tbasic: {"), shaderLib.indexOf("\tlambert: {"));
+  assert.equal(basicShader.includes("UniformsLib.emissivemap"), false, "ShaderLib.basic does not merge emissivemap uniforms");
+  assert.equal(basicShader.includes("UniformsLib.metalnessmap"), false, "ShaderLib.basic does not merge metalnessmap uniforms");
+  assert.match(basicShader, /UniformsLib\.specularmap/);
+  assert.match(shaderLib.slice(shaderLib.indexOf("\tlambert: {"), shaderLib.indexOf("\tphong: {")), /UniformsLib\.emissivemap/);
+  assert.match(meshbasicGlsl, /#include <uv_pars_vertex>/);
+  assert.equal(meshbasicGlsl.includes("emissivemap_fragment"), false, "meshbasic does not include the emissive-map sample chunk");
+  assert.match(uvPars, /#ifdef USE_EMISSIVEMAP[\s\S]*emissiveMapTransform[\s\S]*vEmissiveMapUv/);
+  assert.match(uvPars, /#ifdef USE_METALNESSMAP[\s\S]*metalnessMapTransform/);
+  const programs = readFileSync(require.resolve("three/src/renderers/webgl/WebGLPrograms.js"), "utf8");
+  assert.equal(programs.includes("emissiveIntensity"), false, "WebGLPrograms does not read emissiveIntensity");
+  assert.match(programs, /const HAS_EMISSIVEMAP = !! material\.emissiveMap;/);
+  assert.match(programs, /emissiveMap: HAS_EMISSIVEMAP,/);
+  assert.match(programs, /emissiveMapUv: HAS_EMISSIVEMAP && getChannel\( material\.emissiveMap\.channel \),/);
+  const emissiveUvPush = programs.indexOf("array.push( parameters.emissiveMapUv );");
+  const metalnessUvPush = programs.indexOf("array.push( parameters.metalnessMapUv );");
+  assert.ok(emissiveUvPush >= 0 && emissiveUvPush < metalnessUvPush, "metalnessMapUv is the next program-cache UV after emissiveMapUv");
+  assert.match(programs, /const HAS_METALNESSMAP = !! material\.metalnessMap;/);
+  const program = readFileSync(require.resolve("three/src/renderers/webgl/WebGLProgram.js"), "utf8");
+  assert.match(program, /parameters\.emissiveMap \? '#define USE_EMISSIVEMAP' : ''/);
+  assert.match(program, /parameters\.metalnessMap \? '#define USE_METALNESSMAP' : ''/);
+  const toolboxSrc = readFileSync(new URL("./toolbox.js", import.meta.url), "utf8");
+  const packagedSrc = readFileSync(new URL("./packaged-visual.js", import.meta.url), "utf8");
+  const displacementCall = "pinColorOnlyVisualMaterialDisplacementMap(root);";
+  const emissiveCall = "pinColorOnlyVisualMaterialEmissiveMap(root);";
+  assert.ok(toolboxSrc.indexOf(displacementCall) < toolboxSrc.indexOf(emissiveCall), "procedural create runs the emissiveMap pin after the displacementMap pin");
+  assert.ok(packagedSrc.indexOf(displacementCall) < packagedSrc.indexOf(emissiveCall), "packaged ingest runs the emissiveMap pin after the displacementMap pin");
+  const emissiveFn = toolboxSrc.slice(
+    toolboxSrc.indexOf("function pinColorOnlyMeshBasicMaterialEmissiveMap"),
+    toolboxSrc.indexOf("export function pinColorOnlyUnlitBasicMaterialEmissiveMap"),
+  );
+  assert.match(emissiveFn, /delete material\.emissiveMap;/);
+  assert.equal(emissiveFn.includes("delete material.displacementMap"), false, "emissiveMap pin does not clear displacementMap");
+  assert.equal(emissiveFn.includes("delete material.normalMap"), false, "emissiveMap pin does not clear normalMap");
+  assert.equal(emissiveFn.includes("delete material.bumpMap"), false, "emissiveMap pin does not clear bumpMap");
+  assert.equal(emissiveFn.includes("delete material.emissiveIntensity"), false, "emissiveMap pin does not clear emissiveIntensity");
+  assert.equal(emissiveFn.includes("delete material.emissive;"), false, "emissiveMap pin does not clear emissive");
+  assert.equal(emissiveFn.includes("delete material.specularMap"), false, "emissiveMap pin does not clear specularMap");
+  assert.equal(emissiveFn.includes("delete material.metalnessMap"), false, "emissiveMap pin does not clear metalnessMap");
+  assert.equal(emissiveFn.includes("delete material.isSpriteMaterial"), false, "emissiveMap pin does not clear isSpriteMaterial");
+  assert.equal(emissiveFn.includes("delete material.size"), false, "emissiveMap pin does not clear size");
+});
+
+test("v1.42.0 clears leftover Material emissiveMap on packed color-only MeshBasics; envelope stays v1.41.0", () => {
+  assert.equal(THREE.REVISION, "170", "verified three@0.170.0 REVISION 170");
+  const crate = createToolbox();
+  const stats = getToolboxLodStats(crate);
+  assert.deepEqual(stats[0], { tris: 240, draws: 6, verts: 230, attrBytes: 2820 });
+  assert.deepEqual(stats[1], { tris: 96, draws: 4, verts: 100, attrBytes: 1176 });
+  assert.deepEqual(stats[2], { tris: 24, draws: 2, verts: 48, attrBytes: 432 });
+  assert.equal(stats[0].draws + 1, 7, "drawCallsEstimate stays LOD0 draws plus fastener");
+  assert.equal(crate.userData.l2.uniqueMaterials, 3);
+  assert.match(crate.userData.l2.note, /v1\.42\.0 pins leftover Material emissiveMap/);
+  assert.match(crate.userData.l2.note, /emissiveMap-absent 3/);
+  assert.match(crate.userData.l2.note, /v1\.41\.0 pins leftover Material displacementMap/);
+  assert.match(crate.userData.l2.note, /displacementMap-absent 3/);
+  assert.match(crate.userData.l2.note, /normalMap-absent 3/);
+
+  const wood = crate.userData.materials.lod0.wood;
+  const brass = crate.userData.materials.lod0.brass;
+  const steel = crate.userData.materials.lod0.steel;
+  assert.equal(materialEmissiveMapAbsent(wood), true, "wood emissiveMap is absent");
+  assert.equal(materialEmissiveMapAbsent(brass), true, "brass emissiveMap is absent");
+  assert.equal(materialEmissiveMapAbsent(steel), true, "steel emissiveMap is absent");
+  assert.equal(materialDisplacementMapAbsent(wood), true, "wood displacementMap stays absent");
+  assert.equal(materialDisplacementMapAbsent(brass), true, "brass displacementMap stays absent");
+  assert.equal(materialDisplacementMapAbsent(steel), true, "steel displacementMap stays absent");
+  assert.equal(materialNormalMapAbsent(wood), true, "wood normalMap stays absent");
+  assert.equal(materialBumpMapAbsent(wood), true, "wood bumpMap stays absent");
+  assert.equal(materialIsSpriteMaterialAbsentSafe(wood), true, "wood isSpriteMaterial stays absent");
+  assert.equal(materialIsPointsMaterialAbsent(wood), true, "wood isPointsMaterial stays absent");
+  assert.equal(wood.size, undefined, "wood does not gain size");
+  assert.equal(Object.hasOwn(wood, "size"), false, "wood size is not an own property");
+  assert.equal(wood.emissiveIntensity, undefined, "wood does not gain emissiveIntensity");
+  assert.equal(wood.emissive, undefined, "wood does not gain emissive");
+  assert.equal(wood.displacementMap, undefined, "wood does not gain displacementMap");
+  assert.equal(wood.specularMap, null, "wood keeps constructor specularMap null");
+  assert.equal(wood.isMeshBasicMaterial, true, "wood stays MeshBasic");
+  assert.equal(brass.isMeshBasicMaterial, true, "brass stays MeshBasic");
+  assert.equal(steel.isMeshBasicMaterial, true, "steel stays MeshBasic");
+  assert.equal(wood.type, "MeshBasicMaterial", "wood type stays MeshBasicMaterial");
+  assert.equal(wood.map, null, "wood map stays null");
+  assert.equal(wood.flatShading, false, "wood flatShading stays the v0.82 false pin");
+
+  const flags = countVisualMaterialEmissiveMap(crate);
+  assert.equal(flags.absent, 3, "emissiveMap-absent count is 3");
+  assert.equal(flags.leftover, 0);
+  assert.equal(flags.total, 3);
+  assert.equal(countVisualMaterialDisplacementMap(crate).absent, 3, "displacementMap-absent stays 3");
+  assert.equal(countVisualMaterialNormalMap(crate).absent, 3, "normalMap-absent stays 3");
+  assert.equal(countVisualMaterialBumpMap(crate).absent, 3, "bumpMap-absent stays 3");
+  assert.equal(countVisualMaterialIsSpriteMaterial(crate).absent, 3, "isSpriteMaterial-absent stays 3");
+  assert.equal(countVisualMaterialIsPointsMaterial(crate).absent, 3, "isPointsMaterial-absent stays 3");
+
+  const visuals = crateVisualMeshes(crate);
+  assert.equal(visuals.length, 13);
+  for (const mesh of visuals) {
+    assert.equal(mesh.isMesh, true, "visual stays a Mesh");
+    assert.equal(materialEmissiveMapAbsent(mesh.material), true, "packed visual emissiveMap stays absent");
+    assert.equal(materialDisplacementMapAbsent(mesh.material), true, "packed visual displacementMap stays absent");
+    assert.equal(mesh.material.isMeshBasicMaterial, true, "visual stays MeshBasic");
+  }
+});
+
+test("pinColorOnlyUnlitBasicMaterialEmissiveMap / pinColorOnlyVisualMaterialEmissiveMap delete leftover emissiveMap and skip mapped, lit, interleaved, colliders, and shared blocked", () => {
+  const stub = emissiveTextureStub("pin-emissive");
+  const colorMesh = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  colorMesh.material.emissiveMap = stub;
+  colorMesh.material.emissiveIntensity = 2;
+  colorMesh.material.emissive = new THREE.Color(0x010101);
+  colorMesh.material.displacementMap = stub;
+  colorMesh.material.displacementScale = 2;
+  colorMesh.material.normalMap = stub;
+  colorMesh.material.bumpMap = stub;
+  colorMesh.material.bumpScale = 4;
+  colorMesh.material.isSpriteMaterial = true;
+  colorMesh.material.size = 9;
+  colorMesh.material.version = 9;
+  pinColorOnlyUnlitBasicMaterialEmissiveMap(colorMesh);
+  assert.equal(materialEmissiveMapAbsent(colorMesh.material), true, "color-only emissiveMap is deleted");
+  assert.equal(colorMesh.material.emissiveIntensity, 2, "emissiveIntensity stays authored");
+  assert.equal(colorMesh.material.emissive.getHex(), 0x010101, "emissive stays authored");
+  assert.equal(colorMesh.material.displacementMap, stub, "displacementMap stays authored");
+  assert.equal(colorMesh.material.displacementScale, 2, "displacementScale stays authored");
+  assert.equal(colorMesh.material.normalMap, stub, "normalMap stays authored");
+  assert.equal(colorMesh.material.bumpMap, stub, "bumpMap stays authored");
+  assert.equal(colorMesh.material.bumpScale, 4, "bumpScale stays authored");
+  assert.equal(colorMesh.material.specularMap, null, "constructor specularMap stays null");
+  assert.equal(colorMesh.material.isSpriteMaterial, true, "isSpriteMaterial stays authored");
+  assert.equal(colorMesh.material.size, 9, "authored size stays");
+  assert.equal(colorMesh.material.version, 9, "material.version stays");
+  assert.equal(colorMesh.material.isMeshBasicMaterial, true, "isMeshBasicMaterial stays");
+  assert.equal(colorMesh.material.type, "MeshBasicMaterial", "type stays MeshBasicMaterial");
+  assert.equal(colorMesh.material.map, null, "map stays null");
+
+  const already = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  pinColorOnlyUnlitBasicMaterialEmissiveMap(already);
+  assert.equal(materialEmissiveMapAbsent(already.material), true, "already-absent emissiveMap stays absent");
+
+  const nulled = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xc1c3c9 }));
+  nulled.material.emissiveMap = null;
+  pinColorOnlyUnlitBasicMaterialEmissiveMap(nulled);
+  assert.equal(materialEmissiveMapAbsent(nulled.material), true, "own null emissiveMap is deleted");
+
+  const ownUndef = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  ownUndef.material.emissiveMap = undefined;
+  assert.equal(Object.hasOwn(ownUndef.material, "emissiveMap"), true, "assigned undefined is an own property");
+  pinColorOnlyUnlitBasicMaterialEmissiveMap(ownUndef);
+  assert.equal(materialEmissiveMapAbsent(ownUndef.material), true, "own undefined emissiveMap is deleted");
+
+  const mappedMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } });
+  mappedMat.emissiveMap = stub;
+  const mapped = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mappedMat);
+  pinColorOnlyUnlitBasicMaterialEmissiveMap(mapped);
+  assert.equal(mapped.material.emissiveMap, stub, "mapped emissiveMap stays authored");
+
+  const litCtors = [
+    THREE.MeshLambertMaterial,
+    THREE.MeshPhongMaterial,
+    THREE.MeshToonMaterial,
+    THREE.MeshStandardMaterial,
+    THREE.MeshPhysicalMaterial,
+  ];
+  const litMeshes = litCtors.map((Ctor) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new Ctor());
+    pinColorOnlyUnlitBasicMaterialEmissiveMap(mesh);
+    assert.equal(mesh.material.emissiveMap, null, `${mesh.material.type} emissiveMap stays null`);
+    assert.equal(Object.hasOwn(mesh.material, "emissiveMap"), true, `${mesh.material.type} own emissiveMap stays`);
+    return mesh;
+  });
+  const lambert = litMeshes[0];
+  const standard = litMeshes[3];
+  const matcap = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshMatcapMaterial());
+  matcap.material.emissiveMap = stub;
+  pinColorOnlyUnlitBasicMaterialEmissiveMap(matcap);
+  assert.equal(matcap.material.emissiveMap, stub, "MeshMatcap authored emissiveMap stays");
+
+  const points = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial());
+  assert.equal(points.material.size, 1, "PointsMaterial size starts at 1");
+  pinColorOnlyUnlitBasicMaterialEmissiveMap(points);
+  assert.equal(points.material.size, 1, "PointsMaterial size stays 1");
+  assert.equal(Object.hasOwn(points.material, "size"), true, "PointsMaterial size stays own");
+
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  interleavedMat.emissiveMap = stub;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  pinColorOnlyUnlitBasicMaterialEmissiveMap(interleaved);
+  assert.equal(interleavedMat.emissiveMap, stub, "interleaved emissiveMap stays authored");
+
+  const collider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0x633318 }));
+  collider.name = "collider_grab";
+  collider.userData.collider = true;
+  collider.material.emissiveMap = stub;
+  pinColorOnlyUnlitBasicMaterialEmissiveMap(collider);
+  assert.equal(collider.material.emissiveMap, stub, "collider emissiveMap stays");
+
+  const root = new THREE.Group();
+  const rootBag = root.userData;
+  const sharedBlocked = new THREE.MeshBasicMaterial({ color: 0x8d5a23 });
+  sharedBlocked.emissiveMap = stub;
+  const sharedVisual = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  const sharedCollider = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), sharedBlocked);
+  sharedCollider.name = "collider_shared";
+  sharedCollider.userData.collider = true;
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.emissiveMap = stub;
+  sharedGeoMat.version = 12;
+  const sharedGeoVisual = new THREE.Mesh(mapped.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "fastenerMesh";
+  const colorOnly = new THREE.Mesh(groupsTestGeometry(), new THREE.MeshBasicMaterial({ color: 0xbe7e31 }));
+  colorOnly.material.emissiveMap = null;
+  colorOnly.material.emissiveIntensity = 4;
+  colorOnly.material.displacementMap = stub;
+  colorOnly.name = "dccLatch";
+  root.add(colorOnly, mapped, lambert, standard, matcap, interleaved, collider, sharedVisual, sharedCollider, sharedGeoVisual, points);
+  pinColorOnlyVisualMaterialEmissiveMap(root);
+  assert.equal(root.userData, rootBag, "entity helper does not replace entity userData");
+  assert.equal(materialEmissiveMapAbsent(colorOnly.material), true, "entity helper deletes color-only emissiveMap");
+  assert.equal(colorOnly.material.emissiveIntensity, 4, "entity helper does not touch emissiveIntensity");
+  assert.equal(colorOnly.material.displacementMap, stub, "entity helper does not touch displacementMap");
+  assert.equal(colorOnly.name, "dccLatch", "entity helper does not clear a non-reserved mesh.name");
+  assert.equal(mapped.material.emissiveMap, stub, "mapped emissiveMap stays via entity helper");
+  assert.equal(lambert.material.emissiveMap, null, "Lambert emissiveMap stays via entity helper");
+  assert.equal(Object.hasOwn(standard.material, "emissiveMap"), true, "Standard emissiveMap stays via entity helper");
+  assert.equal(matcap.material.emissiveMap, stub, "Matcap emissiveMap stays via entity helper");
+  assert.equal(interleaved.material.emissiveMap, stub, "interleaved emissiveMap stays via entity helper");
+  assert.equal(collider.material.emissiveMap, stub, "collider emissiveMap stays via entity helper");
+  assert.equal(sharedVisual.material.emissiveMap, stub, "shared collider material keeps authored emissiveMap");
+  assert.equal(sharedVisual.material, sharedBlocked, "shared blocked material is not replaced");
+  assert.equal(sharedGeoVisual.material.emissiveMap, stub, "geometry shared with a mapped mesh keeps emissiveMap");
+  assert.equal(Object.hasOwn(sharedGeoMat, "emissiveMap"), true, "shared-geometry emissiveMap stays an own property");
   assert.equal(sharedGeoMat.version, 12, "geometry shared with a mapped mesh keeps material.version");
   assert.equal(points.material.size, 1, "entity helper does not touch PointsMaterial size");
 });
