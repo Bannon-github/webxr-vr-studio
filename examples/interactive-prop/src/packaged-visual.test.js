@@ -14290,7 +14290,8 @@ test("packaged ingest deletes leftover Material normalMap on color-only visuals 
   assert.equal(bodyMesh.material.normalMapType, THREE.TangentSpaceNormalMap, "ingest does not clear authored normalMapType");
   assert.equal(materialBumpMapAbsent(bodyMesh.material), true, "bump pin still clears bumpMap");
   assert.equal(bodyMesh.material.bumpScale, 5, "ingest does not clear authored bumpScale");
-  assert.equal(bodyMesh.material.displacementMap, stub, "ingest does not clear authored displacementMap");
+  assert.equal(bodyMesh.material.displacementMap, undefined, "v1.41 displacementMap pin clears the color-only displacementMap");
+  assert.equal(Object.hasOwn(bodyMesh.material, "displacementMap"), false, "v1.41 displacementMap pin removes the own key");
   assert.equal(materialIsSpriteMaterialAbsentSafe(bodyMesh.material), true, "sprite pin still clears isSpriteMaterial");
   assert.equal(bodyMesh.material.size, 4, "ingest does not clear authored size");
   assert.equal(bodyMesh.material.isMeshBasicMaterial, true, "body stays MeshBasic");
@@ -14376,5 +14377,166 @@ test("packaged ingest without lod groups still deletes leftover Material normalM
   assert.equal(Object.hasOwn(normalMatMesh.material, "normalMap"), true, "fail-soft MeshNormal own normalMap stays");
   assert.equal(pointsMat.size, 1, "fail-soft PointsMaterial size stays 1");
   assert.equal(colliderGrab.material.normalMap, stub, "fail-soft collider normalMap stays");
+  assert.equal(colliderGrab.name, "collider_grab", "fail-soft collider name stays");
+});
+
+function materialDisplacementMapAbsent(material) {
+  return material?.displacementMap === undefined && Object.hasOwn(material, "displacementMap") === false;
+}
+
+test("packaged ingest deletes leftover Material displacementMap on color-only visuals and the fastener", () => {
+  const stub = { isTexture: true, uuid: "packaged-displacement", channel: 0 };
+  const { root, groups, fastener, lid, latch } = makePackagedFixture();
+  const bodyMesh = groups[0][0].children.find((o) => o.isMesh);
+  bodyMesh.material.displacementMap = stub;
+  bodyMesh.material.displacementScale = 2;
+  bodyMesh.material.displacementBias = 0.5;
+  bodyMesh.material.normalMap = stub;
+  bodyMesh.material.bumpMap = stub;
+  bodyMesh.material.emissiveMap = stub;
+  bodyMesh.material.isSpriteMaterial = true;
+  bodyMesh.material.size = 4;
+  const bodyMat = bodyMesh.material;
+  bodyMat.version = 4;
+  fastener.material = new THREE.MeshBasicMaterial({ color: 0xbe7e31 });
+  fastener.material.displacementMap = null;
+  const fastenerMat = fastener.material;
+  const mapped = boxMesh("mappedHero", new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } }));
+  mapped.material.displacementMap = stub;
+  const sharedGeoMat = new THREE.MeshBasicMaterial({ color: 0xc1c3c9 });
+  sharedGeoMat.displacementMap = stub;
+  const sharedGeoVisual = new THREE.Mesh(mapped.geometry, sharedGeoMat);
+  sharedGeoVisual.name = "sharedGeoBody";
+  const interleavedGeo = new THREE.BufferGeometry();
+  const interleavedBuffer = new THREE.InterleavedBuffer(new Float32Array([0, 0, 0, 1, 0, 0]), 3);
+  interleavedGeo.setAttribute("position", new THREE.InterleavedBufferAttribute(interleavedBuffer, 3, 0));
+  const interleavedMat = new THREE.MeshBasicMaterial({ color: 0x633318 });
+  interleavedMat.displacementMap = stub;
+  const interleaved = new THREE.Mesh(interleavedGeo, interleavedMat);
+  interleaved.name = "interleavedMesh";
+  const litKept = [
+    THREE.MeshLambertMaterial,
+    THREE.MeshPhongMaterial,
+    THREE.MeshToonMaterial,
+    THREE.MeshStandardMaterial,
+    THREE.MeshPhysicalMaterial,
+    THREE.MeshMatcapMaterial,
+    THREE.MeshNormalMaterial,
+    THREE.MeshDepthMaterial,
+    THREE.MeshDistanceMaterial,
+  ].map((Ctor) => {
+    const mat = new Ctor();
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), mat);
+    mesh.name = Ctor.name;
+    return { mat, mesh };
+  });
+  const pointsMat = new THREE.PointsMaterial();
+  const pointsMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), pointsMat);
+  pointsMesh.name = "pointsLike";
+  groups[0][0].add(mapped, interleaved, pointsMesh, ...litKept.map((entry) => entry.mesh));
+  root.add(sharedGeoVisual);
+  const colliderGrab = root.getObjectByName("collider_grab");
+  colliderGrab.material.displacementMap = stub;
+  const lidMesh = lid.getObjectByName("lidL0");
+  const latchMesh = latch.getObjectByName("latchL0");
+  lidMesh.material.displacementMap = stub;
+  latchMesh.material.displacementMap = undefined;
+  lidMesh.name = "lidMesh";
+  latchMesh.name = "latchMesh";
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(bodyMesh.material, bodyMat, "ingest does not replace the body material");
+  assert.equal(materialDisplacementMapAbsent(bodyMesh.material), true, "in-place color-only body displacementMap is deleted");
+  assert.equal(bodyMesh.material.displacementScale, 2, "ingest does not clear authored displacementScale");
+  assert.equal(bodyMesh.material.displacementBias, 0.5, "ingest does not clear authored displacementBias");
+  assert.equal(materialNormalMapAbsent(bodyMesh.material), true, "normal pin still clears normalMap");
+  assert.equal(materialBumpMapAbsent(bodyMesh.material), true, "bump pin still clears bumpMap");
+  assert.equal(bodyMesh.material.emissiveMap, stub, "ingest does not clear authored emissiveMap");
+  assert.equal(materialIsSpriteMaterialAbsentSafe(bodyMesh.material), true, "sprite pin still clears isSpriteMaterial");
+  assert.equal(bodyMesh.material.size, 4, "ingest does not clear authored size");
+  assert.equal(bodyMesh.material.isMeshBasicMaterial, true, "body stays MeshBasic");
+  assert.equal(bodyMesh.material.type, "MeshBasicMaterial", "body type stays MeshBasicMaterial");
+  assert.equal(bodyMesh.material.map, null, "ingest does not invent map");
+  assert.equal(bodyMesh.material.version, 0, "material.version pin still runs");
+  assert.equal(materialDisplacementMapAbsent(fastener.material), true, "fastener displacementMap is deleted");
+  assert.equal(fastener.material, fastenerMat, "ingest does not replace the fastener material");
+  assert.equal(fastener.name, "fastenerMesh", "fastenerMesh stays named");
+  assert.equal(materialDisplacementMapAbsent(lidMesh.material), true, "reserved lidMesh displacementMap is deleted");
+  assert.equal(materialDisplacementMapAbsent(latchMesh.material), true, "reserved latchMesh own undefined displacementMap is deleted");
+  assert.equal(lidMesh.name, "lidMesh", "reserved lidMesh name stays");
+  assert.equal(latchMesh.name, "latchMesh", "reserved latchMesh name stays");
+  assert.equal(mapped.material.displacementMap, stub, "mapped displacementMap stays authored");
+  assert.equal(sharedGeoVisual.material.displacementMap, stub, "geometry shared with a mapped mesh keeps displacementMap");
+  assert.equal(Object.hasOwn(sharedGeoMat, "displacementMap"), true, "shared-geometry displacementMap stays an own property");
+  assert.equal(interleaved.material.displacementMap, stub, "interleaved displacementMap stays authored");
+  for (const { mat } of litKept) {
+    assert.equal(mat.displacementMap, null, `${mat.type} displacementMap stays null`);
+    assert.equal(Object.hasOwn(mat, "displacementMap"), true, `${mat.type} own displacementMap stays`);
+  }
+  assert.equal(pointsMat.size, 1, "PointsMaterial size stays 1");
+  assert.equal(Object.hasOwn(pointsMat, "size"), true, "PointsMaterial size stays own");
+  assert.equal(colliderGrab.material.displacementMap, stub, "collider displacementMap stays authored");
+  assert.equal(colliderGrab.name, "collider_grab", "collider mesh name stays");
+});
+
+test("packaged ingest without lod groups still deletes leftover Material displacementMap", () => {
+  const stub = { isTexture: true, uuid: "fail-soft-displacement", channel: 0 };
+  const { root, body, lid, latch, fastener } = makePackagedFixture({ withLod: false });
+  const bodyMesh = visualMeshes(body)[0];
+  bodyMesh.material.displacementMap = stub;
+  bodyMesh.material.displacementScale = 3;
+  bodyMesh.material.displacementBias = -1;
+  bodyMesh.material.normalMap = stub;
+  bodyMesh.material.isSpriteMaterial = true;
+  const bodyMat = bodyMesh.material;
+  bodyMesh.name = "lidMesh";
+  bodyMesh.material.version = 5;
+  fastener.material.displacementMap = null;
+  const fastenerMat = fastener.material;
+  const mapped = boxMesh("mappedHero", new THREE.MeshBasicMaterial({ color: 0xffffff, map: { isTexture: true } }));
+  mapped.material.displacementMap = stub;
+  body.add(mapped);
+  const lambert = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshLambertMaterial());
+  lambert.name = "lambertLike";
+  body.add(lambert);
+  const depthMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshDepthMaterial());
+  depthMesh.name = "depthLike";
+  body.add(depthMesh);
+  const pointsMat = new THREE.PointsMaterial();
+  const pointsMesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), pointsMat);
+  pointsMesh.name = "pointsLike";
+  body.add(pointsMesh);
+  const colliderGrab = root.getObjectByName("collider_grab");
+  colliderGrab.material.displacementMap = stub;
+  const lidMesh = lid.getObjectByName("lidMesh");
+  const latchMesh = latch.getObjectByName("latchMesh");
+  lidMesh.material.displacementMap = stub;
+  latchMesh.material.displacementMap = undefined;
+
+  ingestPackagedRoot(root, sidecar);
+
+  assert.equal(root.userData.lod, undefined, "fail-soft still does not invent lod groups");
+  assert.equal(bodyMesh.material, bodyMat, "fail-soft does not replace the body material");
+  assert.equal(materialDisplacementMapAbsent(bodyMesh.material), true, "fail-soft body displacementMap is deleted");
+  assert.equal(bodyMesh.material.displacementScale, 3, "fail-soft does not clear authored displacementScale");
+  assert.equal(bodyMesh.material.displacementBias, -1, "fail-soft does not clear authored displacementBias");
+  assert.equal(materialNormalMapAbsent(bodyMesh.material), true, "fail-soft normal pin still clears normalMap");
+  assert.equal(materialIsSpriteMaterialAbsentSafe(bodyMesh.material), true, "fail-soft sprite pin still clears isSpriteMaterial");
+  assert.equal(bodyMesh.name, "lidMesh", "fail-soft reserved lidMesh name stays");
+  assert.equal(bodyMesh.material.version, 0, "fail-soft material.version pin still runs");
+  assert.equal(bodyMesh.material.type, "MeshBasicMaterial", "fail-soft body type stays MeshBasicMaterial");
+  assert.equal(materialDisplacementMapAbsent(fastener.material), true, "fail-soft fastener displacementMap is deleted");
+  assert.equal(fastener.material, fastenerMat, "fail-soft does not replace the fastener material");
+  assert.equal(fastener.name, "fastenerMesh", "fail-soft fastenerMesh stays named");
+  assert.equal(materialDisplacementMapAbsent(lidMesh.material), true, "fail-soft lidMesh displacementMap is deleted");
+  assert.equal(materialDisplacementMapAbsent(latchMesh.material), true, "fail-soft latchMesh own undefined displacementMap is deleted");
+  assert.equal(mapped.material.displacementMap, stub, "fail-soft mapped displacementMap stays authored");
+  assert.equal(lambert.material.displacementMap, null, "fail-soft MeshLambert displacementMap stays null");
+  assert.equal(Object.hasOwn(lambert.material, "displacementMap"), true, "fail-soft MeshLambert own displacementMap stays");
+  assert.equal(depthMesh.material.displacementMap, null, "fail-soft MeshDepth displacementMap stays null");
+  assert.equal(Object.hasOwn(depthMesh.material, "displacementMap"), true, "fail-soft MeshDepth own displacementMap stays");
+  assert.equal(pointsMat.size, 1, "fail-soft PointsMaterial size stays 1");
+  assert.equal(colliderGrab.material.displacementMap, stub, "fail-soft collider displacementMap stays");
   assert.equal(colliderGrab.name, "collider_grab", "fail-soft collider name stays");
 });

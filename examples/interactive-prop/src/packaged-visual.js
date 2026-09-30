@@ -4559,6 +4559,7 @@ import {
   pinColorOnlyVisualMaterialIsSpriteMaterial,
   pinColorOnlyVisualMaterialBumpMap,
   pinColorOnlyVisualMaterialNormalMap,
+  pinColorOnlyVisualMaterialDisplacementMap,
 } from "./toolbox.js";
 
 const REQUIRED_COLLIDERS = [
@@ -4787,6 +4788,7 @@ export function ingestPackagedRoot(root, sidecar) {
   pinColorOnlyVisualMaterialIsSpriteMaterial(root);
   pinColorOnlyVisualMaterialBumpMap(root);
   pinColorOnlyVisualMaterialNormalMap(root);
+  pinColorOnlyVisualMaterialDisplacementMap(root);
   return root;
 }
 
